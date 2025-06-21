@@ -1,0 +1,3855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mutagen</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%; /* Ensure body fills the viewport */
+            font-family: 'Inter', sans-serif;
+            color: #eee;
+            background-color: #222; /* Consistent dark background for body */
+            overflow: hidden; /* Hide scrollbars to ensure precise layout control */
+        }
+
+        .main-content {
+            position: absolute; /* Position relative to body */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+            box-sizing: border-box; /* Include padding in dimensions if added later */
+            background-color: #222; /* Ensure main content matches body background */
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #333; /* Slightly lighter than body for contrast */
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            padding: 20px; /* Internal padding around the canvas */
+            box-sizing: border-box;
+            flex-shrink: 0; /* Prevent it from shrinking more than necessary due to flex */
+        }
+
+        canvas {
+            background-color: #000;
+            border: 2px solid #555;
+            border-radius: 10px;
+            display: block;
+            cursor: crosshair;
+            /* Canvas dimensions are set directly by JS using width/height attributes,
+               so CSS width/height: 100% is not needed here as canvas's intrinsic size will be respected. */
+        }
+
+        /* --- Overlays for Start Screen, Popups, Admin Panel --- */
+        .overlay {
+            position: absolute; /* Absolute positioning relative to .main-content */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Consistent dimming */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000; /* Ensure it's on top of canvas but below other popups if any */
+            flex-direction: column;
+            gap: 20px;
+            opacity: 0;
+            pointer-events: none; /* Hidden by default for interactions */
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto; /* Active for interactions */
+        }
+
+        .start-screen-content {
+            text-align: center;
+            color: #eee;
+            /* Flex layout to center content vertically/horizontally within itself */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px; /* Space between title, subtitle, and button */
+        }
+
+        /* Styling for the HTML title and subtitle */
+        .game-title {
+            font-size: 5em; /* Large for impact */
+            font-weight: bold;
+            color: #FF8C00; /* Neon Orange */
+            text-shadow: 0 0 15px rgba(255, 140, 0, 0.7), 0 0 25px rgba(255, 140, 0, 0.5);
+            margin-bottom: 10px; /* Space between title and subtitle */
+        }
+
+        .game-subtitle {
+            font-size: 1.8em; /* Slightly larger subtitle */
+            margin-bottom: 30px; /* Space between subtitle and button */
+        }
+
+        .game-subtitle span {
+            font-weight: bold; /* Make all words bold */
+            margin: 0 5px; /* Small space between words */
+        }
+
+        .game-subtitle .survive {
+            color: #b39ddb; /* Bold purple */
+        }
+
+        .game-subtitle .adapt {
+            color: #28a745; /* Green */
+        }
+
+        .game-subtitle .consume {
+            color: #dc3545; /* Dangerous red */
+        }
+
+        .action-button {
+            background-color: #6a0dad; /* Darker purple */
+            color: white;
+            border: 2px solid #9932CC; /* Purple border */
+            border-radius: 10px;
+            padding: 12px 30px;
+            font-size: 1.4em; /* Larger button text */
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .action-button:hover {
+            background-color: #9932CC; /* Lighter purple on hover */
+            transform: translateY(-3px);
+            border-color: #6200ff; /* Brighter purple border */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Generic Popup styles */
+        .popup-panel {
+            background-color: #1a0f2b; /* Dark purple/black theme */
+            color: #eee;
+            padding: 15px; /* Consistent padding for popups */
+            border-radius: 15px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            border: 2px solid #6a0dad; /* Darker purple border */
+            max-height: 90vh; /* Allow scrolling for content overflow */
+            overflow-y: auto;
+            transform: scale(0.9); /* Slightly smaller than full size */
+            animation: popupAppear 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto; /* Active for interactions */
+            z-index: 1001; /* Above general overlays */
+        }
+
+        .popup-panel-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #FF8C00;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        /* --- Genetic Origin Selection Specific Styles --- */
+        .origin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); /* Adjusted for 2-3 columns on larger screens */
+            gap: 15px; /* Spacing between origin options */
+            justify-content: center;
+            align-items: stretch;
+            width: 100%;
+        }
+
+        .origin-option {
+            background-color: #2a1a45; /* Darker purple for option cards */
+            border: 2px solid #4a1c87; /* Purple border */
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+            text-align: center;
+        }
+
+        .origin-option:hover {
+            background-color: #3e2860;
+            transform: translateY(-3px);
+            border-color: #6200ff;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+        }
+
+        .origin-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #b39ddb; /* Lighter purple */
+            margin-bottom: 5px;
+        }
+
+        .origin-name-with-emoji {
+            display: flex;
+            align-items: center;
+            gap: 8px; /* Space between name and emoji */
+        }
+
+        .origin-emoji {
+            font-size: 1.2em; /* Slightly smaller than name, but still visible */
+            line-height: 1; /* Keep emoji vertically centered with text */
+        }
+
+        /* Description text removed, so this style might not be strictly needed for content,
+           but keeping it for structure in case it's repurposed */
+        .origin-description {
+            font-size: 0.9em;
+            color: #d1c4e9;
+            margin-bottom: 10px;
+            flex-grow: 1; /* Allows description to take available space */
+        }
+
+        .origin-bonus {
+            font-size: 0.85em;
+            font-weight: bold;
+            color: #00ff00; /* Green for bonuses */
+            margin-top: 10px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.2);
+            padding-top: 8px;
+            width: 100%;
+        }
+
+        /* Styles for disabled button */
+        .action-button:disabled {
+            background-color: #555;
+            border-color: #777;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* --- Other existing popup/admin styles remain the same --- */
+        /* Healing/Ability Selection Popup */
+        .healing-popup {
+            background-color: #1a0f2b; /* Dark purple/black theme */
+            color: #eee;
+            padding: 8px; /* Reduced padding further */
+            border-radius: 15px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
+            text-align: center;
+            max-width: 400px; /* Reduced max-width from 600px */
+            width: 90%;
+            transform: scale(0.9); /* Slightly smaller than full size */
+            animation: popupAppear 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Reduced gap between main sections */
+            border: 2px solid #6a0dad; /* Darker purple border */
+        }
+
+        .popup-message {
+            font-size: 1.1em; /* Slightly smaller font */
+            margin-bottom: 5px; /* Reduced margin */
+            color: #b39ddb; /* Lighter purple for message */
+        }
+        .healing-amount-text {
+            color: #00ff00; /* Green for healing text */
+            font-weight: bold;
+        }
+        .defeated-creature-name {
+            color: #dc3545; /* Red color for defeated creature name */
+            font-weight: bold;
+        }
+
+        .popup-subtitle {
+            font-size: 1.3em; /* Slightly smaller font */
+            font-weight: bold;
+            color: #FF8C00; /* Neon Orange */
+            text-align: center;
+            margin-top: 5px; /* Reduced margin */
+            margin-bottom: 5px; /* Reduced margin */
+        }
+
+        .popup-content-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Reduced space between rows */
+            width: 100%;
+        }
+        /* New styling for active ability section title */
+        .active-ability-section .popup-subtitle {
+             margin-top: 15px; /* More space above this subtitle */
+             margin-bottom: 10px; /* More space below this subtitle */
+             font-size: 1.2em; /* Slightly smaller than main subtitle */
+             color: #b39ddb; /* Lighter purple for consistency */
+        }
+
+        .ability-row {
+            display: flex;
+            flex-direction: row;
+            gap: 10px; /* Reduced gap */
+            justify-content: center;
+            align-items: stretch;
+            flex-wrap: wrap; /* Allows items to wrap onto next line */
+        }
+
+        .ability-option-half {
+            flex: 1;
+            min-width: 125px; /* Reduced by ~15% from 150px */
+            max-width: 160px; /* Reduced by ~15% from 190px */
+            background-color: #2a1a45;
+            border: 2px solid #4a1c87;
+            border-radius: 10px; /* Slightly reduced border radius */
+            padding: 5px; /* Reduced padding */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4); /* Reduced shadow */
+            text-align: center;
+        }
+        .ability-option-half:hover {
+            background-color: #3e2860;
+            transform: translateY(-2px); /* Slight lift */
+            border-color: #6200ff;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
+        }
+
+        .decline-option-button {
+            flex-basis: 45px; /* Reduced by 10% from 50px */
+            flex-shrink: 0;
+            background-color: #8B0000;
+            border: 2px solid #FF0000;
+            border-radius: 10px;
+            padding: 5px; /* Reduced padding */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+        }
+        .decline-option-button:hover {
+            background-color: #CD0000;
+            transform: translateY(-2px);
+            border-color: #FF4500;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
+        }
+        .decline-option-button .fat-x {
+            font-size: 2.2em; /* Reduced X size further */
+            font-weight: bold;
+            color: #FFF;
+            line-height: 1;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+        }
+        .decline-option-button .decline-text {
+            font-size: 0.65em; /* Reduced text size further */
+            font-weight: normal;
+            color: #FFF;
+            margin-top: 2px; /* Reduced margin */
+        }
+
+
+        .ability-name {
+            font-size: 1em; /* Reduced font size */
+            font-weight: bold;
+            color: #9c27b0;
+            margin-bottom: 2px; /* Reduced margin from 5px to 2px */
+            margin-top: 2px; /* Added margin-top to reduce overall vertical space */
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+            z-index: 1;
+        }
+
+        .stat-details {
+            text-align: center;
+            width: 100%;
+            margin-top: auto;
+            padding-top: 5px; /* Reduced padding */
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1;
+        }
+        .stat-line {
+            font-size: 0.75em; /* Reduced font size */
+            color: #d1c4e9;
+            margin-bottom: 2px; /* Reduced margin */
+        }
+        .stat-change-positive {
+            font-weight: bold;
+            color: #00ff00;
+        }
+        .stat-change-negative {
+            font-weight: bold;
+            color: #ff4500;
+        }
+        .stat-name-bold-orange {
+            font-weight: bold;
+            color: #FF8C00;
+        }
+
+        /* DNA Emoji as background */
+        .dna-background {
+            position: absolute;
+            font-size: 120px; /* Reduced size */
+            opacity: 0;
+            color: #7b1fa2;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 0;
+            pointer-events: none;
+            user-select: none;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .ability-option-half:hover .dna-background {
+            opacity: 0.2;
+        }
+        .selected-passive .dna-background { /* New style for selected passive */
+            opacity: 0.2 !important; /* Force visibility */
+        }
+        .disabled-dna-hover .dna-background { /* For unselected passive options after choice */
+            opacity: 0 !important; /* Force hidden */
+            transition: none !important; /* Disable hover effect */
+        }
+        .flipped-dna {
+            transform: translate(-50%, -50%) scaleY(-1);
+        }
+
+
+        @keyframes popupAppear {
+            from {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* Admin Panel Specific Styles */
+        .admin-panel {
+            background-color: #2a1a45; /* Dark purple, similar to ability options */
+            color: #eee;
+            padding: 15px; /* Reduced padding */
+            border-radius: 15px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
+            text-align: center;
+            max-width: 600px; /* Wider for stats */
+            width: 95%; /* Responsive width */
+            display: flex; /* Use flexbox for internal layout */
+            flex-direction: column;
+            gap: 10px; /* Reduced space between sections */
+            border: 2px solid #6a0dad; /* Purple border */
+            position: relative; /* For close button absolute positioning */
+            max-height: 90vh; /* Max height to allow scrolling */
+            overflow-y: auto; /* Enable vertical scrolling */
+        }
+
+        .admin-panel-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #FF8C00;
+            margin-bottom: 10px; /* Reduced margin */
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        .admin-section {
+            background-color: #3e2860; /* Slightly lighter purple for sections */
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #4a1c87;
+        }
+
+        .admin-section h3 {
+            font-size: 1.2em;
+            color: #b39ddb; /* Lighter purple */
+            margin-top: 0;
+            margin-bottom: 8px; /* Reduced margin */
+        }
+
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); /* Adjusted minmax for more condensation */
+            gap: 8px; /* Reduced gap */
+        }
+
+        .admin-stat-item, .admin-ability-item {
+            display: flex; /* Changed to flex */
+            flex-direction: column; /* Stack label, then input/buttons */
+            align-items: flex-start;
+            text-align: left;
+            background-color: #4a1c87;
+            padding: 6px;
+            border-radius: 8px;
+            border: 1px solid #6200ff;
+        }
+
+        .admin-ability-item { /* Specific style for ability items */
+            border-color: #FF8C00; /* Orange border */
+        }
+
+        .admin-stat-item label, .admin-ability-item label {
+            font-size: 0.85em; /* Slightly smaller font */
+            color: #d1c4e9;
+            margin-bottom: 3px; /* Reduced margin */
+            text-transform: capitalize; /* Capitalize the first letter of labels */
+        }
+
+        .admin-input-row { /* New container for input and buttons */
+            display: flex;
+            align-items: center;
+            gap: 4px; /* Small gap between input and buttons */
+            width: 100%; /* Make this row take full width */
+        }
+        /* Specific styling for level buttons container */
+        .admin-level-buttons {
+            display: flex;
+            gap: 4px; /* Gap between level buttons */
+            width: 100%;
+            justify-content: space-around; /* Distribute buttons evenly */
+        }
+        /* Styling for individual level buttons */
+        .admin-level-button {
+            background-color: #6a0dad;
+            color: white;
+            border: 1px solid #9932CC;
+            border-radius: 5px;
+            padding: 4px 8px;
+            font-size: 0.8em; /* Smaller font for level numbers */
+            cursor: pointer;
+            transition: background-color 0.1s ease, border-color 0.1s ease;
+            flex-grow: 1; /* Make buttons grow to fill space */
+            text-align: center;
+            min-width: 20px; /* Minimum width for very small screens */
+        }
+        .admin-level-button.selected {
+            background-color: #9932CC;
+            border-color: #6200ff;
+            box-shadow: 0 0 5px rgba(98, 0, 255, 0.5);
+        }
+        .admin-level-button:hover:not(.selected) {
+            background-color: #8a0dbd;
+        }
+
+        .admin-stat-item input, .admin-ability-item input {
+            flex-grow: 1; /* Allow input to take available space */
+            width: 66%; /* Explicitly set to 2/3 */
+            max-width: 66%; /* Ensure it doesn't grow beyond 2/3 */
+            min-width: 0; /* Allow shrinking */
+            padding: 4px 6px;
+            border: 1px solid #9c27b0;
+            border-radius: 5px;
+            background-color: #1a0f2b;
+            color: #00ff00;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        .admin-stat-item input:focus, .admin-ability-item input:focus {
+            outline: none;
+            border-color: #6200ff;
+            box-shadow: 0 0 5px rgba(98, 0, 255, 0.5);
+        }
+
+        .admin-panel-button { /* Style for +/- buttons */
+            background-color: #6a0dad; /* Darker purple */
+            color: white;
+            border: 1px solid #9932CC;
+            border-radius: 5px;
+            width: 17%; /* Distribute remaining space - (100-66)/2 = 17 */
+            height: 25px; /* Fixed height for buttons */
+            font-size: 1.2em; /* Bigger font for +/- */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.1s ease, border-color 0.1s ease;
+            flex-shrink: 0; /* Prevent buttons from shrinking */
+        }
+
+        .admin-panel-button:hover {
+            background-color: #9932CC;
+            border-color: #6200ff;
+        }
+
+        .admin-close-button {
+            background-color: #8B0000;
+            color: white;
+            border: 2px solid #FF0000;
+            border-radius: 10px;
+            padding: 8px 15px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+            margin-top: 15px;
+            align-self: center; /* Center the button in flex column */
+        }
+
+        .admin-close-button:hover {
+            background-color: #CD0000;
+            transform: translateY(-2px);
+            border-color: #FF4500;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .game-container {
+                padding: 15px;
+            }
+            .healing-popup {
+                padding: 10px; /* Further reduced for smaller screens */
+                gap: 8px;
+                max-width: 98%; /* Further restrict max-width */
+            }
+            .ability-row {
+                flex-direction: column;
+                gap: 8px;
+            }
+            .ability-option-half {
+                padding: 8px;
+                min-width: unset;
+                max-width: 100%;
+            }
+            .ability-name {
+                font-size: 1em;
+            }
+            .stat-line {
+                font-size: 0.7em;
+            }
+            .dna-background {
+                font-size: 100px;
+            }
+            .decline-option-button {
+                flex-basis: 100%;
+                height: 45px;
+                padding: 6px;
+            }
+            .admin-panel {
+                padding: 10px;
+                gap: 8px;
+            }
+            .admin-panel-title {
+                font-size: 1.5em;
+            }
+            .admin-section h3 {
+                font-size: 1.1em;
+            }
+            .admin-grid {
+                grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+                gap: 6px;
+            }
+            .admin-stat-item input, .admin-ability-item input {
+                font-size: 0.8em;
+            }
+            .origin-grid {
+                grid-template-columns: 1fr; /* Single column for mobile */
+            }
+            .game-title {
+                font-size: 4em;
+            }
+            .game-subtitle {
+                font-size: 1.6em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 10px;
+            }
+            .healing-popup {
+                padding: 8px;
+                gap: 6px;
+            }
+            .popup-message {
+                font-size: 1em;
+            }
+            .popup-subtitle {
+                font-size: 1.1em;
+            }
+            .ability-name {
+                font-size: 0.9em;
+            }
+            .stat-line {
+                font-size: 0.65em;
+            }
+            .dna-background {
+                font-size: 70px;
+            }
+            .decline-option-button .fat-x {
+                font-size: 1.8em;
+            }
+            .decline-option-button .decline-text {
+                font-size: 0.55em;
+            }
+            .admin-panel {
+                padding: 8px;
+                gap: 6px;
+            }
+            .admin-panel-title {
+                font-size: 1.3em;
+            }
+            .admin-section h3 {
+                font-size: 1em;
+            }
+            .admin-grid {
+                grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+                gap: 4px;
+            }
+            .game-title {
+                font-size: 3.5em;
+            }
+            .game-subtitle {
+                font-size: 1.4em;
+            }
+            .action-button {
+                font-size: 1.2em;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <!-- Start Screen Overlay -->
+        <div id="startScreenOverlay" class="overlay active">
+            <div class="start-screen-content">
+                <h1 class="game-title">Mutagen</h1>
+                <h2 class="game-subtitle">
+                    <span class="survive">Survive.</span>
+                    <span class="adapt">Adapt.</span>
+                    <span class="consume">Consume.</span>
+                </h2>
+                <button id="startGameButton" class="action-button">Start Game</button>
+            </div>
+        </div>
+
+        <!-- Canvas for the actual game -->
+        <div class="game-container">
+            <canvas id="gameCanvas"></canvas>
+        </div>
+    </div>
+
+    <!-- General Pop-up Overlay (for healing/ability and admin panel) -->
+    <div id="popupOverlay" class="overlay">
+        <!-- Healing/Ability Selection Popup -->
+        <div id="abilitySelectionPopup" class="healing-popup" style="display: none;">
+            <p id="popupMessage" class="popup-message"></p>
+            <h2 id="popupSubtitle" class="popup-subtitle"></h2>
+            <div id="popupContentArea" class="popup-content-area"></div>
+        </div>
+
+        <!-- Genetic Origin Selection Popup -->
+        <div id="originSelectionPopup" class="popup-panel" style="display: none;">
+            <h2 class="popup-panel-title">Choose Your Genetic Origin</h2>
+            <div id="originGrid" class="origin-grid">
+                <!-- Origin options will be dynamically inserted here -->
+            </div>
+            <button id="selectOriginButton" class="action-button" disabled>Start Game</button>
+        </div>
+
+        <!-- Admin Panel Popup -->
+        <div id="adminPanel" class="admin-panel" style="display: none;">
+            <h2 class="admin-panel-title">Admin Panel</h2>
+            <div class="admin-section">
+                <h3>Player Stats & Abilities</h3>
+                <div id="adminStatsContainer" class="admin-grid">
+                    <!-- Stats and Abilities will be dynamically inserted here -->
+                </div>
+            </div>
+            <button id="closeAdminPanelBtn" class="admin-close-button">Close</button>
+        </div>
+    </div>
+
+    <!-- TEMPLATE ELEMENTS (remain hidden and are cloned) -->
+    <div id="templateAbilityOption" class="ability-option-half" style="display:none;">
+        <span class="dna-background">🧬</span>
+        <h3 class="ability-name"></h3>
+        <div class="stat-details"></div>
+    </div>
+    <div id="templateDeclineButton" class="decline-option-button" style="display:none;">
+        <span class="fat-x">X</span>
+        <div class="decline-text">Decline</div>
+    </div>
+
+    <script>
+        // Get the canvas element and its 2D rendering context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Main game overlays/popups
+        const startScreenOverlay = document.getElementById('startScreenOverlay');
+        const startGameButton = document.getElementById('startGameButton');
+        const popupOverlay = document.getElementById('popupOverlay');
+
+        // Specific popup containers
+        const abilitySelectionPopup = document.getElementById('abilitySelectionPopup');
+        const originSelectionPopup = document.getElementById('originSelectionPopup');
+        const adminPanel = document.getElementById('adminPanel');
+
+        // Elements within popups
+        const popupMessage = document.getElementById('popupMessage');
+        const popupSubtitle = document.getElementById('popupSubtitle');
+        const popupContentArea = document.getElementById('popupContentArea');
+        const originGrid = document.getElementById('originGrid');
+        const selectOriginButton = document.getElementById('selectOriginButton');
+        const adminStatsContainer = document.getElementById('adminStatsContainer');
+        const closeAdminPanelBtn = document.getElementById('closeAdminPanelBtn');
+
+        // Get references to the *template* elements from the HTML. These are never removed from DOM.
+        const templateAbilityOption = document.getElementById('templateAbilityOption');
+        const templateDeclineButton = document.getElementById('templateDeclineButton');
+
+
+        // --- Game Variables ---
+        // Player properties (world coordinates, size at zoomLevel 1)
+        const playerSize = 16;
+        const playerCollisionPadding = playerSize * 0.5;
+        // Adjusted to be radius
+        const playerRadius = playerSize / 2 + playerCollisionPadding;
+
+
+        const basePlayerSpeed = 2;
+
+        // World dimensions
+        const worldWidth = 2400;
+        const worldHeight = 1800;
+
+        // Player's initial position in world coordinates (center of the world)
+        let playerX = worldWidth / 2;
+        let playerY = worldHeight / 2;
+
+        // Target coordinates in world space for player movement
+        let targetX = playerX;
+        let targetY = playerY;
+        let isMoving = false;
+        let showTargetIndicator = false; // For red 'X'
+
+        // Camera position (top-left corner of the visible world area in world coordinates)
+        let cameraX = 0;
+        let cameraY = 0;
+        let zoomScale = 1;
+        let isMapModeActive = false; // New state for map view toggle
+
+        // Player's current direction angle in radians (for orientation line)
+        let playerDirectionAngle = 0;
+
+        // --- Game State ---
+        let gameState = 'startScreen'; // 'startScreen', 'originSelection', 'inGame', 'pausedMap', 'gameOver'
+
+        // Character Stats (Consolidated into an object)
+        let playerStats = {
+            currentHp: 50,
+            maxHp: 50,
+            attack: 20,
+            defense: 5,
+            stamina: 0,
+            stealth: 0,
+            speed: 0,
+            currentHunger: 1,
+            maxHunger: 100,
+            currentXp: 0,
+            playerLevel: 1,
+            xpToNextLevel: 10,
+            playerEvolutionState: 'Grub'
+        };
+
+        // Define XP thresholds and corresponding level descriptions
+        const XP_THRESHOLDS = [0, 10, 100, 1000, Infinity]; // XP for Level 1, 2, 3, 4. Infinity for max level
+        const LEVEL_DESCRIPTIONS = ['Grub', 'Scavenger', 'Predator', 'Abomination'];
+        const MAX_PLAYER_LEVEL = LEVEL_DESCRIPTIONS.length;
+
+
+        // Player Abilities (Consolidated into an object)
+        let playerAbilities = {
+            jump: 0,
+            dash: 0,
+            burrow: 0,
+        };
+
+        // Map for quick lookup of ability details for hotbar assignment
+        const abilityDetailsMap = {
+            'jump': { name: 'Jump', key: 'jump', hotbarIcon: '🏃' },
+            'dash': { name: 'Dash', key: 'dash', hotbarIcon: '💨' },
+            'burrow': { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' }
+        };
+        const allActiveAbilities = Object.values(abilityDetailsMap); // Array of all active ability objects
+
+        // Array to store pre-generated forest background elements
+        let forestElements = [];
+
+        // --- Combat Variables ---
+        let inCombat = false;
+        let combatTarget = null;
+        const combatDelay = 500; // milliseconds (0.5 seconds) - base cooldown for continuous attacks
+        let gameOver = false;
+
+        // Attack animation variables
+        const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation
+        const ATTACK_LURCH_DISTANCE = 8; // pixels for the lurch distance
+
+        // Player specific attack timing
+        let playerLastAttackTime = 0;
+        let playerAttackCooldown = 500; // Default cooldown
+        let playerIsAttacking = false;
+        let playerAttackAnimStartTime = 0;
+
+        const FIRST_STRIKE_DELAY = 250; // 1/4 second delay for the second attacker
+
+
+        // --- NPC Variables ---
+        let npcs = []; // Array to hold NPC objects
+        const npcSize = 16; // NPCs are same size as player
+        const npcCollisionPadding = npcSize * 0.5;
+        // Adjusted to be radius
+        const npcRadius = npcSize / 2 + npcCollisionPadding;
+        const npcTargetingClickRadius = npcRadius * 2; // New, larger radius for targeting clicks
+
+        const baseNpcSpeed = 2; // Base speed for NPCs
+        // Updated NPC emojis and names
+        const npcEmojis = ['🐞', '🕷️', '🦋'];
+        const npcEmojiNames = {
+            '🐞': 'Ladybug Scuttler',
+            '🕷️': 'Spider Lurker',
+            '🦋': 'Butterfly Flitter'
+        };
+        const MAX_ENEMIES = 5; // Maximum number of enemies allowed on the map
+        let closestNpcAngle = 0; // Angle to the closest NPC for the radial indicator
+        let closestNpcDistance = Infinity; // Distance to the closest NPC for dynamic indicator
+        // deadNpcs will store { x, y, maxHp, name, totalDamageDealtByPlayer, totalDamageReceivedByPlayer }
+        let deadNpcs = [];
+        let clickedDeadNpc = null; // Stores the dead NPC object that was clicked for the pop-up
+        let targetedNpc = null; // Stores the currently targeted live NPC
+
+        // --- Floating Damage Text Variables ---
+        let floatingDamageTexts = []; // Array to store active damage text objects
+
+        // --- Pop-up State ---
+        let isAnyPanelOpen = false; // Tracks if *any* overlay is active (visually)
+        let passiveAbilityChoiceData = null;
+        let activeAbilityRewardToOffer = null;
+
+        let passiveChoiceMade = false;
+        let activeChoiceMade = false;
+
+
+        // Variable to hold the animation frame ID to prevent multiple calls
+        let animationFrameId = null;
+
+        // --- Movement Ability Variables (Generalized for Jump/Dash/Burrow) ---
+        let isPerformingMovementAbility = false; // True if Jump or Dash is active
+        const JUMP_BASE_DISTANCE = 100; // Base distance for Jump
+        const DASH_BASE_DISTANCE = 150 * 1.5; // Base distance for Dash (100 * 1.5) increased by 50%
+        let currentMovementAbilityDuration = 0; // Duration for current active movement
+        let movementAbilityStartTime = 0;
+        let movementAbilityStartX = 0;
+        let movementAbilityStartY = 0;
+        let movementAbilityEndX = 0;
+        let movementAbilityEndY = 0;
+        let postMovementImmobilityDuration = 250; // milliseconds after Jump/Dash (can vary by ability)
+        let canMoveFreeLy = true; // True if player can initiate normal movement or another movement ability
+        let lastActivatedAbilityRef = null; // To track which ability was just activated for post-movement effects
+
+        // New Burrow specific variables
+        let isBurrowing = false;
+        const burrowMaxDuration = 5000; // 5 seconds
+        let burrowStartTime = 0;
+
+        // New visual effect variables
+        let playerVisualScale = 1; // Current scale factor for the player icon
+
+        // New jump landing indicator
+        let showJumpLandingIndicator = false;
+        let jumpLandingX = 0;
+        let jumpLandingY = 0;
+
+        // Fixed jump duration for consistent "air time"
+        const JUMP_FIXED_DURATION = 350; // milliseconds (e.g., 350ms for a quick hop)
+
+
+        // Store last known mouse canvas coordinates for movement ability direction calculation
+        let lastMouseCanvasX = canvas.width / 2; // Initialize to center
+        let lastMouseCanvasY = canvas.height / 2; // Initialize to center
+
+
+        // --- Cooldowns for Abilities ---
+        let cooldowns = {
+            jump: { lastUsed: 0, duration: 5000 }, // 5 seconds
+            dash: { lastUsed: 0, duration: 5000 } ,
+            burrow: { lastUsed: 0, duration: 5000 }
+        };
+
+        function isAbilityOnCooldown(abilityKey) {
+            const cooldownInfo = cooldowns[abilityKey];
+            if (!cooldownInfo) return false; // No cooldown defined
+            return (performance.now() - cooldownInfo.lastUsed) < cooldownInfo.duration;
+        }
+
+        function getCooldownRemaining(abilityKey) {
+            const cooldownInfo = cooldowns[abilityKey];
+            if (!cooldownInfo) return 0;
+            const elapsed = performance.now() - cooldownInfo.lastUsed;
+            return Math.max(0, cooldownInfo.duration - elapsed);
+        }
+
+        function startCooldown(abilityKey) {
+            if (cooldowns[abilityKey]) {
+                cooldowns[abilityKey].lastUsed = performance.now();
+            }
+        }
+
+
+        // --- Hotbar Variables ---
+        // Defines the fixed slots in the hotbar. 'abilityRef' maps to a property in playerAbilities.
+        const hotbarSlots = [
+            { keybind: 'F', abilityRef: null, abilityName: 'Empty', icon: '' },
+            { keybind: 'R', abilityRef: null, abilityName: 'Empty', icon: '' },
+            { keybind: 'E', abilityRef: null, abilityName: '', icon: '' },
+            { keybind: 'Q', abilityRef: null, abilityName: '', icon: '' },
+            { keybind: 'C', abilityRef: null, abilityName: '', icon: '' },
+            { keybind: 'X', abilityRef: null, abilityName: '', icon: '' },
+            { keybind: 'Z', abilityRef: null, abilityName: '', icon: '' }
+        ];
+        // Smaller hotbar slot size, making it look like keyboard keys
+        let hotbarSlotSize = 45; // Size of each hotbar slot (width and height) - changed to let
+        const hotbarSpacing = 3; // Smaller spacing between slots
+
+        // Hotkey swap state variables
+        let swapMode = false;
+        let swapSourceSlotIndex = -1;
+        const SWAP_INIT_TEXT = "Select an ability to swap"; // Initial text when entering swap mode
+        let swapMessage = null; // Used to display swap related messages (initiate, success)
+        let swapMessageTimer = null; // Timer for clearing the success message
+
+        // --- Color Definitions ---
+        const colorGreen = '#28a745';
+        const colorYellow = '#ffc107';
+        const colorOrange = '#fd7e14';
+        const colorRed = '#dc3545';
+        const buttonColor = 'rgba(70, 70, 70, 0.8)';
+        const buttonBorderColor = '#aaa';
+        const buttonTextColor = 'white';
+        // Removed colorLightGold as per user request (no more gold highlighting for stats)
+
+
+        // --- Genetic Origin Data ---
+        const geneticOrigins = [
+            {
+                key: 'arachnoid', // Changed from arachnid
+                name: 'Arachnoid', // Changed from Arachnid
+                emoji: '🦂',
+                rotation: 0, // No rotation needed for scorpion
+                bonusStats: { attack: 0.02, defense: 0.02 },
+                getBonusText: () => '+2% All Attack & Defense Gains'
+            },
+            {
+                key: 'reptilian', // Changed from reptile
+                name: 'Reptilian', // Changed from Reptile
+                emoji: '🦎',
+                rotation: -Math.PI / 2, // -90 degrees (facing left/right naturally)
+                bonusStats: { stealth: 0.02, speed: 0.02 },
+                getBonusText: () => '+2% All Stealth & Speed Gains'
+            },
+            {
+                key: 'raptorial', // Changed from raptor
+                name: 'Raptorial', // Changed from Raptor
+                emoji: '🦖',
+                rotation: -Math.PI / 2, // -90 degrees
+                bonusStats: { speed: 0.02, attack: 0.02 },
+                getBonusText: () => '+2% All Speed & Attack Gains'
+            },
+            {
+                key: 'simian',
+                name: 'Simian',
+                emoji: '�',
+                rotation: -Math.PI / 2, // -90 degrees
+                bonusStats: { maxHp: 0.02, defense: 0.02 },
+                getBonusText: () => '+2% All HP & Defense Gains'
+            },
+            {
+                key: 'synthetic',
+                name: 'Synthetic',
+                emoji: '🤖',
+                rotation: 0, // No rotation
+                bonusStats: { currentXp: 0.02, stamina: 0.02 },
+                getBonusText: () => '+2% All XP & Stamina Gains'
+            }
+        ];
+        let playerGeneticOrigin = null; // Will store the selected genetic origin object
+
+        // --- Passive Abilities Data ---
+        const passiveAbilities = [
+            {
+                name: 'Tough Skin',
+                stats: ['maxHp', 'defense'], // Use an array for stats impacted by this ability
+                activeAbilityReward: { name: 'Jump', key: 'jump', hotbarIcon: '🏃' },
+                getDescription: (boost1, boost2) => `+${boost1.toFixed(1)} HP, +${boost2.toFixed(1)} Defense`,
+                applyBoost: (boost1, boost2) => {
+                    let actualBoost1 = boost1;
+                    let actualBoost2 = boost2;
+
+                    // Apply genetic origin bonuses if applicable
+                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                        if (playerGeneticOrigin.bonusStats.maxHp) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
+                        if (playerGeneticOrigin.bonusStats.defense) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
+                    }
+
+                    playerStats.maxHp = Math.round((playerStats.maxHp + actualBoost1) * 10) / 10;
+                    playerStats.currentHp = Math.min(playerStats.maxHp, Math.round((playerStats.currentHp + actualBoost1) * 10) / 10);
+                    playerStats.defense = Math.round((playerStats.defense + actualBoost2) * 10) / 10;
+                },
+                getPreview: (boost1, boost2, currentStats) => {
+                    const previewLines = [];
+                    let previewBoost1 = boost1;
+                    let previewBoost2 = boost2;
+
+                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                        if (playerGeneticOrigin.bonusStats.maxHp) previewBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
+                        if (playerGeneticOrigin.bonusStats.defense) previewBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
+                    }
+
+                    const oldHp = currentStats.maxHp;
+                    const newHp = oldHp + previewBoost1;
+                    const deltaHpClass = previewBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">HP</span>: ${oldHp.toFixed(1)} ➡ <span class="${deltaHpClass}">${newHp.toFixed(1)}</span>`);
+
+                    const oldDef = currentStats.defense;
+                    const newDef = oldDef + previewBoost2;
+                    const deltaDefClass = previewBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Defense</span>: ${oldDef.toFixed(1)}% ➡ <span class="${deltaDefClass}">${newDef.toFixed(1)}%</span>`);
+
+                    return previewLines;
+                }
+            },
+            {
+                name: 'Reflexes',
+                stats: ['speed', 'stealth'],
+                activeAbilityReward: { name: 'Dash', key: 'dash', hotbarIcon: '💨' },
+                getDescription: (boost1, boost2) => `+${boost1.toFixed(1)} Speed, +${boost2.toFixed(1)} Stealth`,
+                applyBoost: (boost1, boost2) => {
+                    let actualBoost1 = boost1;
+                    let actualBoost2 = boost2;
+
+                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                        if (playerGeneticOrigin.bonusStats.speed) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
+                        if (playerGeneticOrigin.bonusStats.stealth) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
+                    }
+
+                    playerStats.speed = Math.round((playerStats.speed + actualBoost1) * 10) / 10;
+                    playerStats.stealth = Math.round((playerStats.stealth + actualBoost2) * 10) / 10;
+                },
+                getPreview: (boost1, boost2, currentStats) => {
+                    const previewLines = [];
+                    let previewBoost1 = boost1;
+                    let previewBoost2 = boost2;
+
+                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                        if (playerGeneticOrigin.bonusStats.speed) previewBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
+                        if (playerGeneticOrigin.bonusStats.stealth) previewBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
+                    }
+
+                    const oldSpd = currentStats.speed;
+                    const newSpd = oldSpd + previewBoost1;
+                    const deltaSpdClass = previewBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Speed</span>: ${oldSpd.toFixed(1)}% ➡ <span class="${deltaSpdClass}">${newSpd.toFixed(1)}%</span>`);
+
+                    const oldStl = currentStats.stealth;
+                    const newStl = oldStl + previewBoost2;
+                    const deltaStlClass = previewBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${oldStl.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}%</span>`);
+
+                    return previewLines;
+                }
+            },
+            {
+                name: 'Instinct',
+                stats: ['stamina', 'attack'],
+                activeAbilityReward: { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' },
+                getDescription: (boost1, boost2) => `+${boost1.toFixed(1)} Stamina, +${boost2.toFixed(1)} Attack`,
+                applyBoost: (boost1, boost2) => {
+                    let actualBoost1 = boost1;
+                    let actualBoost2 = boost2;
+
+                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                        if (playerGeneticOrigin.bonusStats.stamina) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
+                        if (playerGeneticOrigin.bonusStats.attack) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
+                    }
+
+                    playerStats.stamina = Math.round((playerStats.stamina + actualBoost1) * 10) / 10;
+                    playerStats.attack = Math.round((playerStats.attack + actualBoost2) * 10) / 10;
+                },
+                getPreview: (boost1, boost2, currentStats) => {
+                    const previewLines = [];
+                    let previewBoost1 = boost1;
+                    let previewBoost2 = boost2;
+
+                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                        if (playerGeneticOrigin.bonusStats.stamina) previewBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
+                        if (playerGeneticOrigin.bonusStats.attack) previewBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
+                    }
+
+                    const oldSta = currentStats.stamina;
+                    const newSta = oldSta + previewBoost1;
+                    const deltaStaClass = previewBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Stamina</span>: ${oldSta.toFixed(1)}% ➡ <span class="${deltaStaClass}">${newSta.toFixed(1)}%</span>`);
+
+                    const oldAtk = currentStats.attack;
+                    const newAtk = oldAtk + previewBoost2;
+                    const deltaAtkClass = previewBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Attack</span>: ${oldAtk.toFixed(1)} ➡ <span class="${deltaAtkClass}">${newAtk.toFixed(1)}</span>`);
+
+                    return previewLines;
+                }
+            }
+        ];
+
+        // Map NPC emoji to their preferred passive ability name
+        const npcPreferredAbilityMap = {
+            '🐞': 'Tough Skin',
+            '🕷️': 'Instinct',
+            '🦋': 'Reflexes'
+        };
+
+        // Helper to generate boost amount (1.0 to 5.0, rounded to nearest tenth)
+        function generateBoostAmount() {
+            let boost = (Math.random() * 4) + 1; // Range [1, 5)
+            return Math.round(boost * 10) / 10;
+        }
+
+        // --- Helper Function for Bar Colors ---
+        // This function is now simplified to return fixed colors for HP and Hunger,
+        // but keeps the percentage-based logic for XP if needed later, though for now XP is fixed blue.
+        function getBarColor(percentage, type) {
+            if (type === 'hp') {
+                return colorGreen; // Always green for HP bar fill
+            } else if (type === 'hunger') {
+                return colorRed; // Always red for Hunger bar fill
+            } else if (type === 'xp') {
+                return '#4A90E2'; // Blue for XP bar
+            }
+            return 'gray'; // Default or error color
+        }
+
+        // --- Canvas Resizing Logic ---
+        function resizeCanvas() {
+            const desiredAspectRatio = 4 / 3;
+            // No padding on main-content, so usable width/height is full window
+            const viewportUsableWidth = window.innerWidth;
+            const viewportUsableHeight = window.innerHeight;
+
+            let newCanvasWidth = viewportUsableWidth;
+            let newCanvasHeight = viewportUsableWidth / desiredAspectRatio;
+
+            if (newCanvasHeight > viewportUsableHeight) {
+                newCanvasHeight = viewportUsableHeight;
+                newCanvasWidth = viewportUsableHeight * desiredAspectRatio;
+            }
+
+            const minCanvasDisplayWidth = 320;
+            const minCanvasDisplayHeight = minCanvasDisplayWidth / desiredAspectRatio;
+
+            if (newCanvasWidth < minCanvasDisplayWidth) {
+                newCanvasWidth = minCanvasDisplayWidth;
+                newCanvasHeight = minCanvasDisplayHeight;
+            }
+
+            canvas.width = newCanvasWidth;
+            canvas.height = newCanvasHeight;
+
+            canvas.style.width = `${newCanvasWidth}px`;
+            canvas.style.height = `${newCanvasHeight}px`;
+
+            const gameContainer = document.querySelector('.game-container');
+            const containerPadding = 20; // Padding inside game-container
+            gameContainer.style.width = `${newCanvasWidth + (2 * containerPadding)}px`;
+            gameContainer.style.height = `${newCanvasHeight + (2 * containerPadding)}px`;
+
+            // Overlays take 100% of main-content, which is 100% of viewport, so no direct adjustment needed
+        }
+
+        // --- Drawing Functions ---
+        function generateForestElements() {
+            forestElements = [];
+            for (let i = 0; i < 200; i++) {
+                const x = Math.random() * worldWidth;
+                const y = Math.random() * worldHeight;
+                const width = 50 + Math.random() * 70;
+                const height = 40 + Math.random() * 60;
+                const color = `rgba(34, 87, 42, ${0.5 + Math.random() * 0.3})`;
+                forestElements.push({ type: 'rect', x, y, width, height, color });
+            }
+            for (let i = 0; i < 150; i++) {
+                const x = Math.random() * worldWidth;
+                const y = Math.random() * worldHeight;
+                const size = 30 + Math.random() * 40;
+                const color = `rgba(88, 57, 39, ${0.6 + Math.random() * 0.3})`;
+                forestElements.push({ type: 'rect', x, y, width: size, height: size, color });
+            }
+            for (let i = 0; i < 100; i++) {
+                const x = Math.random() * worldWidth;
+                const y = Math.random() * worldHeight;
+                const size = 20 + Math.random() * 50;
+                const color = `rgba(60, 118, 59, ${0.4 + Math.random() * 0.2})`;
+                forestElements.push({ type: 'rect', x, y, width: size, height: size, color });
+            }
+        }
+
+        function renderForestBackground() {
+            ctx.fillStyle = '#22572a';
+            ctx.fillRect(0, 0, worldWidth, worldHeight);
+
+            forestElements.forEach(element => {
+                if (element.type === 'rect') {
+                    ctx.fillStyle = element.color;
+                    ctx.fillRect(element.x, element.y, element.width, element.height);
+                }
+            });
+        }
+
+        function createSingleNPC() {
+            const minNpcNpcDistance = 100;
+            let newNpcX, newNpcY;
+            let validSpawn = false;
+            let attempts = 0;
+            const maxAttempts = 100;
+
+            const patrolOrigins = [
+                { x: worldWidth * 0.1, y: worldHeight * 0.1 },
+                { x: worldWidth * 0.7, y: worldHeight * 0.1 },
+                { x: worldWidth * 0.4, y: worldHeight * 0.7 },
+                { x: worldWidth * 0.2, y: worldHeight * 0.8 },
+                { x: worldWidth * 0.9, y: worldHeight * 0.5 }
+            ];
+
+            const screenBuffer = 100;
+            const playerViewWorldX_min = cameraX - screenBuffer;
+            const playerViewWorldX_max = cameraX + (canvas.width / zoomScale) + screenBuffer;
+            const playerViewWorldY_min = cameraY - screenBuffer;
+            const playerViewWorldY_max = cameraY + (canvas.height / zoomScale) + screenBuffer;
+
+
+            while (!validSpawn && attempts < maxAttempts) {
+                const areaIndex = Math.floor(Math.random() * patrolOrigins.length);
+                const origin = patrolOrigins[areaIndex];
+                const basePatrolAreaSize = 100;
+                const randomSizeVariation = 50;
+                const areaWidth = basePatrolAreaSize + Math.random() * randomSizeVariation;
+                const areaHeight = basePatrolAreaSize + Math.random() * randomSizeVariation;
+
+                newNpcX = origin.x + (Math.random() * areaWidth);
+                newNpcY = origin.y + (Math.random() * areaHeight);
+
+                newNpcX = Math.max(npcSize / 2, Math.min(newNpcX, worldWidth - npcSize / 2));
+                newNpcY = Math.max(npcSize / 2, Math.min(newNpcY, worldHeight - npcSize / 2));
+
+                const isInsidePlayerView = (
+                    newNpcX + npcSize / 2 > playerViewWorldX_min &&
+                    newNpcX - npcSize / 2 < playerViewWorldX_max &&
+                    newNpcY + npcSize / 2 > playerViewWorldY_min &&
+                    newNpcY + npcSize / 2 < playerViewWorldY_max
+                );
+
+                if (isInsidePlayerView) {
+                    attempts++;
+                    continue;
+                }
+
+                let tooCloseToOtherNpc = false;
+                for (const existingNpc of npcs) {
+                    const distFromOtherNpc = Math.sqrt(Math.pow(newNpcX - existingNpc.x, 2) + Math.pow(newNpcY - existingNpc.y, 2));
+                    if (distFromOtherNpc < minNpcNpcDistance) {
+                        tooCloseToOtherNpc = true;
+                        break;
+                    }
+                }
+
+                if (!tooCloseToOtherNpc) {
+                    validSpawn = true;
+                }
+                attempts++;
+            }
+
+            if (!validSpawn) {
+                console.warn("Could not find a valid off-screen spawn location for NPC after multiple attempts. Spawning randomly within world.");
+                newNpcX = Math.random() * worldWidth;
+                newNpcY = Math.random() * worldHeight;
+            }
+
+            const patrolWaypoints = [
+                { x: newNpcX - 50, y: newNpcY },
+                { x: newNpcX + 50, y: newNpcY },
+                { x: newNpcX + 50, y: newNpcY + 50 },
+                { x: newNpcX - 50, y: newNpcY + 50 }
+            ];
+
+            const chosenEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
+            const chosenName = npcEmojiNames[chosenEmoji] || `NPC #${npcs.length + 1}`;
+
+            return {
+                id: npcs.length + 1,
+                name: chosenName,
+                x: newNpcX,
+                y: newNpcY,
+                size: npcSize,
+                radius: npcRadius, // Use the new radius property
+                emoji: chosenEmoji,
+                currentHp: Math.floor(Math.random() * 20) + 10,
+                maxHp: Math.floor(Math.random() * 20) + 10,
+                attack: Math.floor(Math.random() * 5) + 5,
+                defense: Math.floor(Math.random() * 10) + 1,
+                stamina: Math.floor(Math.random() * 5) + 1,
+                stealth: Math.floor(Math.random() * 5) + 1,
+                speed: Math.floor(Math.random() * 5) + 1,
+                patrolWaypoints: patrolWaypoints,
+                currentPatrolPointIndex: 0,
+                patrolTargetX: patrolWaypoints[0].x,
+                patrolTargetY: patrolWaypoints[0].y,
+                inCombat: false,
+                directionAngle: 0,
+                totalDamageDealtToPlayer: 0,
+                totalDamageReceivedFromPlayer: 0,
+                dashedThrough: false,
+                // NPC specific attack timing and animation
+                lastAttackTime: 0,
+                attackCooldown: 500, // Default 0.5s
+                isAttacking: false,
+                attackAnimStartTime: 0
+            };
+        }
+
+        function generateNPCs() {
+            npcs = [];
+            const numNPCsToGenerate = 3;
+            for (let i = 0; i < numNPCsToGenerate; i++) {
+                npcs.push(createSingleNPC());
+            }
+        }
+
+        function lerp(a, b, t) {
+            return a + (b - a) * Math.max(0, Math.min(1, t));
+        }
+
+        // New function for circle-to-circle collision
+        function checkCircleCollision(x1, y1, r1, x2, y2, r2) {
+            const dx = x1 - x2;
+            const dy = y1 - y2;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < (r1 + r2);
+        }
+
+        /**
+         * Normalizes an angle to be between -PI and PI.
+         * @param {number} angle The angle in radians.
+         * @returns {number} The normalized angle.
+         */
+        function normalizeAngle(angle) {
+            return Math.atan2(Math.sin(angle), Math.cos(angle));
+        }
+
+        function dealDamage(attacker, defender) {
+            let rawDamage = attacker.attack;
+            let defenseReduction = rawDamage * (defender.defense / 100);
+
+            let effectiveDamage = Math.round((rawDamage - defenseReduction) * 10) / 10;
+            effectiveDamage = Math.max(0, effectiveDamage);
+
+            const actualHpReduction = Math.min(effectiveDamage, defender.currentHp);
+
+            defender.currentHp -= effectiveDamage;
+            defender.currentHp = Math.max(0, Math.round(defender.currentHp * 10) / 10);
+
+            const isKillingBlow = defender.currentHp <= 0;
+            const duration = isKillingBlow ? 1000 : 500;
+
+            let textX, textY;
+
+            if (attacker.isPlayer) {
+                // Player is attacker, NPC is defender
+                defender.totalDamageReceivedFromPlayer += actualHpReduction;
+                // Damage text for NPC (defender) should appear adjacent to NPC, opposite from player
+                const anglePlayerToNpc = Math.atan2(defender.y - attacker.y, defender.x - attacker.x);
+                const offsetDistance = defender.radius + 15;
+                textX = defender.x + Math.cos(anglePlayerToNpc + Math.PI) * offsetDistance;
+                textY = defender.y + Math.sin(anglePlayerToNpc + Math.PI) * offsetDistance;
+
+                floatingDamageTexts.push({
+                    value: effectiveDamage.toFixed(1),
+                    x: textX,
+                    y: textY,
+                    color: 'yellow', // Player's damage is yellow
+                    timestamp: performance.now(),
+                    duration: duration,
+                    floatDuration: duration
+                });
+
+            } else { // NPC is attacker, player is defender
+                playerStats.currentHp = defender.currentHp;
+                attacker.totalDamageDealtToPlayer += actualHpReduction;
+                // Damage text for Player (defender) should appear adjacent to player, opposite from NPC
+                const angleNpcToPlayer = Math.atan2(defender.y - attacker.y, defender.x - attacker.x);
+                const offsetDistance = defender.radius + 15; // Using playerRadius here
+                textX = defender.x + Math.cos(angleNpcToPlayer + Math.PI) * offsetDistance;
+                textY = defender.y + Math.sin(angleNpcToPlayer + Math.PI) * offsetDistance;
+
+                floatingDamageTexts.push({
+                    value: effectiveDamage.toFixed(1),
+                    x: textX,
+                    y: textY,
+                    color: 'red', // Player receives red damage
+                    timestamp: performance.now(),
+                    duration: duration,
+                    floatDuration: duration
+                });
+            }
+        }
+
+        function endBurrow() {
+            if (!isBurrowing) return;
+
+            isBurrowing = false;
+            canMoveFreeLy = false;
+
+            playerVisualScale = 1.5;
+            setTimeout(() => {
+                playerVisualScale = 1;
+                setTimeout(() => {
+                    canMoveFreeLy = true;
+                }, postMovementImmobilityDuration);
+            }, 100);
+        }
+
+        // New global variables for hunger mechanic
+        let lastHungerIncreaseTime = 0;
+        const HUNGER_INCREASE_INTERVAL = 5000; // 5 seconds
+
+        /**
+         * Determines which character (player or NPC) has the first strike advantage
+         * based on their orientation towards the opponent. Sets their initial attack timers.
+         * @param {object} playerObj The player object (with x, y, directionAngle, isPlayer:true).
+         * @param {object} npcObj The combat target NPC object (with x, y, directionAngle).
+         */
+        function determineFirstAttackerAndSetTimers(playerObj, npcObj) {
+            const currentTime = performance.now();
+
+            // Angle from player to NPC
+            const anglePlayerToNpc = Math.atan2(npcObj.y - playerObj.y, npcObj.x - playerObj.x);
+            // Angle from NPC to player
+            const angleNpcToPlayer = Math.atan2(playerObj.y - npcObj.y, playerObj.x - npcObj.x);
+
+            // Calculate how "off" the player's current direction is from facing the NPC
+            const playerOrientationDiff = Math.abs(normalizeAngle(playerObj.directionAngle - anglePlayerToNpc));
+            // Calculate how "off" the NPC's current direction is from facing the player
+            const npcOrientationDiff = Math.abs(normalizeAngle(npcObj.directionAngle - angleNpcToPlayer));
+
+            // Player attacks first if their orientation is more direct OR if it's a tie
+            if (playerOrientationDiff <= npcOrientationDiff) {
+                playerLastAttackTime = currentTime;
+                playerAttackCooldown = 0; // First attack is immediate
+                npcObj.lastAttackTime = currentTime + FIRST_STRIKE_DELAY;
+                npcObj.attackCooldown = 500; // Will be set to 500 after the first delayed attack
+                console.log("Player has first strike advantage.");
+            } else {
+                npcObj.lastAttackTime = currentTime;
+                npcObj.attackCooldown = 0; // First attack is immediate
+                playerLastAttackTime = currentTime + FIRST_STRIKE_DELAY;
+                playerAttackCooldown = 500; // Will be set to 500 after the first delayed attack
+                console.log("NPC has first strike advantage.");
+            }
+        }
+
+
+        function update() {
+            // Game logic for movement, AI, combat should run if NOT gameOver AND NOT adminPanel/originPanel
+            // The loot menu (abilitySelectionPopup) should NOT pause game logic.
+            const shouldRunGameLogic = gameState === 'inGame' && adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex';
+
+            if (playerStats.currentHp <= 0 && gameState !== 'gameOver') {
+                gameOver = true;
+                gameState = 'gameOver'; // Set game state to game over
+                cancelAnimationFrame(animationFrameId); // Stop the animation loop
+                return; // Stop further updates once game over
+            }
+
+            if (shouldRunGameLogic) {
+                const currentTime = performance.now();
+
+                // Hunger increase logic (always runs if inGame and not paused by specific panels)
+                if (currentTime - lastHungerIncreaseTime >= HUNGER_INCREASE_INTERVAL) {
+                    if (playerStats.currentHunger >= playerStats.maxHunger) {
+                        const hpLoss = Math.round(playerStats.maxHp * 0.1 * 10) / 10;
+                        playerStats.currentHp -= hpLoss;
+                        playerStats.currentHp = Math.max(0, Math.round(playerStats.currentHp * 10) / 10);
+                        floatingDamageTexts.push({
+                            value: `-${hpLoss.toFixed(1)} HP`, // Display as HP loss
+                            x: playerX,
+                            y: playerY - playerSize, // Above player
+                            color: 'red',
+                            timestamp: currentTime,
+                            duration: 1000, // Longer duration for hunger damage
+                            floatDuration: 1000
+                        });
+                        // Check for game over after hunger damage
+                        if (playerStats.currentHp <= 0) {
+                            gameOver = true;
+                            gameState = 'gameOver';
+                            cancelAnimationFrame(animationFrameId);
+                        }
+                    } else {
+                        playerStats.currentHunger++;
+                        // Hunger can now go below 1, so no Math.min here
+                    }
+                    lastHungerIncreaseTime = currentTime;
+                }
+
+                // Update attack animation state
+                if (playerIsAttacking && (currentTime - playerAttackAnimStartTime >= ATTACK_ANIM_DURATION)) {
+                    playerIsAttacking = false;
+                }
+                npcs.forEach(npc => {
+                    if (npc.isAttacking && (currentTime - npc.attackAnimStartTime >= ATTACK_ANIM_DURATION)) {
+                        npc.isAttacking = false;
+                    }
+                });
+
+
+                if (isPerformingMovementAbility) {
+                    const elapsedTime = currentTime - movementAbilityStartTime;
+                    const progress = Math.min(1, elapsedTime / currentMovementAbilityDuration);
+
+                    playerX = lerp(movementAbilityStartX, movementAbilityEndX, progress);
+                    playerY = lerp(movementAbilityStartY, movementAbilityEndY, progress);
+
+                    playerX = Math.max(playerSize / 2, Math.min(playerX, worldWidth - playerSize / 2));
+                    playerY = Math.max(playerSize / 2, Math.min(playerY, worldHeight - playerSize / 2));
+
+                    if (lastActivatedAbilityRef === 'jump') {
+                        playerVisualScale = 1 + Math.sin(progress * Math.PI) * 0.5;
+                    } else if (lastActivatedAbilityRef === 'dash') {
+                        playerVisualScale = 1;
+                        npcs.forEach(npc => {
+                            if (!npc.dashedThrough && checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
+                                dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc);
+                                npc.dashedThrough = true;
+                                if (npc.currentHp <= 0) {
+                                    playerStats.currentXp += 2;
+                                    updatePlayerLevel();
+
+                                    // Hunger reduction on enemy defeat
+                                    const xpGained = 2; // XP gained is currently always 2
+                                    playerStats.currentHunger = Math.max(0, playerStats.currentHunger - xpGained); // Hunger can now go down to 0%
+
+                                    deadNpcs.push({
+                                        x: npc.x,
+                                        y: npc.y,
+                                        maxHp: npc.maxHp,
+                                        id: npc.id,
+                                        name: npc.name,
+                                        totalDamageDealtByPlayer: npc.totalDamageReceivedFromPlayer,
+                                        totalDamageReceivedByPlayer: npc.totalDamageDealtToPlayer
+                                    });
+                                    npcs = npcs.filter(n => n !== npc);
+                                    if (combatTarget === npc) {
+                                        inCombat = false;
+                                        combatTarget.inCombat = false;
+                                        combatTarget = null;
+                                        isMoving = false;
+                                        showTargetIndicator = false;
+                                        targetedNpc = null; // Clear target on death
+                                    }
+                                    // Ensure new NPCs are spawned when one dies
+                                    while (npcs.length < MAX_ENEMIES) {
+                                        npcs.push(createSingleNPC());
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    if (progress >= 1) {
+                        isPerformingMovementAbility = false;
+                        playerVisualScale = 1;
+
+                        if (lastActivatedAbilityRef === 'jump') {
+                            showJumpLandingIndicator = false;
+                            postMovementImmobilityDuration = 250;
+                        } else if (lastActivatedAbilityRef === 'dash') {
+                            postMovementImmobilityDuration = 0;
+                            npcs.forEach(npc => npc.dashedThrough = false);
+                        }
+
+                        if (postMovementImmobilityDuration > 0) {
+                            setTimeout(() => {
+                                canMoveFreeLy = true;
+                            }, postMovementImmobilityDuration);
+                        } else {
+                            canMoveFreeLy = true;
+                        }
+                        lastActivatedAbilityRef = null;
+                    }
+                }
+                else if (isBurrowing) {
+                    if (currentTime - burrowStartTime >= burrowMaxDuration) {
+                        endBurrow();
+                    }
+                }
+
+                if (isMoving && canMoveFreeLy) { // Regular movement
+                    let destinationX, destinationY;
+                    let stopMovingCondition = false;
+
+                    let currentCalculatedPlayerSpeed = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
+                    if (isBurrowing) {
+                        currentCalculatedPlayerSpeed *= 0.5;
+                    }
+
+                    if (targetedNpc) {
+                        destinationX = targetedNpc.x;
+                        destinationY = targetedNpc.y;
+                        playerDirectionAngle = Math.atan2(destinationY - playerY, destinationX - playerX); // Constantly face NPC
+                        stopMovingCondition = checkCircleCollision(playerX, playerY, playerRadius, targetedNpc.x, targetedNpc.y, targetedNpc.radius);
+
+                        if (stopMovingCondition) { // Reached targeted NPC
+                            if (!inCombat) { // If not already in combat, initiate it
+                                inCombat = true;
+                                combatTarget = targetedNpc;
+                                combatTarget.inCombat = true;
+                                determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
+                                console.log(`Combat initiated with ${combatTarget.name}.`);
+                            }
+                            isMoving = false; // Stop movement when combat starts
+                            showTargetIndicator = false;
+                        }
+                    } else { // Moving to a specific point (right-click on empty space)
+                        destinationX = targetX;
+                        destinationY = targetY;
+                        const distanceToTarget = Math.sqrt(Math.pow(destinationX - playerX, 2) + Math.pow(destinationY - playerY, 2));
+                        stopMovingCondition = distanceToTarget < currentCalculatedPlayerSpeed;
+
+                        if (stopMovingCondition) {
+                            playerX = destinationX;
+                            playerY = destinationY;
+                            isMoving = false;
+                            showTargetIndicator = false;
+                        }
+                    }
+
+                    if (!stopMovingCondition) { // Continue moving if not stopped
+                        const dx = destinationX - playerX;
+                        const dy = destinationY - playerY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const ratio = currentCalculatedPlayerSpeed / distance;
+                        playerX += dx * ratio;
+                        playerY += dy * ratio;
+                    }
+
+                    // Clamp player position to world bounds
+                    playerX = Math.max(playerSize / 2, Math.min(playerX, worldWidth - playerSize / 2));
+                    playerY = Math.max(playerSize / 2, Math.min(playerY, worldHeight - playerSize / 2));
+                }
+
+                npcs.forEach(npc => {
+                    if (!npc.inCombat) { // NPC patrols if not in combat
+                        const currentWaypoint = npc.patrolWaypoints[npc.currentPatrolPointIndex];
+                        const dx = currentWaypoint.x - npc.x;
+                        const dy = currentWaypoint.y - npc.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        const currentCalculatedNpcSpeed = Math.max(0.1, baseNpcSpeed * (1 + npc.speed / 100));
+
+                        if (distance > currentCalculatedNpcSpeed) {
+                            npc.directionAngle = Math.atan2(dy, dx);
+                        }
+
+                        if (distance < currentCalculatedNpcSpeed) {
+                            npc.x = currentWaypoint.x;
+                            npc.y = currentWaypoint.y;
+                            npc.currentPatrolPointIndex = (npc.currentPatrolPointIndex + 1) % npc.patrolWaypoints.length;
+                        } else {
+                            const ratio = currentCalculatedNpcSpeed / distance;
+                            npc.x += dx * ratio;
+                            npc.y += dy * ratio;
+                        }
+
+                        npc.x = Math.max(npc.size / 2, Math.min(npc.x, worldWidth - npc.size / 2));
+                        npc.y = Math.max(npc.size / 2, Math.min(npc.y, worldHeight - npc.size / 2));
+                    }
+                });
+
+                // NPC automatic combat initiation if player is in range and not already in combat with that NPC
+                if (!inCombat && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'jump')) {
+                    for (const npc of npcs) {
+                        if (checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
+                            // NPCs should initiate combat automatically when in range, regardless of player's `targetedNpc` state.
+                            inCombat = true;
+                            combatTarget = npc;
+                            combatTarget.inCombat = true;
+                            // Pass player's details with isPlayer:true for correct first attacker logic
+                            determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
+                            console.log(`Combat initiated by NPC ${npc.name}.`);
+                            break; // Only one combat at a time
+                        }
+                    }
+                }
+
+
+                if (inCombat && combatTarget) {
+                    // Check if player moved away from combat target or used a mobility ability
+                    // Also check if targetedNpc is null or not the current combatTarget (player moved away or changed target)
+                    // Combat only ends if player explicitly moves away or changes target, or uses certain abilities.
+                    // If player is attacked by NPC but not targeting it, combat should *continue* for the NPC,
+                    // but player won't retaliate until right-clicked.
+                    const combatShouldContinue = checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'jump');
+
+                    if (!combatShouldContinue) {
+                        inCombat = false;
+                        if (combatTarget) combatTarget.inCombat = false;
+                        combatTarget = null;
+                        isMoving = false; // Stop any ongoing player movement if combat ends this way
+                        showTargetIndicator = false;
+                        targetedNpc = null; // Clear target on combat end
+                        console.log("Combat ended: distance or ability used or target changed.");
+                        return; // Stop processing combat for this frame if it ended
+                    }
+
+
+                    // Player attack logic: Only if targetedNpc is set AND it's the current combatTarget
+                    if (targetedNpc && targetedNpc === combatTarget) {
+                        if (currentTime - playerLastAttackTime >= playerAttackCooldown) {
+                            // Orient player towards target before attacking
+                            playerDirectionAngle = Math.atan2(combatTarget.y - playerY, combatTarget.x - playerX);
+                            dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, combatTarget);
+                            playerLastAttackTime = currentTime;
+                            playerAttackCooldown = combatDelay; // Subsequent attacks every 0.5 seconds
+                            playerIsAttacking = true;
+                            playerAttackAnimStartTime = currentTime;
+                        }
+                    }
+
+                    // NPC attack logic (always, if in combat and not prevented by player's dash)
+                    if (currentTime - combatTarget.lastAttackTime >= combatTarget.attackCooldown) {
+                        if (!(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) { // Prevent NPC attack if player just dashed through
+                            // Orient NPC towards player before attacking
+                            combatTarget.directionAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
+                            dealDamage(combatTarget, {
+                                currentHp: playerStats.currentHp,
+                                defense: playerStats.defense,
+                                attack: combatTarget.attack,
+                                x: playerX, // Pass player's current x
+                                y: playerY, // Pass player's current y
+                                isPlayer: false, // Indicate defender is player
+                                radius: playerRadius
+                            });
+                            combatTarget.isAttacking = true;
+                            combatTarget.attackAnimStartTime = currentTime;
+                        }
+                        combatTarget.lastAttackTime = currentTime;
+                        combatTarget.attackCooldown = combatDelay; // Subsequent attacks every 0.5 seconds
+                    }
+
+
+                    if (combatTarget.currentHp <= 0) {
+                        console.log(`NPC ${combatTarget.name} defeated.`);
+
+                        playerStats.currentXp += 2;
+                        updatePlayerLevel(); // This also updates xpToNextLevel
+
+                        // Hunger reduction on enemy defeat
+                        const xpGained = 2; // XP gained is currently always 2
+                        playerStats.currentHunger = Math.max(0, playerStats.currentHunger - xpGained); // Hunger cannot go below 0%
+
+
+                        deadNpcs.push({
+                            x: combatTarget.x,
+                            y: combatTarget.y,
+                            maxHp: combatTarget.maxHp,
+                            id: combatTarget.id,
+                            name: combatTarget.name,
+                            totalDamageDealtByPlayer: combatTarget.totalDamageReceivedFromPlayer,
+                            totalDamageReceivedByPlayer: combatTarget.totalDamageDealtToPlayer
+                        });
+                        npcs = npcs.filter(n => n !== combatTarget);
+                        inCombat = false;
+                        if (combatTarget) combatTarget.inCombat = false;
+                        combatTarget = null;
+                        isMoving = false;
+                        showTargetIndicator = false;
+                        targetedNpc = null; // Clear target on death
+
+                        while (npcs.length < MAX_ENEMIES) {
+                            npcs.push(createSingleNPC());
+                        }
+                    }
+                }
+            }
+
+
+            // Camera and Zoom (always run, even if game logic is paused for admin/origin panel)
+            if (isMapModeActive) { // If in map mode, zoom out
+                zoomScale = Math.min(canvas.width / worldWidth, canvas.height / worldHeight);
+                cameraX = 0;
+                cameraY = 0;
+            } else { // Otherwise, zoom in on player
+                zoomScale = 1;
+
+                let desiredCameraX = playerX - canvas.width / 2;
+                let desiredCameraY = playerY - canvas.height / 2;
+
+                cameraX = Math.max(0, Math.min(desiredCameraX, worldWidth - canvas.width));
+                cameraY = Math.max(0, Math.min(desiredCameraY, worldHeight - canvas.height));
+
+                if (canvas.width > worldWidth) {
+                    cameraX = (worldWidth - canvas.width) / 2;
+                }
+                if (canvas.height > worldHeight) {
+                    cameraY = (worldHeight - canvas.height) / 2;
+                }
+            }
+
+            // Update closest NPC for radial indicator even if game logic is paused by menu
+            // Only if inGame state and not map mode
+            if (gameState === 'inGame' && !isMapModeActive) {
+                let minDistance = Infinity;
+                let tempClosestNpcAngle = 0;
+                let tempClosestNpcDistance = Infinity;
+                let foundClosest = false;
+
+                npcs.forEach(npc => {
+                    const dx = npc.x - playerX;
+                    const dy = npc.y - playerY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        tempClosestNpcAngle = Math.atan2(dy, dx);
+                        tempClosestNpcDistance = distance;
+                        foundClosest = true;
+                    }
+                });
+
+                if (foundClosest) {
+                    closestNpcAngle = tempClosestNpcAngle;
+                    closestNpcDistance = tempClosestNpcDistance;
+                } else {
+                    closestNpcDistance = Infinity; // No NPCs visible, hide indicator
+                }
+            } else {
+                closestNpcDistance = Infinity; // Hide indicator if not inGame or in map mode
+            }
+        }
+
+        const STATIC_RADIAL_INDICATOR_RADIUS = (800 / 3) / 2;
+
+        const HOTBAR_SLOT_SIZE = 45;
+        const HOTBAR_SPACING = 3;
+        const HOTBAR_TOTAL_WIDTH = (hotbarSlots.length * HOTBAR_SLOT_SIZE) + ((hotbarSlots.length - 1) * HOTBAR_SPACING);
+        const HOTBAR_MARGIN_BOTTOM = 5;
+
+        const PLAYER_INFO_PANEL_PADDING = 15;
+        const PLAYER_INFO_PANEL_CORNER_RADIUS = 10;
+        const PLAYER_INFO_PANEL_BG_COLOR = 'rgba(30, 30, 45, 0.9)';
+        const PLAYER_INFO_PANEL_BORDER_COLOR = '#6A0DAD';
+        const PLAYER_INFO_BAR_HEIGHT = 12;
+        const PLAYER_INFO_BAR_SPACING = 5;
+        const PLAYER_INFO_STAT_LINE_HEIGHT = 18;
+        const PLAYER_INFO_PLAYER_NAME = "Arachnoid"; // Updated default name
+
+        const NEW_PLAYER_INFO_PANEL_WIDTH = 170 * 0.8; // Shrunk by 10%
+
+        let showHitCircles = false; // New global variable for toggling hitbox visibility
+
+        function drawPanelBar(x, y, width, height, currentValue, maxValue, type, labelText, cornerRadius = 5) {
+            const percentage = (currentValue / maxValue) * 100;
+            const fillWidth = (currentValue / maxValue) * width;
+
+            // Draw label and raw values (e.g., "Health: 50 / 50")
+            ctx.fillStyle = 'white';
+            ctx.font = `10px "Inter", sans-serif`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom'; // Align to bottom of text, effectively placing it above the bar
+            let displayCurrent = currentValue.toFixed(0);
+            let displayMax = maxValue.toFixed(0);
+            if (type === 'xp') {
+                displayMax = playerStats.xpToNextLevel.toFixed(0); // For XP, max is xpToNextLevel
+            }
+            ctx.fillText(`${labelText}: ${displayCurrent} / ${displayMax}`, x, y - 2); // Position 2px above the bar
+
+            // Draw background bar
+            ctx.fillStyle = 'rgba(50, 50, 50, 0.8)';
+            ctx.beginPath();
+            ctx.roundRect(x, y, width, height, cornerRadius);
+            ctx.fill();
+
+            // Determine fill color based on type
+            let fillColor; // Declare here so it's scoped correctly
+            if (type === 'hp') {
+                fillColor = colorGreen; // Always green for HP
+            } else if (type === 'hunger') {
+                fillColor = colorRed; // Always red for Hunger
+            } else if (type === 'xp') {
+                fillColor = '#4A90E2'; // Blue for XP bar
+            } else {
+                fillColor = 'gray'; // Default or error color
+            }
+
+            // Draw filled bar
+            ctx.fillStyle = fillColor; // Set the determined color
+            ctx.beginPath();
+            ctx.roundRect(x, y, fillWidth, height, cornerRadius); // Use fillWidth here
+            ctx.fill();
+        }
+
+        function drawHotbar() {
+            if (isMapModeActive || gameOver) return; // Hide hotbar in map mode or game over
+
+            const currentHotbarSlotSize = HOTBAR_SLOT_SIZE;
+            const actualHotbarWidth = HOTBAR_TOTAL_WIDTH;
+
+
+            const hotbarX = (canvas.width / 2) - (actualHotbarWidth / 2); // Correctly horizontally centered
+            const hotbarY = canvas.height - currentHotbarSlotSize - HOTBAR_MARGIN_BOTTOM;
+
+            hotbarSlots.forEach((slot, index) => {
+                const slotX = hotbarX + (index * (currentHotbarSlotSize + HOTBAR_SPACING));
+                const slotY = hotbarY;
+
+                ctx.fillStyle = 'rgba(30, 30, 30, 0.9)';
+                ctx.fillRect(slotX, slotY, currentHotbarSlotSize, currentHotbarSlotSize);
+
+                if (slot.abilityRef && playerAbilities[slot.abilityRef] > 0) {
+                    ctx.strokeStyle = '#6A0DAD';
+                } else {
+                    ctx.strokeStyle = '#777';
+                }
+                ctx.lineWidth = 2;
+                ctx.strokeRect(slotX, slotY, currentHotbarSlotSize, currentHotbarSlotSize);
+
+                if (!slot.abilityRef || playerAbilities[slot.abilityRef] === 0) {
+                    ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
+                } else {
+                    ctx.fillStyle = '#FFD700';
+                }
+                ctx.font = `bold ${currentHotbarSlotSize * 0.4}px "Inter", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(slot.keybind.toUpperCase(), slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize * 0.1 + 5);
+
+                if (slot.abilityRef && playerAbilities[slot.abilityRef] > 0) {
+                    const abilityLevel = playerAbilities[slot.abilityRef];
+
+                    ctx.fillStyle = 'white';
+                    ctx.font = `${currentHotbarSlotSize * 0.2}px "Inter", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(slot.abilityName, slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize - 5);
+
+                    if (abilityLevel > 1) {
+                        ctx.fillStyle = '#00CED1';
+                        ctx.font = `bold ${currentHotbarSlotSize * 0.2}px "Inter", sans-serif`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'top';
+                        ctx.fillText(`Lv.${abilityLevel}`, slotX + 3, slotY + 3);
+                    }
+
+                    const cooldownRemaining = getCooldownRemaining(slot.abilityRef);
+                    if (cooldownRemaining > 0) {
+                        const cooldownFraction = cooldownRemaining / cooldowns[slot.abilityRef].duration;
+                        const arcAngle = Math.PI * 2 * cooldownFraction;
+
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                        ctx.beginPath();
+                        ctx.moveTo(slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2);
+                        ctx.arc(slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2,
+                                currentHotbarSlotSize / 2,
+                                -Math.PI / 2,
+                                -Math.PI / 2 + arcAngle,
+                                false);
+                        ctx.lineTo(slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2);
+                        ctx.fill();
+
+                        ctx.fillStyle = 'white';
+                        ctx.font = `bold ${currentHotbarSlotSize * 0.35}px Arial`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(Math.ceil(cooldownRemaining / 1000), slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2);
+                    }
+                }
+            });
+        }
+
+        function drawPlayerInfoPanel() {
+            if (isMapModeActive || gameOver) return; // Hide panel in map mode or game over
+
+            const panelX = 2;
+            const panelWidth = NEW_PLAYER_INFO_PANEL_WIDTH;
+
+            const levelBoxHeight = 22 * 0.9;
+            const lineHeight = 16;
+            const textLines = (() => {
+                const combinedText = `${playerGeneticOrigin ? playerGeneticOrigin.name : PLAYER_INFO_PLAYER_NAME} ${playerStats.playerEvolutionState}`;
+                ctx.font = `bold 14px "Inter", sans-serif`;
+                const availableWidthForText = panelWidth - (2 * PLAYER_INFO_PANEL_PADDING) - (30 * 0.9) - 8;
+                let words = combinedText.split(' ');
+                let lines = [];
+                let currentLine = '';
+                for (let i = 0; i < words.length; i++) {
+                    let testLine = currentLine + words[i] + (i < words.length - 1 ? ' ' : '');
+                    if (ctx.measureText(testLine).width < availableWidthForText) {
+                        currentLine = testLine;
+                    } else {
+                        lines.push(currentLine);
+                        currentLine = words[i] + (i < words.length - 1 ? ' ' : '');
+                    }
+                }
+                lines.push(currentLine);
+                return lines.filter(line => line.trim() !== '');
+            })();
+
+            // Calculate content height needed *before* any scaling or positioning
+            let requiredContentHeight = 0;
+            requiredContentHeight += PLAYER_INFO_PANEL_PADDING; // Top padding
+            requiredContentHeight += Math.max(textLines.length * lineHeight, levelBoxHeight); // Player name/level height
+            requiredContentHeight += PLAYER_INFO_PANEL_PADDING / 2; // Space before bars
+            requiredContentHeight += (PLAYER_INFO_BAR_HEIGHT + PLAYER_INFO_BAR_SPACING + 10) * 3; // 3 bars + labels + spacing
+            requiredContentHeight += 2; // Small spacing after XP bar
+            requiredContentHeight += 1 + 3; // First Separator
+            requiredContentHeight += PLAYER_INFO_STAT_LINE_HEIGHT * 5; // 5 stat lines
+            requiredContentHeight += 1 + 3; // Second Separator
+
+            if (playerGeneticOrigin && Object.keys(playerGeneticOrigin.bonusStats).length > 0) {
+                requiredContentHeight += Object.keys(playerGeneticOrigin.bonusStats).length * PLAYER_INFO_STAT_LINE_HEIGHT;
+            }
+
+            // Calculate the desired bottom edge of the panel (5px from canvas bottom)
+            const canvasBottomMargin = 5;
+            const desiredPanelBottomY = canvas.height - canvasBottomMargin;
+
+            // Calculate the panel's top position based on its *original* bottom alignment relative to hotbar,
+            // then apply the 25px upward shift.
+            const hotbarTopY = canvas.height - HOTBAR_SLOT_SIZE - HOTBAR_MARGIN_BOTTOM;
+            const originalPanelBottomAlignedY = hotbarTopY - 5; // The bottom it *used* to align with
+
+            // The original panel's top was calculated with a 0.85 scaling factor on its height.
+            const originalPanelTopUnshifted = originalPanelBottomAlignedY - (requiredContentHeight * 0.85);
+
+            // Now, apply the 25px upward shift from this original calculated top
+            const panelY = originalPanelTopUnshifted - 25;
+
+            // The final height is from the newly calculated `panelY` down to `desiredPanelBottomY`
+            let finalPanelHeight = desiredPanelBottomY - panelY;
+
+
+            // Ensure finalPanelHeight is not negative or zero.
+            if (finalPanelHeight <= 0) {
+                console.warn("Calculated finalPanelHeight is non-positive. Adjusting to a minimum height.");
+                finalPanelHeight = 10; // Fallback minimum height
+            }
+
+            // --- Now, draw the panel background and content ---
+            ctx.fillStyle = PLAYER_INFO_PANEL_BG_COLOR;
+            ctx.strokeStyle = PLAYER_INFO_PANEL_BORDER_COLOR;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(panelX, panelY, panelWidth, finalPanelHeight, PLAYER_INFO_PANEL_CORNER_RADIUS);
+            ctx.fill();
+            ctx.stroke();
+
+            let currentDrawingY = panelY + PLAYER_INFO_PANEL_PADDING;
+
+            // Player Level Box
+            const levelBoxWidth = 30 * 0.9;
+            const levelBoxX = panelX + PLAYER_INFO_PANEL_PADDING;
+            const levelBoxY = currentDrawingY;
+
+            ctx.strokeStyle = '#9932CC';
+            ctx.lineWidth = 2;
+            ctx.fillStyle = 'rgba(128, 0, 128, 0.4)';
+            ctx.beginPath();
+            ctx.roundRect(levelBoxX, levelBoxY, levelBoxWidth, levelBoxHeight, 5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#FF8C00';
+            ctx.font = `bold 16px "Inter", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(playerStats.playerLevel, levelBoxX + levelBoxWidth / 2, levelBoxY + levelBoxHeight / 2 + 2);
+
+            // Player Name and Evolution State
+            ctx.font = `bold 14px "Inter", sans-serif`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            let firstLineYOffset = 0;
+            if (textLines.length > 1) {
+                firstLineYOffset = -8;
+            }
+
+            textLines.forEach((line, index) => {
+                ctx.fillStyle = '#FFD700';
+                ctx.fillText(line, levelBoxX + levelBoxWidth + 8, levelBoxY + levelBoxHeight / 2 + 2 + (index * lineHeight) + firstLineYOffset);
+            });
+
+            currentDrawingY += Math.max(textLines.length * lineHeight, levelBoxHeight) + 5; // Use calculated height and advance Y
+
+
+            currentDrawingY += PLAYER_INFO_PANEL_PADDING / 2;
+
+            const barWidth = (panelWidth - (2 * PLAYER_INFO_PANEL_PADDING)) * 0.85;
+
+            // Health Bar
+            drawPanelBar(panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY, barWidth, PLAYER_INFO_BAR_HEIGHT, playerStats.currentHp, playerStats.maxHp, 'hp', 'Health');
+            currentDrawingY += PLAYER_INFO_BAR_HEIGHT + PLAYER_INFO_BAR_SPACING + 10;
+
+            // Hunger Bar
+            drawPanelBar(panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY, barWidth, PLAYER_INFO_BAR_HEIGHT, playerStats.currentHunger, playerStats.maxHunger, 'hunger', 'Hunger');
+            currentDrawingY += PLAYER_INFO_BAR_HEIGHT + PLAYER_INFO_BAR_SPACING + 10;
+
+            // XP Bar
+            drawPanelBar(panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY, barWidth, PLAYER_INFO_BAR_HEIGHT, playerStats.currentXp, playerStats.xpToNextLevel, 'xp', 'XP');
+            currentDrawingY += PLAYER_INFO_BAR_HEIGHT + PLAYER_INFO_BAR_SPACING + 2; // Minimal spacing
+
+            // --- Draw first separator line ---
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(panelX + PLAYER_INFO_PANEL_PADDING / 2, currentDrawingY);
+            ctx.lineTo(panelX + panelWidth - PLAYER_INFO_PANEL_PADDING / 2, currentDrawingY);
+            ctx.stroke();
+            currentDrawingY += 3; // Space after line
+
+
+            ctx.font = `13px "Inter", sans-serif`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+
+            // Helper to get stat name from generic key for genetic origin bonus check
+            const statKeyMap = {
+                'Attack': 'attack',
+                'Defense': 'defense',
+                'Stamina': 'stamina',
+                'Stealth': 'stealth',
+                'Speed': 'speed',
+                'HP': 'maxHp',
+                'XP': 'currentXp'
+            };
+
+            function drawStatLine(label, value, isPercentage = false) {
+                ctx.fillStyle = 'white'; // Always white for core stats
+                ctx.fillText(`${label}: ${value.toFixed(1)}${isPercentage ? '%' : ''}`, panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY);
+                currentDrawingY += PLAYER_INFO_STAT_LINE_HEIGHT;
+            }
+
+            drawStatLine('Attack', playerStats.attack);
+            drawStatLine('Defense', playerStats.defense, true);
+            drawStatLine('Stamina', playerStats.stamina, true);
+            drawStatLine('Stealth', playerStats.stealth, true);
+            drawStatLine('Speed', playerStats.speed, true);
+
+            // --- Draw second separator line ---
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(panelX + PLAYER_INFO_PANEL_PADDING / 2, currentDrawingY);
+            ctx.lineTo(panelX + panelWidth - PLAYER_INFO_PANEL_PADDING / 2, currentDrawingY);
+            ctx.stroke();
+            currentDrawingY += 3; // Space after line
+
+            // --- NEW GENETIC BONUSES SECTION (Inline with core stats) ---
+            if (playerGeneticOrigin && Object.keys(playerGeneticOrigin.bonusStats).length > 0) {
+                // No "Genetic Bonuses:" title anymore
+                const bonusDisplayMap = {
+                    attack: 'Attack',
+                    defense: 'Defense',
+                    stamina: 'Stamina',
+                    stealth: 'Stealth',
+                    speed: 'Speed',
+                    maxHp: 'Health', // Changed from HP to Health for display consistency
+                    currentXp: 'XP' // Changed from XP Gains to XP
+                };
+
+                for (const statKey in playerGeneticOrigin.bonusStats) {
+                    const bonusValue = playerGeneticOrigin.bonusStats[statKey];
+                    const displayName = bonusDisplayMap[statKey] || statKey;
+                    const percentage = (Math.abs(bonusValue) * 100).toFixed(0);
+                    const arrow = bonusValue >= 0 ? '🔼' : '🔽';
+                    const sign = bonusValue >= 0 ? '+' : ''; // Only show + for positive, - handled by value itself
+                    const color = '#b39ddb'; // Light purple for the entire bonus line
+
+                    ctx.fillStyle = color;
+                    ctx.font = `13px "Inter", sans-serif`;
+                    ctx.fillText(`${arrow} ${displayName} ${sign}${percentage}%`, panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY);
+                    currentDrawingY += PLAYER_INFO_STAT_LINE_HEIGHT;
+                }
+            }
+        }
+
+        function updatePlayerLevel() {
+            // Determine the next XP threshold based on the current player level
+            let currentLevelThreshold = XP_THRESHOLDS[playerStats.playerLevel - 1]; // XP needed to *reach* current level
+            let nextLevelThreshold = Infinity;
+
+            if (playerStats.playerLevel < MAX_PLAYER_LEVEL) {
+                nextLevelThreshold = XP_THRESHOLDS[playerStats.playerLevel];
+            } else {
+                nextLevelThreshold = Infinity; // Max level reached
+            }
+
+            playerStats.xpToNextLevel = nextLevelThreshold;
+
+            // Adjust level if XP goes beyond or below thresholds
+            while (playerStats.currentXp >= playerStats.xpToNextLevel && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
+                playerStats.playerLevel++;
+                playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
+                playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel];
+                console.log(`Player leveled up to Lv.${playerStats.playerLevel}! Evolution: ${playerStats.playerEvolutionState}`);
+            }
+
+            while (playerStats.playerLevel > 1 && playerStats.currentXp < XP_THRESHOLDS[playerStats.playerLevel - 1]) {
+                playerStats.playerLevel--;
+                playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
+                playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel]; // Update XP to next level for new lower level
+                console.log(`Player leveled down to Lv.${playerStats.playerLevel}! Evolution: ${playerStats.playerEvolutionState}`);
+            }
+
+            // Ensure xpToNextLevel is updated even if level doesn't change,
+            // e.g., if XP is modified in admin panel but within current level's bounds.
+            if (playerStats.playerLevel < MAX_PLAYER_LEVEL) {
+                 playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel];
+            } else {
+                 playerStats.xpToNextLevel = Infinity;
+            }
+        }
+
+
+        function drawDashLines(x, y, travelAngle, size, intensity) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(travelAngle + Math.PI);
+
+            for (let i = 0; i < 5; i++) {
+                const lineLength = size * (0.1 + Math.random() * 0.3) * intensity * 2;
+                const offset = size * (0.5 + i * 0.1);
+                const alpha = 0.8 * (1 - i / 5) * intensity;
+
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.lineWidth = Math.max(1, 2 * intensity);
+                ctx.beginPath();
+                ctx.moveTo(offset, 0);
+                ctx.lineTo(offset + lineLength, 0);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawStatusBarMessage() {
+            // Prioritize swapMessage if it's active
+            let messageToDisplay = null;
+            let borderColor = null;
+
+            if (swapMessage) {
+                messageToDisplay = swapMessage;
+                borderColor = '#FFD700'; // Gold border for swap mode/messages
+            } else if (targetedNpc) {
+                messageToDisplay = targetedNpc.name;
+                borderColor = '#FF8C00'; // Orange border for NPC target
+            }
+
+            if (!messageToDisplay || gameState !== 'inGame') return; // Only draw if message exists and game is active
+
+            const bubbleWidth = messageToDisplay.length * 9 + 50; // Dynamic width based on text length
+            const bubbleHeight = 40; // Fixed height for messages
+            const bubbleX = (canvas.width / 2) - (bubbleWidth / 2);
+            const bubbleY = 10; // Top center
+
+            // Draw bubble background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 5);
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw message text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 16px "Inter", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(messageToDisplay, bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2);
+        }
+
+
+        function draw() {
+            const currentTime = performance.now(); // Get current time once per draw call
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Background fill for the entire canvas area
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset for UI elements
+
+            // Only draw game elements if inGame or pausedMap or gameOver
+            if (gameState === 'inGame' || gameState === 'pausedMap' || gameState === 'gameOver') {
+                ctx.save();
+                ctx.translate(-cameraX * zoomScale, -cameraY * zoomScale);
+                ctx.scale(zoomScale, zoomScale);
+
+                renderForestBackground();
+
+                // Draw player
+                ctx.save();
+                let playerDrawX = playerX;
+                let playerDrawY = playerY;
+
+                if (playerIsAttacking) {
+                    const animProgress = (currentTime - playerAttackAnimStartTime) / ATTACK_ANIM_DURATION;
+                    let lurchOffset = 0;
+                    if (animProgress < 0.5) {
+                        lurchOffset = lerp(0, ATTACK_LURCH_DISTANCE, animProgress * 2);
+                    } else {
+                        lurchOffset = lerp(ATTACK_LURCH_DISTANCE, 0, (animProgress - 0.5) * 2);
+                    }
+                    playerDrawX += Math.cos(playerDirectionAngle) * lurchOffset;
+                    playerDrawY += Math.sin(playerDirectionAngle) * lurchOffset;
+                }
+
+                ctx.translate(playerDrawX, playerDrawY);
+                ctx.scale(playerVisualScale, playerVisualScale);
+                ctx.globalAlpha = isBurrowing ? 0.4 : 1;
+                ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
+
+                const emojiFontSize = playerSize * 1.5;
+                ctx.font = `${emojiFontSize}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'white';
+                const emojiVisualOffsetY = playerSize * 0.2;
+                ctx.fillText(playerGeneticOrigin ? playerGeneticOrigin.emoji : '🦂', 0, emojiVisualOffsetY);
+
+                // Draw player hitcircle (wireframe)
+                if (showHitCircles) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = Math.max(1, 1 / zoomScale); // Adjust line width for zoom
+                    ctx.beginPath();
+                    ctx.arc(0, 0, playerRadius * playerVisualScale, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                if (isPerformingMovementAbility && lastActivatedAbilityRef === 'dash') {
+                    const elapsedTime = currentTime - movementAbilityStartTime;
+                    const progress = Math.min(1, elapsedTime / currentMovementAbilityDuration);
+                    const intensity = Math.sin(progress * Math.PI);
+                    ctx.restore(); // Restore to apply dash lines relative to player's actual position
+                    drawDashLines(playerX, playerY, playerDirectionAngle, playerSize, intensity);
+                    // Save and translate again for player icon drawing
+                    ctx.save();
+                    ctx.translate(playerDrawX, playerDrawY); // Use playerDrawX/Y for consistency
+                    ctx.scale(playerVisualScale, playerVisualScale);
+                    ctx.globalAlpha = isBurrowing ? 0.4 : 1;
+                    ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
+                }
+                ctx.restore();
+
+                if (showTargetIndicator && !isMapModeActive) { // Only show target in normal play, not map mode
+                    ctx.globalAlpha = 1;
+                    const indicatorSize = 10;
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = Math.max(1, 3 / zoomScale);
+                    ctx.beginPath();
+                    ctx.moveTo(targetX - indicatorSize / 2, targetY - indicatorSize / 2);
+                    ctx.lineTo(targetX + indicatorSize / 2, targetY + indicatorSize / 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(targetX + indicatorSize / 2, targetY - indicatorSize / 2);
+                    ctx.lineTo(targetX - indicatorSize / 2, targetY + indicatorSize / 2);
+                    ctx.stroke();
+                }
+
+                if (showJumpLandingIndicator && !isMapModeActive) { // Only show landing in normal play, not map mode
+                    const indicatorSize = 10;
+                    ctx.strokeStyle = 'grey';
+                    ctx.lineWidth = Math.max(1, 3 / zoomScale);
+                    ctx.beginPath();
+                    ctx.moveTo(jumpLandingX - indicatorSize / 2, jumpLandingY - indicatorSize / 2);
+                    ctx.lineTo(jumpLandingX + indicatorSize / 2, jumpLandingY + indicatorSize / 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(jumpLandingX + indicatorSize / 2, jumpLandingY - indicatorSize / 2);
+                    ctx.lineTo(jumpLandingX - indicatorSize / 2, jumpLandingY + indicatorSize / 2);
+                    ctx.stroke();
+                }
+
+                // Draw NPCs and their hitcircles
+                npcs.forEach(npc => {
+                    ctx.save();
+                    let npcDrawX = npc.x;
+                    let npcDrawY = npc.y;
+
+                    if (npc.isAttacking) {
+                        const animProgress = (currentTime - npc.attackAnimStartTime) / ATTACK_ANIM_DURATION;
+                        let lurchOffset = 0;
+                        if (animProgress < 0.5) {
+                            lurchOffset = lerp(0, ATTACK_LURCH_DISTANCE, animProgress * 2);
+                        } else {
+                            lurchOffset = lerp(ATTACK_LURCH_DISTANCE, 0, (animProgress - 0.5) * 2);
+                        }
+                        npcDrawX += Math.cos(npc.directionAngle) * lurchOffset;
+                        npcDrawY += Math.sin(npc.directionAngle) * lurchOffset;
+                    }
+
+                    ctx.translate(npcDrawX, npcDrawY);
+                    ctx.rotate(npc.directionAngle + Math.PI / 2);
+
+                    const npcEmojiFontSize = npc.size * 1.5;
+                    ctx.font = `${npcEmojiFontSize}px serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = 'white';
+                    const npcEmojiVisualOffsetY = npc.size * 0.2;
+                    ctx.fillText(npc.emoji, 0, npcEmojiVisualOffsetY);
+
+                    // Draw NPC hitcircle (wireframe)
+                    if (showHitCircles) {
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = Math.max(1, 1 / zoomScale); // Adjust line width for zoom
+                        ctx.beginPath();
+                        ctx.arc(0, 0, npc.radius, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+
+                    ctx.restore();
+                });
+
+                deadNpcs.forEach(deadNpc => {
+                    ctx.font = '24px serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🦴', deadNpc.x, deadNpc.y);
+                });
+
+                ctx.restore(); // Restore context after world transformations
+
+                // UI elements (not scaled by zoomScale)
+                if (!isMapModeActive && !gameOver) { // Hide UI if in map mode or game over
+                    drawPlayerInfoPanel();
+                    drawHotbar();
+                }
+
+                // Radial indicator only in normal play, not map mode and not game over
+                if (!isMapModeActive && closestNpcDistance !== Infinity && !gameOver) {
+                    const ringRadius = STATIC_RADIAL_INDICATOR_RADIUS;
+                    const ringCenterX = canvas.width / 2;
+                    const ringCenterY = canvas.height / 2;
+
+                    const maxIndicatorDistance = 2 * canvas.width;
+                    const effectiveMinIndicatorDistance = ringRadius + 50;
+
+                    if (closestNpcDistance > ringRadius) {
+                        const minLineThickness = 1.5;
+                        const maxLineThickness = 6;
+                        const minArcDegrees = 15;
+                        const maxArcDegrees = 45;
+
+
+                        const t = lerp(0, 1, (closestNpcDistance - effectiveMinIndicatorDistance) / (maxIndicatorDistance - effectiveMinIndicatorDistance));
+
+                        const indicatorLineWidth = lerp(maxLineThickness, minLineThickness, t);
+
+                        const currentArcDegrees = lerp(minArcDegrees, maxArcDegrees, t);
+                        const currentArcRadians = currentArcDegrees * Math.PI / 180;
+                        const halfArcRadians = currentArcRadians / 2;
+
+                        const numSegments = 30;
+                        const segmentArcLength = currentArcRadians / numSegments;
+
+                        for (let i = 0; i < numSegments; i++) {
+                            const segStartAngle = closestNpcAngle - halfArcRadians + i * segmentArcLength;
+                            const segEndAngle = segStartAngle + segmentArcLength;
+                            const midSegmentAngle = (segStartAngle + segEndAngle) / 2;
+
+                            const normalizedPosition = Math.abs(midSegmentAngle - closestNpcAngle) / halfArcRadians;
+                            const alpha = Math.max(0, Math.cos(normalizedPosition * Math.PI / 2));
+
+                            ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+                            ctx.lineWidth = indicatorLineWidth;
+                            ctx.beginPath();
+                            ctx.arc(ringCenterX, ringCenterY, ringRadius, segStartAngle, segEndAngle);
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    ctx.fillStyle = 'white';
+                    ctx.font = `bold 48px "Inter", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
+
+                    const tryAgainButton = {
+                        x: canvas.width / 2 - 75,
+                        y: canvas.height / 2 + 20,
+                        width: 150,
+                        height: 50,
+                        label: "Try Again",
+                        action: "restartGame"
+                    };
+                    ctx.fillStyle = buttonColor;
+                    ctx.fillRect(tryAgainButton.x, tryAgainButton.y, tryAgainButton.width, tryAgainButton.height);
+                    ctx.strokeStyle = buttonBorderColor;
+                    ctx.strokeRect(tryAgainButton.x, tryAgainButton.y, tryAgainButton.width, tryAgainButton.height);
+                    ctx.fillStyle = buttonTextColor;
+                    ctx.font = `bold 20px "Inter", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(tryAgainButton.label, tryAgainButton.x + tryAgainButton.width / 2, tryAgainButton.y + tryAgainButton.height / 2);
+                }
+
+                // Floating damage texts are always drawn if they exist, regardless of map mode
+                floatingDamageTexts = floatingDamageTexts.filter(text => (currentTime - text.timestamp) < text.duration);
+
+                floatingDamageTexts.forEach(text => {
+                    const elapsedTime = currentTime - text.timestamp;
+                    const floatProgress = Math.min(1, elapsedTime / text.floatDuration);
+                    const yFloat = -30 * floatProgress; // Float up by 30 pixels
+
+                    const canvasX = (text.x - cameraX) * zoomScale;
+                    const canvasY = (text.y - cameraY + yFloat) * zoomScale; // Apply float to Y
+
+                    ctx.globalAlpha = 1 - floatProgress; // Fade out
+
+                    ctx.fillStyle = text.color;
+                    ctx.font = `bold 20px "Inter", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(text.value, canvasX, canvasY);
+                    ctx.globalAlpha = 1; // Reset alpha for other drawings
+                });
+            }
+            drawStatusBarMessage(); // Draw status messages (like swap message or targeted NPC)
+        }
+
+        function gameLoop() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+
+            // Only update game logic if not paused by specific panels or game over
+            const shouldRunGameLogic = adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex' && gameState !== 'gameOver';
+
+            if (shouldRunGameLogic) {
+                update();
+            }
+
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function resetGame() {
+            playerX = worldWidth / 2;
+            playerY = worldHeight / 2;
+            targetX = playerX;
+            targetY = playerY;
+            isMoving = false;
+            showTargetIndicator = false;
+            isMapModeActive = false; // Reset map mode
+            playerDirectionAngle = 0;
+
+            playerStats = {
+                currentHp: 50,
+                maxHp: 50,
+                attack: 20,
+                defense: 5,
+                stamina: 0,
+                stealth: 0,
+                speed: 0,
+                currentHunger: 1, // Hunger starts at 1%
+                maxHunger: 100,
+                currentXp: 0,
+                playerLevel: 1,
+                xpToNextLevel: 10,
+                playerEvolutionState: 'Grub'
+            };
+            lastHungerIncreaseTime = performance.now(); // Reset hunger timer
+
+            // Reset player attack and animation state
+            playerLastAttackTime = 0;
+            playerAttackCooldown = 500;
+            playerIsAttacking = false;
+            playerAttackAnimStartTime = 0;
+
+
+            playerAbilities = {
+                jump: 0,
+                dash: 0,
+                burrow: 0,
+            };
+
+            hotbarSlots.forEach(slot => {
+                if (slot.keybind === 'F' || slot.keybind === 'R') {
+                    slot.abilityRef = null;
+                    slot.abilityName = 'Empty';
+                    slot.icon = '';
+                } else {
+                    slot.abilityRef = null;
+                    slot.abilityName = '';
+                    slot.icon = '';
+                }
+            });
+
+            cooldowns.jump.lastUsed = 0;
+            cooldowns.dash.lastUsed = 0;
+            cooldowns.burrow.lastUsed = 0;
+
+            inCombat = false;
+            combatTarget = null;
+
+            npcs = []; // Clear current NPCs
+            deadNpcs = [];
+
+            floatingDamageTexts = [];
+            targetedNpc = null; // Clear targeted NPC on reset
+            swapMode = false; // Reset swap mode
+            swapSourceSlotIndex = -1;
+            swapMessage = null; // Clear swap message
+            if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+
+
+            isAnyPanelOpen = false; // This primarily controls the overlay visibility
+            popupOverlay.classList.remove('active');
+            abilitySelectionPopup.style.display = 'none';
+            originSelectionPopup.style.display = 'none';
+            adminPanel.style.display = 'none';
+
+            clickedDeadNpc = null;
+            passiveAbilityChoiceData = null;
+            activeAbilityRewardToOffer = null;
+            passiveChoiceMade = false;
+            activeChoiceMade = false;
+
+            isPerformingMovementAbility = false;
+            isBurrowing = false;
+            canMoveFreeLy = true;
+            playerVisualScale = 1;
+            showJumpLandingIndicator = false;
+            jumpLandingX = 0;
+            jumpLandingY = 0;
+            lastActivatedAbilityRef = null;
+
+            generateForestElements();
+            generateNPCs(); // Re-generate NPCs
+
+            gameOver = false;
+
+            // Reset game state to start screen
+            gameState = 'startScreen';
+            startScreenOverlay.classList.add('active');
+            gameLoop();
+        }
+
+        // --- Panel Control Functions ---
+        let keysPressed = {};
+
+        function showOverlayPanel(panelElement) {
+            popupOverlay.classList.add('active');
+            panelElement.style.display = 'flex';
+            isAnyPanelOpen = true; // Still track for cursor and general overlay state
+            canvas.style.cursor = 'default';
+        }
+
+        function hideAllPanels() {
+            popupOverlay.classList.remove('active');
+            abilitySelectionPopup.style.display = 'none';
+            originSelectionPopup.style.display = 'none';
+            adminPanel.style.display = 'none';
+            isAnyPanelOpen = false; // Reset general overlay state
+            canvas.style.cursor = 'crosshair';
+            popupContentArea.innerHTML = '';
+            targetedNpc = null; // Clear targeted NPC when any panel is closed
+            swapMode = false; // Reset swap mode
+            swapSourceSlotIndex = -1;
+            swapMessage = null; // Clear swap message
+            if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+        }
+
+        function createAbilityOptionElement(template) {
+            const clone = template.cloneNode(true);
+            clone.style.display = 'flex';
+            return clone;
+        }
+
+        function updateHotbarSlot(slotIndex, ability) {
+            const currentSlot = hotbarSlots[slotIndex];
+            if (currentSlot.abilityRef === ability.key) {
+                playerAbilities[ability.key]++;
+            } else {
+                if (currentSlot.abilityRef) {
+                    playerAbilities[currentSlot.abilityRef] = 0;
+                }
+                playerAbilities[ability.key] = 1;
+            }
+            currentSlot.abilityRef = ability.key;
+            currentSlot.abilityName = ability.name;
+            currentSlot.icon = ability.hotbarIcon;
+        }
+
+        function presentActiveAbilityChoice(passiveRewardAbility) {
+            const activeChoiceSection = document.createElement('div');
+            activeChoiceSection.id = 'activeChoiceSection';
+            activeChoiceSection.className = 'active-ability-section';
+            activeChoiceSection.style.display = 'flex';
+            activeChoiceSection.style.flexDirection = 'column';
+            activeChoiceSection.style.alignItems = 'center';
+            activeChoiceSection.innerHTML = `
+                <div id="activeAbilityRow" class="ability-row"></div>
+            `;
+            popupContentArea.appendChild(activeChoiceSection);
+            const activeRow = activeChoiceSection.querySelector('#activeAbilityRow');
+            activeRow.innerHTML = '';
+
+            // Ensure we have a passiveRewardAbility to offer
+            if (!passiveRewardAbility) {
+                console.log("No active ability to offer from passive. Auto-declining.");
+                activeChoiceMade = true;
+                checkAndClosePopup();
+                return;
+            }
+
+            // Create the left button (Assign to F)
+            const optionFElement = createAbilityOptionElement(templateAbilityOption);
+            optionFElement.id = `activeAbilityOption-F`;
+            optionFElement.querySelector('.ability-name').textContent = passiveRewardAbility.name;
+            optionFElement.querySelector('.stat-details').innerHTML = `<p class="stat-line"><span class="stat-name-bold-orange">Assign to:</span> F</p>`;
+            optionFElement.onclick = () => {
+                if (activeChoiceMade) return;
+                console.log(`Chose active ability: ${passiveRewardAbility.name} for slot F`);
+                updateHotbarSlot(0, passiveRewardAbility); // Assign to F slot (index 0)
+                activeChoiceMade = true;
+                disableButtonRow(activeRow, optionFElement.id);
+                checkAndClosePopup();
+            };
+            activeRow.appendChild(optionFElement);
+
+            // Always append the decline button in the middle
+            const declineActiveButton = createAbilityOptionElement(templateDeclineButton);
+            declineActiveButton.id = 'declineActiveButton';
+            declineActiveButton.onclick = () => {
+                if (activeChoiceMade) return;
+                console.log("Declined active ability selection.");
+                activeChoiceMade = true;
+                disableButtonRow(activeRow, declineActiveButton.id);
+                checkAndClosePopup();
+            };
+            activeRow.appendChild(declineActiveButton);
+
+            // Create the right button (Assign to R)
+            const optionRElement = createAbilityOptionElement(templateAbilityOption);
+            optionRElement.id = `activeAbilityOption-R`;
+            optionRElement.querySelector('.ability-name').textContent = passiveRewardAbility.name;
+            optionRElement.querySelector('.stat-details').innerHTML = `<p class="stat-line"><span class="stat-name-bold-orange">Assign to:</span> R</p>`;
+            optionRElement.onclick = () => {
+                if (activeChoiceMade) return;
+                console.log(`Chose active ability: ${passiveRewardAbility.name} for slot R`);
+                updateHotbarSlot(1, passiveRewardAbility); // Assign to R slot (index 1)
+                activeChoiceMade = true;
+                disableButtonRow(activeRow, optionRElement.id);
+                checkAndClosePopup();
+            };
+            activeRow.appendChild(optionRElement);
+        }
+
+
+        // Specific popup functions
+        function showAbilitySelectionPopup() {
+            // This popup should NOT pause the game logic, so we don't set isAnyPanelOpen here for that purpose
+            popupOverlay.classList.add('active'); // Still show the overlay visually
+            abilitySelectionPopup.style.display = 'flex';
+            canvas.style.cursor = 'default'; // Change cursor for the UI
+            isAnyPanelOpen = true; // Use this variable to manage general UI/cursor state, not game logic pause
+
+            popupContentArea.innerHTML = ''; // Clear ALL content at the start of new popup
+            passiveChoiceMade = false;
+            activeChoiceMade = false;
+
+            const healingAmount = Math.round(0.5 * clickedDeadNpc.maxHp * 10) / 10;
+            playerStats.currentHp = Math.min(playerStats.maxHp, playerStats.currentHp + healingAmount);
+
+            // Removed "prioritise on current health" from the message
+            popupMessage.innerHTML = `Defeated <span class="defeated-creature-name">${clickedDeadNpc.name}</span>! Healed <span class="healing-amount-text">+${healingAmount.toFixed(1)} HP</b>.`;
+            popupSubtitle.textContent = "Choose your Adaptation(s):"; // This is the main title for all choices
+
+            const passiveRow = document.createElement('div');
+            passiveRow.id = 'passiveAbilityRow'; // Add an ID to easily find if needed
+            passiveRow.className = 'ability-row';
+            popupContentArea.appendChild(passiveRow);
+
+            let abilityOption1Data = null;
+            let abilityOption2Data = null;
+
+            const preferredAbilityName = npcPreferredAbilityMap[clickedDeadNpc.emoji];
+            const preferredAbility = preferredAbilityName ? passiveAbilities.find(ability => ability.name === preferredAbilityName) : null;
+
+            const biasChance = 0.3;
+
+            let biasSlot = null;
+            if (preferredAbility && Math.random() < biasChance) {
+                biasSlot = Math.random() < 0.5 ? 'left' : 'right';
+            }
+
+            let remainingAbilities = [...passiveAbilities];
+
+            if (biasSlot === 'left') {
+                abilityOption1Data = preferredAbility;
+                remainingAbilities = remainingAbilities.filter(ab => ab.name !== preferredAbility.name);
+            } else if (biasSlot === 'right') {
+                abilityOption2Data = preferredAbility;
+                remainingAbilities = remainingAbilities.filter(ab => ab.name !== preferredAbility.name);
+            }
+
+            if (!abilityOption1Data) {
+                const randomIndex = Math.floor(Math.random() * remainingAbilities.length);
+                abilityOption1Data = remainingAbilities.splice(randomIndex, 1)[0];
+            }
+
+            if (!abilityOption2Data) {
+                const randomIndex = Math.floor(Math.random() * remainingAbilities.length);
+                abilityOption2Data = remainingAbilities.splice(randomIndex, 1)[0];
+            }
+
+            let boost1_1 = generateBoostAmount();
+            let boost1_2 = generateBoostAmount();
+            let boost2_1 = generateBoostAmount();
+            let boost2_2 = generateBoostAmount();
+
+            const currentStats = {
+                maxHp: playerStats.maxHp,
+                currentHp: playerStats.currentHp,
+                attack: playerStats.attack,
+                defense: playerStats.defense,
+                stamina: playerStats.stamina,
+                stealth: playerStats.stealth,
+                speed: playerStats.speed,
+                currentXp: playerStats.currentXp
+            };
+
+            const passiveLeftOption = createAbilityOptionElement(templateAbilityOption);
+            passiveLeftOption.id = 'passiveOptionLeft';
+            const passiveLeftName = passiveLeftOption.querySelector('.ability-name');
+            const passiveLeftStats = passiveLeftOption.querySelector('.stat-details');
+            const passiveLeftDnaBg = passiveLeftOption.querySelector('.dna-background');
+            if (passiveLeftDnaBg) passiveLeftDnaBg.classList.remove('flipped-dna');
+
+            passiveLeftName.textContent = abilityOption1Data.name;
+            passiveLeftStats.innerHTML = '';
+            abilityOption1Data.getPreview(boost1_1, boost1_2, currentStats).forEach(line => {
+                const p = document.createElement('p');
+                p.className = 'stat-line';
+                p.innerHTML = line;
+                passiveLeftStats.appendChild(p);
+            });
+            passiveLeftOption.onclick = () => {
+                if (passiveChoiceMade) return;
+
+                passiveAbilityChoiceData = { ability: abilityOption1Data, boosts: { boost1: boost1_1, boost2: boost1_2 } };
+                passiveAbilityChoiceData.ability.applyBoost(passiveAbilityChoiceData.boosts.boost1, passiveAbilityChoiceData.boosts.boost2);
+                passiveChoiceMade = true;
+
+                const index = deadNpcs.indexOf(clickedDeadNpc);
+                if (index > -1) { deadNpcs.splice(index, 1); }
+
+                disableButtonRow(passiveRow, passiveLeftOption.id);
+
+                if (playerStats.playerLevel >= 2) {
+                    presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
+                } else {
+                    activeChoiceMade = true; // No active ability choice offered at this level
+                    checkAndClosePopup();
+                }
+            };
+            passiveRow.appendChild(passiveLeftOption);
+
+            const declinePassiveButton = createAbilityOptionElement(templateDeclineButton);
+            declinePassiveButton.id = 'declinePassiveButton';
+            declinePassiveButton.onclick = () => {
+                if (passiveChoiceMade) return;
+                console.log("Declined passive ability selection. No passive abilities chosen.");
+                passiveChoiceMade = true;
+                passiveAbilityChoiceData = null;
+
+                const index = deadNpcs.indexOf(clickedDeadNpc);
+                if (index > -1) { deadNpcs.splice(index, 1); }
+
+                activeChoiceMade = true; // If passive declined, no active is offered from this interaction
+                checkAndClosePopup();
+            };
+            passiveRow.appendChild(declinePassiveButton);
+
+            const passiveRightOption = createAbilityOptionElement(templateAbilityOption);
+            passiveRightOption.id = 'passiveOptionRight';
+            const passiveRightName = passiveRightOption.querySelector('.ability-name');
+            const passiveRightStats = passiveRightOption.querySelector('.stat-details');
+            const passiveRightDnaBg = passiveRightOption.querySelector('.dna-background');
+            if (passiveRightDnaBg) passiveRightDnaBg.classList.add('flipped-dna');
+
+            passiveRightName.textContent = abilityOption2Data.name;
+            passiveRightStats.innerHTML = '';
+            abilityOption2Data.getPreview(boost2_1, boost2_2, currentStats).forEach(line => {
+                const p = document.createElement('p');
+                p.className = 'stat-line';
+                p.innerHTML = line;
+                passiveRightStats.appendChild(p);
+            });
+            passiveRightOption.onclick = () => {
+                if (passiveChoiceMade) return;
+
+                passiveAbilityChoiceData = { ability: abilityOption2Data, boosts: { boost1: boost2_1, boost2: boost2_2 } };
+                passiveAbilityChoiceData.ability.applyBoost(passiveAbilityChoiceData.boosts.boost1, passiveAbilityChoiceData.boosts.boost2);
+                passiveChoiceMade = true;
+
+                const index = deadNpcs.indexOf(clickedDeadNpc);
+                if (index > -1) { deadNpcs.splice(index, 1); }
+
+                disableButtonRow(passiveRow, passiveRightOption.id);
+
+                if (playerStats.playerLevel >= 2) {
+                    presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
+                } else {
+                    activeChoiceMade = true; // No active ability choice offered at this level
+                    checkAndClosePopup();
+                }
+            };
+            passiveRow.appendChild(passiveRightOption);
+        }
+
+        function disableButtonRow(rowElement, selectedButtonId) {
+            Array.from(rowElement.children).forEach(child => {
+                if (child.id !== selectedButtonId) {
+                    child.style.opacity = '0.6';
+                    child.style.cursor = 'not-allowed';
+                    child.onclick = null;
+                    child.classList.add('disabled-dna-hover'); // Add class to specifically disable hover on DNA background
+                } else {
+                    child.classList.add('selected-passive'); // Add class for selected item styling
+                }
+            });
+        }
+
+
+        function checkAndClosePopup() {
+            if (passiveChoiceMade && activeChoiceMade) {
+                clickedDeadNpc = null;
+                passiveAbilityChoiceData = null;
+                activeAbilityRewardToOffer = null;
+                hideAllPanels(); // This will also clear isAnyPanelOpen and reset cursor
+            }
+        }
+
+        // --- Admin Panel Functions ---
+        function toggleAdminPanel() {
+            if (isAnyPanelOpen && adminPanel.style.display === 'flex') {
+                hideAllPanels();
+            } else {
+                showOverlayPanel(adminPanel);
+                populateAdminPanel();
+            }
+        }
+
+        function populateAdminPanel() {
+            adminStatsContainer.innerHTML = '';
+
+            const allStatsAndAbilities = { ...playerStats, ...playerAbilities };
+
+            for (const key in allStatsAndAbilities) {
+                if (key === 'playerEvolutionState' || key === 'xpToNextLevel') continue; // Skip derived state
+
+                const div = document.createElement('div');
+                div.className = playerAbilities.hasOwnProperty(key) ? 'admin-ability-item' : 'admin-stat-item';
+
+                const labelText = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+
+                div.innerHTML = `<label>${labelText}:</label>`; // Add label first
+
+                // Handle playerLevel specifically with buttons
+                if (key === 'playerLevel') {
+                    const levelButtonsContainer = document.createElement('div');
+                    levelButtonsContainer.className = 'admin-level-buttons';
+                    for (let i = 1; i <= MAX_PLAYER_LEVEL; i++) {
+                        const levelButton = document.createElement('button');
+                        levelButton.className = 'admin-level-button';
+                        levelButton.textContent = i;
+                        if (i === playerStats.playerLevel) {
+                            levelButton.classList.add('selected');
+                        }
+                        levelButton.onclick = () => {
+                            updateInputAndValue('playerLevel', i);
+                        };
+                        levelButtonsContainer.appendChild(levelButton);
+                    }
+                    div.appendChild(levelButtonsContainer);
+                } else {
+                    const isNumeric = typeof allStatsAndAbilities[key] === 'number';
+                    const inputType = isNumeric ? 'number' : 'text';
+
+                    // Create the input row container for other stats/abilities
+                    const inputRow = document.createElement('div');
+                    inputRow.className = 'admin-input-row';
+
+                    // Create the input
+                    const input = document.createElement('input');
+                    input.type = inputType;
+                    input.id = `admin-${key}`;
+                    input.value = allStatsAndAbilities[key];
+                    inputRow.appendChild(input);
+
+                    // Create the decrement button
+                    const decrementButton = document.createElement('button');
+                    decrementButton.className = 'admin-panel-button';
+                    decrementButton.textContent = '-';
+                    decrementButton.onclick = () => {
+                        let currentValue = parseFloat(input.value);
+                        if (isNaN(currentValue)) currentValue = 0; // Default to 0 if not a number
+                        let newValue = currentValue - 1;
+                        if (playerAbilities.hasOwnProperty(key) || key === 'currentXp') { // XP also cannot go below 0
+                            newValue = Math.max(0, newValue); // Abilities and XP cannot go below 0
+                        }
+                        updateInputAndValue(key, newValue);
+                    };
+                    inputRow.appendChild(decrementButton);
+
+                    // Create the increment button
+                    const incrementButton = document.createElement('button');
+                    incrementButton.className = 'admin-panel-button';
+                    incrementButton.textContent = '+';
+                    incrementButton.onclick = () => {
+                        let currentValue = parseFloat(input.value);
+                        if (isNaN(currentValue)) currentValue = 0;
+                        let newValue = currentValue + 1;
+                        updateInputAndValue(key, newValue);
+                    };
+                    inputRow.appendChild(incrementButton);
+
+                    div.appendChild(inputRow); // Then add the input row
+                }
+
+                adminStatsContainer.appendChild(div);
+
+                if (key !== 'playerLevel') { // Only add change listener for actual input fields
+                    const input = div.querySelector(`#admin-${key}`);
+                    if (input) {
+                        input.addEventListener('change', (e) => {
+                            updateInputAndValue(key, e.target.value);
+                        });
+                    }
+                }
+            }
+        }
+
+        // Helper function to update both the input field and the underlying stat/ability
+        function updateInputAndValue(key, value) {
+            let numValue;
+
+            if (key === 'playerLevel' || playerAbilities.hasOwnProperty(key)) {
+                numValue = parseInt(value); // Ensure integer for levels and abilities
+            } else {
+                numValue = parseFloat(value);
+            }
+
+            if (!isNaN(numValue)) {
+                if (playerAbilities.hasOwnProperty(key)) {
+                    numValue = Math.max(0, numValue); // Abilities cannot go below 0
+                    const oldAbilityLevel = playerAbilities[key];
+                    playerAbilities[key] = numValue; // Directly set ability level
+                    // Handle hotbar assignment/removal
+                    if (oldAbilityLevel === 0 && numValue > 0) {
+                        const abilityDetails = abilityDetailsMap[key];
+                        if (abilityDetails) {
+                            let assigned = false;
+                            const hotbarOrder = ['F', 'R', 'E', 'Q', 'C', 'X', 'Z'];
+                            for (const keybind of hotbarOrder) {
+                                const slotIndex = hotbarSlots.findIndex(slot => slot.keybind === keybind);
+                                if (slotIndex !== -1 && hotbarSlots[slotIndex].abilityRef === null) {
+                                    let isAlreadyAssignedToActiveSlot = false;
+                                    for (let i = 0; i < hotbarSlots.length; i++) {
+                                        if (hotbarSlots[i].abilityRef === key && i !== slotIndex) {
+                                            isAlreadyAssignedToActiveSlot = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!isAlreadyAssignedToActiveSlot) {
+                                        updateHotbarSlot(slotIndex, { key: key, name: abilityDetails.name, hotbarIcon: abilityDetails.hotbarIcon });
+                                        assigned = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!assigned) {
+                                console.warn(`Ability '${key}' unlocked but no empty hotbar slot available.`);
+                            }
+                        }
+                    } else if (numValue === 0 && oldAbilityLevel > 0) {
+                        for (let i = 0; i < hotbarSlots.length; i++) {
+                            if (hotbarSlots[i].abilityRef === key) {
+                                hotbarSlots[i].abilityRef = null;
+                                hotbarSlots[i].abilityName = 'Empty';
+                                hotbarSlots[i].icon = '';
+                                break;
+                            }
+                        }
+                    }
+                } else if (key === 'playerLevel') {
+                    const newLevel = Math.min(Math.max(1, numValue), MAX_PLAYER_LEVEL);
+                    // Temporarily set playerLevel directly, then call updatePlayerLevel to handle XP and evolution state
+                    playerStats.playerLevel = newLevel;
+                    updatePlayerLevel(); // This will recalculate xpToNextLevel and evolution state
+                } else if (key === 'currentXp') {
+                    playerStats.currentXp = Math.max(0, numValue); // XP cannot be negative
+                    updatePlayerLevel(); // This will re-evaluate level and evolution state based on new XP
+                } else {
+                    playerStats[key] = numValue;
+                }
+
+                if (key === 'maxHp') {
+                    playerStats.currentHp = Math.min(playerStats.currentHp, playerStats.maxHp);
+                    if (playerStats.currentHp > playerStats.maxHp) {
+                        playerStats.currentHp = playerStats.maxHp;
+                    }
+                }
+            } else {
+                console.warn(`Invalid input for ${key}: ${value}. Please enter a number.`);
+            }
+            populateAdminPanel(); // Re-populate to reflect all changes instantly
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            lastMouseCanvasX = event.clientX - rect.left;
+            lastMouseCanvasY = event.clientY - rect.top;
+
+            let isHoveringButton = false;
+            if (gameOver) {
+                const tryAgainButton = {
+                    x: canvas.width / 2 - 75,
+                    y: canvas.height / 2 + 20,
+                    width: 150,
+                    height: 50,
+                    label: "Try Again",
+                    action: "restartGame"
+                };
+                if (lastMouseCanvasX >= tryAgainButton.x && lastMouseCanvasX <= tryAgainButton.x + tryAgainButton.width &&
+                    lastMouseCanvasY >= tryAgainButton.y && lastMouseCanvasY <= tryAgainButton.y + tryAgainButton.height) {
+                    isHoveringButton = true;
+                }
+            }
+
+            // This block determines cursor for UI elements, separate from game logic pausing
+            if (isAnyPanelOpen || gameState === 'startScreen' || gameState === 'originSelection') {
+                const clickableElements = document.querySelectorAll('.action-button, .healing-popup .ability-option-half, .healing-popup .decline-option-button, .admin-panel .admin-close-button, .origin-option, .admin-panel-button, .admin-level-button'); // Added .admin-level-button
+                const globalMouseX = event.clientX;
+                const globalMouseY = event.clientY;
+
+                clickableElements.forEach(button => {
+                    const rect = button.getBoundingClientRect();
+                    // Check for general clickable elements
+                    if ((button.style.opacity === '' || button.style.opacity === '1') && !button.classList.contains('disabled-dna-hover') && globalMouseX >= rect.left && globalMouseX <= rect.right &&
+                        globalMouseY >= rect.top && globalMouseY <= rect.bottom) {
+                        isHoveringButton = true;
+                    }
+                });
+                const adminInputs = document.querySelectorAll('.admin-panel input');
+                adminInputs.forEach(input => {
+                    const rect = input.getBoundingClientRect();
+                    // Check for input fields specifically
+                    if (globalMouseX >= rect.left && globalMouseX <= rect.right &&
+                        globalMouseY >= rect.top && globalMouseY <= rect.bottom) {
+                        isHoveringButton = true;
+                    }
+                });
+            }
+
+            if (isHoveringButton) {
+                canvas.style.cursor = 'pointer';
+            } else {
+                canvas.style.cursor = 'crosshair';
+            }
+        });
+
+
+        window.addEventListener('keydown', (event) => {
+            keysPressed[event.key.toLowerCase()] = true;
+
+            // Immediately cancel swap mode on ANY key press
+            if (swapMode) {
+                swapMode = false;
+                swapSourceSlotIndex = -1;
+                swapMessage = null; // Clear current swap message
+                if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+                targetedNpc = null; // Clear general NPC target
+                console.log("Swap mode cancelled (key pressed).");
+                return; // Consume the key press to prevent it from doing anything else
+            }
+
+            if (keysPressed['p'] && keysPressed['.']) {
+                event.preventDefault();
+                toggleAdminPanel();
+                keysPressed = {}; // Clear keys to prevent 'p' or '.' from triggering again
+                return;
+            }
+
+            if (event.key.toLowerCase() === 'm' && (gameState === 'inGame' || gameState === 'pausedMap')) {
+                // If game is paused by admin/origin panel, prevent map toggle
+                if (adminPanel.style.display === 'flex' || originSelectionPopup.style.display === 'flex') {
+                    console.log("Cannot toggle map while Admin/Origin panel is open.");
+                    return;
+                }
+                if (gameState === 'inGame') {
+                    gameState = 'pausedMap';
+                    isMapModeActive = true;
+                    isMoving = false; // Stop player movement when pausing
+                    showTargetIndicator = false; // Hide target indicator
+                    canvas.style.cursor = 'default'; // Change cursor to default for map
+                } else if (gameState === 'pausedMap') {
+                    gameState = 'inGame';
+                    isMapModeActive = false;
+                    canvas.style.cursor = 'crosshair'; // Restore cursor for game
+                }
+                return; // Consume the 'm' key press
+            }
+
+            if (event.key.toLowerCase() === 'o') { // Toggle hitbox visibility
+                showHitCircles = !showHitCircles;
+                console.log(`Hitcircles visibility: ${showHitCircles ? 'ON' : 'OFF'}`);
+                return; // Consume the 'o' key press
+            }
+
+
+            // Only allow ability activation if in-game, not paused by admin/origin panels, and not game over
+            const allowAbilityUse = gameState === 'inGame' && adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex' && !gameOver;
+            if (!allowAbilityUse) return;
+
+            const keybind = event.key.toLowerCase();
+            const slotIndex = hotbarSlots.findIndex(slot => slot.keybind.toLowerCase() === keybind);
+
+            if (slotIndex === -1) return;
+
+            const activeAbilitySlot = hotbarSlots[slotIndex];
+
+            if (!activeAbilitySlot.abilityRef || playerAbilities[activeAbilitySlot.abilityRef] === 0) {
+                console.log(`Slot ${keybind.toUpperCase()} is empty or ability not unlocked.`);
+                return;
+            }
+
+            const abilityKey = activeAbilitySlot.abilityRef;
+
+            if (abilityKey === 'burrow' && isBurrowing) {
+                endBurrow();
+                startCooldown('burrow');
+                // Update player direction based on mouse when unburrowing (ending burrow)
+                const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+                const currentMouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+                playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX);
+                return;
+            }
+
+            if (isPerformingMovementAbility) {
+                console.log("Player is currently performing another movement ability.");
+                return;
+            }
+            if (isBurrowing && (abilityKey === 'jump' || abilityKey === 'dash')) {
+                 console.log("Cannot perform Jump/Dash while burrowed.");
+                 return;
+            }
+
+            if (isAbilityOnCooldown(abilityKey)) {
+                console.log(`${activeAbilitySlot.abilityName} is on cooldown!`);
+                return;
+            }
+
+            if (abilityKey === 'burrow') {
+                isBurrowing = true;
+                burrowStartTime = performance.now();
+                canMoveFreeLy = true;
+                startCooldown('burrow');
+            } else if (abilityKey === 'jump' || abilityKey === 'dash') {
+                if (!canMoveFreeLy) {
+                    console.log("Player is immobilized after a previous movement ability.");
+                    return;
+                }
+
+                startCooldown(abilityKey);
+                lastActivatedAbilityRef = abilityKey;
+
+                const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+                const currentMouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+
+                const dx = currentMouseWorldX - playerX;
+                const dy = currentMouseWorldY - playerY;
+
+                const distanceToMouse = Math.sqrt(dx * dx + dy * dy);
+
+                if (distanceToMouse === 0) {
+                    console.log("Cannot perform ability: mouse is on the player.");
+                    return;
+                }
+
+                playerDirectionAngle = Math.atan2(dy, dx); // Update direction on ability use
+
+                let currentAbilityMaxDistance = 0;
+                if (abilityKey === 'jump') {
+                    currentAbilityMaxDistance = JUMP_BASE_DISTANCE;
+                    showJumpLandingIndicator = true;
+                } else if (abilityKey === 'dash') {
+                    currentAbilityMaxDistance = DASH_BASE_DISTANCE;
+                    showJumpLandingIndicator = false;
+                }
+
+                const actualTravelDistance = Math.min(currentAbilityMaxDistance, distanceToMouse);
+
+                movementAbilityStartX = playerX;
+                movementAbilityStartY = playerY;
+                movementAbilityEndX = playerX + (dx / distanceToMouse) * actualTravelDistance;
+                movementAbilityEndY = playerY + (dy / distanceToMouse) * actualTravelDistance;
+
+                movementAbilityEndX = Math.max(playerSize / 2, Math.min(movementAbilityEndX, worldWidth - playerSize / 2));
+                movementAbilityEndY = Math.max(playerSize / 2, Math.min(movementAbilityEndY, worldHeight - playerSize / 2));
+
+                const playerActualSpeedPerFrame = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
+
+                if (abilityKey === 'jump') {
+                    jumpLandingX = movementAbilityEndX;
+                    jumpLandingY = movementAbilityEndY;
+                    currentMovementAbilityDuration = JUMP_FIXED_DURATION;
+                } else if (abilityKey === 'dash') {
+                    const dashSpeedFactor = 2;
+                    const effectiveSpeed = playerActualSpeedPerFrame * dashSpeedFactor;
+                    const framesToComplete = actualTravelDistance / effectiveSpeed;
+                    currentMovementAbilityDuration = framesToComplete * (1000 / 60);
+                }
+
+                if (currentMovementAbilityDuration === 0) currentMovementAbilityDuration = 1;
+
+                isPerformingMovementAbility = true;
+                movementAbilityStartTime = performance.now();
+                canMoveFreeLy = false;
+                isMoving = false;
+                showTargetIndicator = true;
+            }
+        });
+
+        window.addEventListener('keyup', (event) => {
+            keysPressed[event.key.toLowerCase()] = false;
+        });
+
+        closeAdminPanelBtn.addEventListener('click', hideAllPanels);
+        startGameButton.addEventListener('click', showOriginSelection);
+        // The selectOriginButton will be enabled programmatically
+        selectOriginButton.addEventListener('click', startGame);
+
+
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (event.clientX - rect.left) * scaleX;
+            const mouseY = (event.clientY - rect.top) * scaleY;
+
+            if (gameOver) {
+                const tryAgainButton = {
+                    x: canvas.width / 2 - 75,
+                    y: canvas.height / 2 + 20,
+                    width: 150,
+                    height: 50,
+                    label: "Try Again",
+                    action: "restartGame"
+                };
+                if (mouseX >= tryAgainButton.x && mouseX <= tryAgainButton.x + tryAgainButton.width &&
+                    mouseY >= tryAgainButton.y && mouseY <= tryAgainButton.y + tryAgainButton.height) {
+                    resetGame();
+                    return;
+                }
+                return;
+            }
+
+            // If Admin or Origin selection panel is open, consume click to prevent game interaction
+            if (adminPanel.style.display === 'flex' || originSelectionPopup.style.display === 'flex') {
+                return;
+            }
+
+            // Check if click is on hotbar (only relevant if no pausing panel is open)
+            const hotbarY = canvas.height - HOTBAR_SLOT_SIZE - HOTBAR_MARGIN_BOTTOM;
+            const hotbarX = (canvas.width / 2) - (HOTBAR_TOTAL_WIDTH / 2);
+            const clickedOnHotbar = (mouseX >= hotbarX && mouseX <= hotbarX + HOTBAR_TOTAL_WIDTH &&
+                                    mouseY >= hotbarY && mouseY <= hotbarY + HOTBAR_SLOT_SIZE);
+
+            if (swapMode) {
+                if (clickedOnHotbar) {
+                    for (let i = 0; i < hotbarSlots.length; i++) {
+                        const slotX = hotbarX + (i * (HOTBAR_SLOT_SIZE + HOTBAR_SPACING));
+                        if (mouseX >= slotX && mouseX <= slotX + HOTBAR_SLOT_SIZE) {
+                            const destinationSlotIndex = i;
+
+                            if (destinationSlotIndex !== swapSourceSlotIndex && hotbarSlots[destinationSlotIndex].abilityRef) {
+                                // Valid destination slot found, perform swap
+                                const sourceSlot = hotbarSlots[swapSourceSlotIndex];
+                                const destinationSlot = hotbarSlots[destinationSlotIndex];
+
+                                // Store temp values from destination
+                                const tempAbilityRef = destinationSlot.abilityRef;
+                                const tempAbilityName = destinationSlot.abilityName;
+                                const tempIcon = destinationSlot.icon;
+
+                                // Move source to destination
+                                destinationSlot.abilityRef = sourceSlot.abilityRef;
+                                destinationSlot.abilityName = sourceSlot.abilityName;
+                                destinationSlot.icon = sourceSlot.icon;
+
+                                // Move temp (original destination) to source
+                                sourceSlot.abilityRef = tempAbilityRef;
+                                sourceSlot.abilityName = tempAbilityName;
+                                sourceSlot.icon = tempIcon;
+
+                                // Show success message and clear after 1 second
+                                const successText = `${hotbarSlots[swapSourceSlotIndex].keybind.toUpperCase()} and ${hotbarSlots[destinationSlotIndex].keybind.toUpperCase()} swapped successfully!`;
+                                swapMessage = successText;
+                                if (swapMessageTimer) clearTimeout(swapMessageTimer);
+                                swapMessageTimer = setTimeout(() => { swapMessage = null; }, 1000);
+
+                                // Reset swap mode
+                                swapMode = false;
+                                swapSourceSlotIndex = -1;
+                                targetedNpc = null; // Clear general NPC target as well
+                                console.log("Abilities swapped successfully!");
+                            } else {
+                                // Clicked same slot, empty slot, or invalid slot: cancel swap mode
+                                swapMode = false;
+                                swapSourceSlotIndex = -1;
+                                swapMessage = null; // Clear current swap message
+                                if (swapMessageTimer) clearTimeout(swapMessageTimer);
+                                targetedNpc = null; // Clear general NPC target
+                                console.log("Swap mode cancelled (invalid second click).");
+                            }
+                            return; // Consume the click
+                        }
+                    }
+                } else {
+                    // Clicked outside hotbar while in swap mode: cancel swap mode
+                    swapMode = false;
+                    swapSourceSlotIndex = -1;
+                    swapMessage = null; // Clear current swap message
+                    if (swapMessageTimer) clearTimeout(swapMessageTimer);
+                    targetedNpc = null; // Clear general NPC target
+                    console.log("Swap mode cancelled (clicked outside hotbar).");
+                    return; // Consume the click
+                }
+            }
+
+
+            // --- Hotkey Swap Initiation Logic (Mouse Click) ---
+            if (clickedOnHotbar && gameState === 'inGame') {
+                for (let i = 0; i < hotbarSlots.length; i++) {
+                    const slotX = hotbarX + (i * (HOTBAR_SLOT_SIZE + HOTBAR_SPACING));
+                    if (mouseX >= slotX && mouseX <= slotX + HOTBAR_SLOT_SIZE) {
+                        // Clicked on a hotbar slot
+                        if (hotbarSlots[i].abilityRef) { // If there's an ability in the slot
+                            swapMode = true;
+                            swapSourceSlotIndex = i;
+                            swapMessage = SWAP_INIT_TEXT; // Display initial swap message
+                            targetedNpc = null; // Ensure no NPC target is displayed during swap
+                            console.log(`Clicked hotkey ${hotbarSlots[i].keybind}. Entering swap mode.`);
+                        } else {
+                            console.log("Clicked empty hotbar slot. Not entering swap mode.");
+                            // If user clicks empty slot, do nothing or provide feedback
+                        }
+                        return; // Prevent further click processing after hotbar interaction
+                    }
+                }
+            }
+
+
+            // If in paused map mode, clicks do nothing on the map
+            if (gameState === 'pausedMap') {
+                return;
+            }
+
+            if (gameState !== 'inGame') return; // Only allow game clicks when inGame state
+
+            // Flag to check if any NPC (dead or alive) was clicked
+            let clickedOnNpc = false;
+
+            // Check for dead NPC clicks first (for ability selection)
+            for (let i = 0; i < deadNpcs.length; i++) {
+                const deadNpc = deadNpcs[i];
+                const boneCanvasX = (deadNpc.x - cameraX) * zoomScale;
+                const boneCanvasY = (deadNpc.y - cameraY) * zoomScale;
+
+                const deadNpcHitboxSize = 40;
+                const dist = Math.sqrt(Math.pow(mouseX - boneCanvasX, 2) + Math.pow(mouseY - boneCanvasY, 2));
+
+                if (dist < deadNpcHitboxSize / 2) {
+                    clickedDeadNpc = deadNpc;
+                    showAbilitySelectionPopup(); // This shows the loot menu
+                    clickedOnNpc = true;
+                    break; // Exit loop after finding a dead NPC
+                }
+            }
+
+            if (clickedOnNpc) {
+                return; // If a dead NPC was clicked, stop further processing
+            }
+
+            // If no dead NPC was clicked, check for live NPC clicks (for targeting)
+            let newTargetedNpc = null;
+            for (let i = 0; i < npcs.length; i++) {
+                const npc = npcs[i];
+                const npcCanvasX = (npc.x - cameraX) * zoomScale;
+                const npcCanvasY = (npc.y - cameraY) * zoomScale;
+
+                const npcHitboxSize = npc.radius * 2; // Use radius for clickable area
+                const dist = Math.sqrt(Math.pow(mouseX - npcCanvasX, 2) + Math.pow(mouseY - npcCanvasY, 2));
+
+                if (dist < npcHitboxSize / 2) {
+                    newTargetedNpc = npc;
+                    clickedOnNpc = true;
+                    break; // Exit loop after finding a live NPC
+                }
+            }
+
+            if (newTargetedNpc) {
+                // If a live NPC was clicked, set it as targeted but don't automatically start movement or combat.
+                // Right-click handles starting combat/movement.
+                targetedNpc = newTargetedNpc;
+                // Maybe add some visual feedback that this NPC is now targeted, without initiating movement
+            } else if (!clickedOnNpc && !swapMode) { // Only clear targetedNpc if not in swap mode and nothing else was clicked
+                targetedNpc = null;
+            }
+            // Left click will no longer initiate movement by default.
+        });
+
+        // New event listener for right-click (contextmenu) for movement
+        canvas.addEventListener('contextmenu', (event) => {
+            event.preventDefault(); // Prevent the browser's context menu from appearing
+
+            // Immediately cancel swap mode on ANY right-click
+            if (swapMode) {
+                swapMode = false;
+                swapSourceSlotIndex = -1;
+                swapMessage = null; // Clear current swap message
+                if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+                targetedNpc = null; // Clear general NPC target
+                console.log("Swap mode cancelled (right-click).");
+                return; // Consume the right-click
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (event.clientX - rect.left) * scaleX;
+            const mouseY = (event.clientY - rect.top) * scaleY;
+
+            // Do not allow movement if game is over, or admin/origin panel is open.
+            // Loot menu (abilitySelectionPopup) should NOT prevent movement.
+            if (gameOver || adminPanel.style.display === 'flex' || originSelectionPopup.style.display === 'flex' || gameState !== 'inGame') {
+                return;
+            }
+
+            if (canMoveFreeLy && !isPerformingMovementAbility) {
+                let clickedOnNpc = null;
+                const worldMouseX = mouseX / zoomScale + cameraX;
+                const worldMouseY = mouseY / zoomScale + cameraY;
+
+                // Check if an NPC was clicked
+                for (let i = 0; i < npcs.length; i++) {
+                    const npc = npcs[i];
+                    // Use the new, larger npcTargetingClickRadius for click detection
+                    const dist = Math.sqrt(Math.pow(worldMouseX - npc.x, 2) + Math.pow(worldMouseY - npc.y, 2));
+                    if (dist < npcTargetingClickRadius) { // Use the larger radius for targeting
+                        clickedOnNpc = npc;
+                        break;
+                    }
+                }
+
+                if (clickedOnNpc) {
+                    targetedNpc = clickedOnNpc; // Set the new targeted NPC
+                    isMoving = true; // Player will move towards this NPC or engage if already in range
+                    showTargetIndicator = false; // Hide the 'X' for explicit click, as it's targeting NPC
+
+                    // If already in combat with a *different* NPC, stop that combat
+                    if (inCombat && combatTarget && combatTarget !== targetedNpc) {
+                        inCombat = false;
+                        if (combatTarget) combatTarget.inCombat = false; // Ensure to clear inCombat for old target
+                        combatTarget = null;
+                        // Player will now move towards the new target
+                    }
+                } else {
+                    // If no NPC clicked, it's a direct movement click
+                    targetedNpc = null; // Clear any previous NPC target
+                    targetX = worldMouseX;
+                    targetY = worldMouseY;
+                    isMoving = true;
+                    showTargetIndicator = true; // Show 'X' for direct movement
+                    playerDirectionAngle = Math.atan2(targetY - playerY, targetX - playerX); // Update player direction
+
+                    // If currently in combat, moving away ends combat
+                    if (inCombat) {
+                        inCombat = false;
+                        if (combatTarget) combatTarget.inCombat = false; // Ensure to clear inCombat for old target
+                        combatTarget = null;
+                    }
+                }
+            }
+        });
+
+
+        // --- Game Flow Functions ---
+        function showStartScreen() {
+            gameState = 'startScreen';
+            startScreenOverlay.classList.add('active');
+            popupOverlay.classList.remove('active'); // Ensure general overlay is hidden
+            originSelectionPopup.style.display = 'none';
+            abilitySelectionPopup.style.display = 'none';
+            adminPanel.style.display = 'none';
+            targetedNpc = null; // Ensure target is cleared on screen change
+            swapMode = false; // Ensure swap mode is off
+            swapSourceSlotIndex = -1;
+            swapMessage = null; // Clear swap message
+            if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+            isAnyPanelOpen = false; // Reset general UI state
+        }
+
+        let selectedOrigin = null; // To keep track of the chosen origin
+
+        function showOriginSelection() {
+            gameState = 'originSelection';
+            startScreenOverlay.classList.remove('active'); // Hide start screen HTML elements
+            showOverlayPanel(originSelectionPopup); // Show origin selection popup (sets isAnyPanelOpen to true)
+
+            originGrid.innerHTML = ''; // Clear previous options
+            selectOriginButton.disabled = true; // Initially disable the button
+            selectOriginButton.style.alignSelf = 'center'; // Center the button
+            selectOriginButton.style.padding = '8px 20px'; // Make it smaller
+            selectOriginButton.style.fontSize = '1.1em'; // Smaller font size
+            targetedNpc = null; // Ensure target is cleared on screen change
+            swapMode = false; // Ensure swap mode is off
+            swapSourceSlotIndex = -1;
+            swapMessage = null; // Clear swap message
+            if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+
+
+            geneticOrigins.forEach(origin => {
+                const div = document.createElement('div');
+                div.className = 'origin-option';
+                div.innerHTML = `
+                    <div class="origin-name-with-emoji">
+                        <h3 class="origin-name">${origin.name}</h3>
+                        <span class="origin-emoji">${origin.emoji}</span>
+                    </div>
+                    <div class="origin-bonus">${origin.getBonusText()}</div>
+                `;
+                div.onclick = () => {
+                    // Remove selected class from all
+                    document.querySelectorAll('.origin-option').forEach(opt => opt.style.borderColor = '');
+                    // Add selected class to this one
+                    div.style.borderColor = '#00ff00'; // Green border for selected
+                    selectedOrigin = origin;
+                    selectOriginButton.disabled = false; // Enable the button
+                };
+                originGrid.appendChild(div);
+            });
+        }
+
+        function startGame() {
+            if (!selectedOrigin) {
+                console.error("Please select a Genetic Origin first!");
+                return;
+            }
+
+            playerGeneticOrigin = selectedOrigin;
+
+            gameState = 'inGame';
+            hideAllPanels(); // This will also clear targetedNpc, swapMode, swapMessage, and set isAnyPanelOpen to false
+            isMapModeActive = false; // Start zoomed in
+
+            playerX = worldWidth / 2;
+            playerY = worldHeight / 2;
+            playerStats = {
+                currentHp: 50,
+                maxHp: 50,
+                attack: 20,
+                defense: 5,
+                stamina: 0,
+                stealth: 0,
+                speed: 0,
+                currentHunger: 1,
+                maxHunger: 100,
+                currentXp: 0,
+                playerLevel: 1,
+                xpToNextLevel: 10,
+                playerEvolutionState: 'Grub'
+            };
+            lastHungerIncreaseTime = performance.now(); // Initialize hunger timer
+
+
+            playerAbilities = {
+                jump: 0,
+                dash: 0,
+                burrow: 0,
+            };
+
+            hotbarSlots.forEach(slot => {
+                if (slot.keybind === 'F' || slot.keybind === 'R') {
+                    slot.abilityRef = null;
+                    slot.abilityName = 'Empty';
+                    slot.icon = '';
+                } else {
+                    slot.abilityRef = null;
+                    slot.abilityName = '';
+                    slot.icon = '';
+                }
+            });
+
+            generateForestElements();
+            generateNPCs();
+
+            if (!animationFrameId) {
+                gameLoop();
+            }
+        }
+
+
+        // Initialize the canvas size and start the game loop when the window loads.
+        window.onload = function() {
+            resizeCanvas();
+            showStartScreen(); // Begin with the start screen
+            gameLoop(); // Start the game loop which will draw based on gameState
+        };
+    </script>
+</body>
+</html>
