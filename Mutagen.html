@@ -23,7 +23,7 @@
             height: 100%;
             display: flex;
             justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
+            align-items: center;
             box-sizing: border-box; /* Include padding in dimensions if added later */
             background-color: #222; /* Ensure main content matches body background */
         }
@@ -105,35 +105,59 @@
         }
 
         .game-subtitle .survive {
-            color: #b39ddb; /* Bold purple */
+            color: #6a0dad; /* Vibrant purple (matches action-button bg) */
         }
 
         .game-subtitle .adapt {
-            color: #28a745; /* Green */
+            color: #00ff00; /* Neon green */
         }
 
         .game-subtitle .consume {
-            color: #dc3545; /* Dangerous red */
+            color: #FF0000; /* Vibrant red */
         }
 
         .action-button {
-            background-color: #6a0dad; /* Darker purple */
-            color: white;
-            border: 2px solid #9932CC; /* Purple border */
+            background-color: black; /* Changed to black */
+            color: #FF8C00; /* Orange text */
+            border: 2px solid white; /* Bold white border */
             border-radius: 10px;
             padding: 12px 30px;
             font-size: 1.4em; /* Larger button text */
             cursor: pointer;
             transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            position: relative; /* For the glint effect */
+            overflow: hidden; /* Hide overflowing glint */
+        }
+
+        .action-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%; /* Start off-screen to the left */
+            width: 50%; /* Width of the glint */
+            height: 100%;
+            background: linear-gradient(to right,
+                rgba(255, 255, 255, 0) 0%,
+                rgba(255, 140, 0, 0.3) 50%, /* Orange glint color, semi-transparent */
+                rgba(255, 255, 255, 0) 100%
+            );
+            transform: skewX(-20deg); /* Angle the glint */
+            transition: none; /* No transition for the glint itself initially */
         }
 
         .action-button:hover {
-            background-color: #9932CC; /* Lighter purple on hover */
+            background-color: rgba(0, 0, 0, 0.8); /* Slight dark hover */
             transform: translateY(-3px);
-            border-color: #6200ff; /* Brighter purple border */
+            border-color: #FF8C00; /* Orange border on hover */
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
         }
+
+        .action-button:hover::before {
+            left: 100%; /* Move across to the right */
+            transition: left 0.8s ease-out; /* Animate the glint */
+        }
+
 
         /* Generic Popup styles */
         .popup-panel {
@@ -149,8 +173,8 @@
             flex-direction: column;
             gap: 15px;
             border: 2px solid #6a0dad; /* Darker purple border */
-            max-height: 90vh; /* Allow scrolling for content overflow */
-            overflow-y: auto;
+            max-height: 90vh; /* Allow content to fill, but prevent internal scrolling for this panel */
+            overflow-y: hidden; /* **CHANGED: Removed scrollbar** */
             transform: scale(0.9); /* Slightly smaller than full size */
             animation: popupAppear 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
             pointer-events: auto; /* Active for interactions */
@@ -161,7 +185,8 @@
             font-size: 1.8em;
             font-weight: bold;
             color: #FF8C00;
-            margin-bottom: 10px;
+            margin-top: 3px; /* Reduced from default padding top by 80% (15px * 0.2 = 3px) */
+            margin-bottom: 5px; /* Reduced by 50% from 10px */
             text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
         }
 
@@ -177,9 +202,9 @@
 
         .origin-option {
             background-color: #2a1a45; /* Darker purple for option cards */
-            border: 2px solid #4a1c87; /* Purple border */
+            border: 2px solid #4a1c87;
             border-radius: 10px;
-            padding: 15px;
+            padding: 2px 15px 15px 15px; /* Reduced top padding further */
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -197,17 +222,19 @@
             box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
         }
 
-        .origin-name {
-            font-size: 1.3em;
-            font-weight: bold;
-            color: #b39ddb; /* Lighter purple */
-            margin-bottom: 5px;
-        }
-
         .origin-name-with-emoji {
             display: flex;
             align-items: center;
             gap: 8px; /* Space between name and emoji */
+            margin-top: 0; /* Set to 0, padding on parent handles it */
+            margin-bottom: 5px; /* Keep bottom margin */
+        }
+        .origin-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #b39ddb; /* Lighter purple */
+            margin: 0; /* Remove default H3 margins */
+            padding: 0; /* Remove any default padding */
         }
 
         .origin-emoji {
@@ -227,22 +254,59 @@
         .origin-bonus {
             font-size: 0.85em;
             font-weight: bold;
-            color: #00ff00; /* Green for bonuses */
+            color: white; /* Base color for the text */
             margin-top: 10px;
             border-top: 1px dashed rgba(255, 255, 255, 0.2);
             padding-top: 8px;
             width: 100%;
+        }
+        .origin-starting-ability { /* New style for starting ability text */
+            font-size: 0.85em;
+            font-weight: bold;
+            color: white; /* Base color for the text */
+            margin-top: 5px; /* Small margin above */
+            border-top: 1px dashed rgba(255, 255, 255, 0.2); /* Separator line */
+            padding-top: 8px; /* Padding above the text */
+            width: 100%;
+        }
+
+        /* New styles for the button and instructions container */
+        .button-and-instructions-container {
+            display: grid; /* Use grid for precise positioning */
+            grid-template-columns: 1fr auto 1fr; /* Flexible left, auto for button, flexible right */
+            align-items: center; /* Vertically align items */
+            gap: 15px; /* Space between grid items */
+            margin-top: 10px; /* Space above this whole row */
+            width: 100%; /* Ensure it spans the full width of its parent */
+            box-sizing: border-box; /* Include padding/border in total width */
+        }
+
+        .control-instructions {
+            font-size: 0.85em;
+            color: #aaa; /* Lighter gray for instructional text */
+            text-align: center; /* Ensure text is centered within its own grid cell */
+            margin: 0; /* Remove default margins for cleaner grid layout */
+        }
+
+        /* Center the button within its grid cell */
+        #selectOriginButton {
+            justify-self: center;
         }
 
         /* Styles for disabled button */
         .action-button:disabled {
             background-color: #555;
             border-color: #777;
+            color: #ccc; /* Disabled text color */
             cursor: not-allowed;
             opacity: 0.6;
             transform: none;
             box-shadow: none;
         }
+        .action-button:disabled::before { /* Disable glint on disabled button */
+            content: none;
+        }
+
 
         /* --- Other existing popup/admin styles remain the same --- */
         /* Healing/Ability Selection Popup */
@@ -389,6 +453,12 @@
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             z-index: 1;
         }
+        /* Specific styles for stat-details within passive ability options */
+        .healing-popup .ability-option-half .stat-details {
+            border-top: none; /* Remove the line */
+            padding-top: 0;   /* Remove padding above the stats */
+            margin-top: 5px; /* Add a small margin to separate from title */
+        }
         .stat-line {
             font-size: 0.75em; /* Reduced font size */
             color: #d1c4e9;
@@ -406,6 +476,8 @@
             font-weight: bold;
             color: #FF8C00;
         }
+        /* Removed passive-description-text style as the element is removed from template */
+
 
         /* DNA Emoji as background */
         .dna-background {
@@ -673,6 +745,15 @@
             .game-subtitle {
                 font-size: 1.6em;
             }
+            /* Responsive adjustments for the instructions container */
+            .button-and-instructions-container {
+                grid-template-columns: 1fr; /* Stack vertically on small screens */
+                justify-items: center; /* Center items horizontally when stacked */
+                gap: 5px; /* Smaller gap when stacked */
+            }
+            .control-instructions {
+                margin: 0; /* Remove extra margins when stacked */
+            }
         }
 
         @media (max-width: 480px) {
@@ -767,7 +848,12 @@
             <div id="originGrid" class="origin-grid">
                 <!-- Origin options will be dynamically inserted here -->
             </div>
-            <button id="selectOriginButton" class="action-button" disabled>Start Game</button>
+            <!-- New container for button and instructions -->
+            <div class="button-and-instructions-container">
+                <p class="control-instructions">Left click to select/interact</p>
+                <button id="selectOriginButton" class="action-button" disabled>Start Game</button>
+                <p class="control-instructions">Right click to move/attack</p>
+            </div>
         </div>
 
         <!-- Admin Panel Popup -->
@@ -787,6 +873,7 @@
     <div id="templateAbilityOption" class="ability-option-half" style="display:none;">
         <span class="dna-background">🧬</span>
         <h3 class="ability-name"></h3>
+        <!-- Removed <p class="passive-description-text"></p> as it is no longer used -->
         <div class="stat-details"></div>
     </div>
     <div id="templateDeclineButton" class="decline-option-button" style="display:none;">
@@ -851,7 +938,7 @@
         let cameraX = 0;
         let cameraY = 0;
         let zoomScale = 1;
-        let isMapModeActive = false; // New state for map view toggle
+        let isMapModeActive = false; // New state for map mode toggle
 
         // Player's current direction angle in radians (for orientation line)
         let playerDirectionAngle = 0;
@@ -884,14 +971,14 @@
 
         // Player Abilities (Consolidated into an object)
         let playerAbilities = {
-            jump: 0,
+            pounce: 0, // Renamed from jump
             dash: 0,
             burrow: 0,
         };
 
         // Map for quick lookup of ability details for hotbar assignment
         const abilityDetailsMap = {
-            'jump': { name: 'Jump', key: 'jump', hotbarIcon: '🏃' },
+            'pounce': { name: 'Pounce', key: 'pounce', hotbarIcon: '🏃' }, // Renamed from jump
             'dash': { name: 'Dash', key: 'dash', hotbarIcon: '💨' },
             'burrow': { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' }
         };
@@ -940,6 +1027,7 @@
         let closestNpcDistance = Infinity; // Distance to the closest NPC for dynamic indicator
         // deadNpcs will store { x, y, maxHp, name, totalDamageDealtByPlayer, totalDamageReceivedByPlayer }
         let deadNpcs = [];
+        const LOOT_INTERACTION_RADIUS = 30; // Radius for player to interact with loot bones
         let clickedDeadNpc = null; // Stores the dead NPC object that was clicked for the pop-up
         let targetedNpc = null; // Stores the currently targeted live NPC
 
@@ -958,9 +1046,10 @@
         // Variable to hold the animation frame ID to prevent multiple calls
         let animationFrameId = null;
 
-        // --- Movement Ability Variables (Generalized for Jump/Dash/Burrow) ---
-        let isPerformingMovementAbility = false; // True if Jump or Dash is active
-        const JUMP_BASE_DISTANCE = 100; // Base distance for Jump
+        // --- Movement Ability Variables (Generalized for Pounce/Dash/Burrow) ---
+        let isPerformingMovementAbility = false; // True if Pounce or Dash is active
+        const POUNCE_BASE_DISTANCE = 100; // Base distance for Pounce (renamed from JUMP_BASE_DISTANCE)
+        const POUNCE_FIXED_DURATION = 350; // milliseconds (e.g., 350ms for a quick hop) (renamed from JUMP_FIXED_DURATION)
         const DASH_BASE_DISTANCE = 150 * 1.5; // Base distance for Dash (100 * 1.5) increased by 50%
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
@@ -968,7 +1057,7 @@
         let movementAbilityStartY = 0;
         let movementAbilityEndX = 0;
         let movementAbilityEndY = 0;
-        let postMovementImmobilityDuration = 250; // milliseconds after Jump/Dash (can vary by ability)
+        let postMovementImmobilityDuration = 250; // milliseconds after Pounce/Dash (can vary by ability)
         let canMoveFreeLy = true; // True if player can initiate normal movement or another movement ability
         let lastActivatedAbilityRef = null; // To track which ability was just activated for post-movement effects
 
@@ -980,15 +1069,6 @@
         // New visual effect variables
         let playerVisualScale = 1; // Current scale factor for the player icon
 
-        // New jump landing indicator
-        let showJumpLandingIndicator = false;
-        let jumpLandingX = 0;
-        let jumpLandingY = 0;
-
-        // Fixed jump duration for consistent "air time"
-        const JUMP_FIXED_DURATION = 350; // milliseconds (e.g., 350ms for a quick hop)
-
-
         // Store last known mouse canvas coordinates for movement ability direction calculation
         let lastMouseCanvasX = canvas.width / 2; // Initialize to center
         let lastMouseCanvasY = canvas.height / 2; // Initialize to center
@@ -996,7 +1076,7 @@
 
         // --- Cooldowns for Abilities ---
         let cooldowns = {
-            jump: { lastUsed: 0, duration: 5000 }, // 5 seconds
+            pounce: { lastUsed: 0, duration: 5000 }, // 5 seconds (renamed from jump)
             dash: { lastUsed: 0, duration: 5000 } ,
             burrow: { lastUsed: 0, duration: 5000 }
         };
@@ -1044,10 +1124,11 @@
         let swapMessageTimer = null; // Timer for clearing the success message
 
         // --- Color Definitions ---
-        const colorGreen = '#28a745';
+        const colorNeonGreen = '#00ff00'; // Brighter neon green
         const colorYellow = '#ffc107';
         const colorOrange = '#fd7e14';
-        const colorRed = '#dc3545';
+        const colorRed = '#dc3545'; // Original red, can be used for general UI elements
+        const colorVibrantRed = '#FF0000'; // Pure vibrant red for "Consume"
         const buttonColor = 'rgba(70, 70, 70, 0.8)';
         const buttonBorderColor = '#aaa';
         const buttonTextColor = 'white';
@@ -1057,44 +1138,74 @@
         // --- Genetic Origin Data ---
         const geneticOrigins = [
             {
-                key: 'arachnoid', // Changed from arachnid
-                name: 'Arachnoid', // Changed from Arachnid
+                key: 'arachnoid',
+                name: 'Arachnoid',
                 emoji: '🦂',
-                rotation: 0, // No rotation needed for scorpion
+                rotation: 0,
                 bonusStats: { attack: 0.02, defense: 0.02 },
-                getBonusText: () => '+2% All Attack & Defense Gains'
+                startingAbilityKey: 'burrow',
+                getBonusText: () => {
+                    const bonusAttack = geneticOrigins.find(o => o.key === 'arachnoid').bonusStats.attack * 100;
+                    const bonusDefense = geneticOrigins.find(o => o.key === 'arachnoid').bonusStats.defense * 100;
+                    return `<span style='color:${colorNeonGreen};'>⬆${bonusAttack.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>Attack</span> & <span style='color:${colorNeonGreen};'>Defense</span> gains`;
+                },
+                getStartingAbilityText: () => `Starts with: <span style='color:${colorOrange};'>${abilityDetailsMap.burrow.name}</span>`
             },
             {
-                key: 'reptilian', // Changed from reptile
-                name: 'Reptilian', // Changed from Reptile
+                key: 'reptilian',
+                name: 'Reptilian',
                 emoji: '🦎',
-                rotation: -Math.PI / 2, // -90 degrees (facing left/right naturally)
+                rotation: -Math.PI / 2,
                 bonusStats: { stealth: 0.02, speed: 0.02 },
-                getBonusText: () => '+2% All Stealth & Speed Gains'
+                startingAbilityKey: 'dash',
+                getBonusText: () => {
+                    const bonusStealth = geneticOrigins.find(o => o.key === 'reptilian').bonusStats.stealth * 100;
+                    const bonusSpeed = geneticOrigins.find(o => o.key === 'reptilian').bonusStats.speed * 100;
+                    return `<span style='color:${colorNeonGreen};'>⬆${bonusStealth.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>Stealth</span> & <span style='color:${colorNeonGreen};'>Speed</span> gains`;
+                },
+                getStartingAbilityText: () => `Starts with: <span style='color:${colorOrange};'>${abilityDetailsMap.dash.name}</span>`
             },
             {
-                key: 'raptorial', // Changed from raptor
-                name: 'Raptorial', // Changed from Raptor
+                key: 'raptorial',
+                name: 'Raptorial',
                 emoji: '🦖',
-                rotation: -Math.PI / 2, // -90 degrees
+                rotation: -Math.PI / 2,
                 bonusStats: { speed: 0.02, attack: 0.02 },
-                getBonusText: () => '+2% All Speed & Attack Gains'
+                startingAbilityKey: 'pounce',
+                getBonusText: () => {
+                    const bonusSpeed = geneticOrigins.find(o => o.key === 'raptorial').bonusStats.speed * 100;
+                    const bonusAttack = geneticOrigins.find(o => o.key === 'raptorial').bonusStats.attack * 100;
+                    return `<span style='color:${colorNeonGreen};'>⬆${bonusSpeed.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>Speed</span> & <span style='color:${colorNeonGreen};'>Attack</span> gains`;
+                },
+                getStartingAbilityText: () => `Starts with: <span style='color:${colorOrange};'>${abilityDetailsMap.pounce.name}</span>`
             },
             {
                 key: 'simian',
                 name: 'Simian',
-                emoji: '�',
-                rotation: -Math.PI / 2, // -90 degrees
+                emoji: '🦍',
+                rotation: -Math.PI / 2,
                 bonusStats: { maxHp: 0.02, defense: 0.02 },
-                getBonusText: () => '+2% All HP & Defense Gains'
+                startingAbilityKey: 'pounce',
+                getBonusText: () => {
+                    const bonusMaxHp = geneticOrigins.find(o => o.key === 'simian').bonusStats.maxHp * 100;
+                    const bonusDefense = geneticOrigins.find(o => o.key === 'simian').bonusStats.defense * 100;
+                    return `<span style='color:${colorNeonGreen};'>⬆${bonusMaxHp.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>Health</span> & <span style='color:${colorNeonGreen};'>Defense</span> gains`;
+                },
+                getStartingAbilityText: () => `Starts with: <span style='color:${colorOrange};'>${abilityDetailsMap.pounce.name}</span>`
             },
             {
                 key: 'synthetic',
                 name: 'Synthetic',
                 emoji: '🤖',
-                rotation: 0, // No rotation
+                rotation: 0,
                 bonusStats: { currentXp: 0.02, stamina: 0.02 },
-                getBonusText: () => '+2% All XP & Stamina Gains'
+                startingAbilityKey: 'dash',
+                getBonusText: () => {
+                    const bonusCurrentXp = geneticOrigins.find(o => o.key === 'synthetic').bonusStats.currentXp * 100;
+                    const bonusStamina = geneticOrigins.find(o => o.key === 'synthetic').bonusStats.stamina * 100;
+                    return `<span style='color:${colorNeonGreen};'>⬆${bonusCurrentXp.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>XP</span> & <span style='color:${colorNeonGreen};'>Stamina</span> gains`;
+                },
+                getStartingAbilityText: () => `Starts with: <span style='color:${colorOrange};'>${abilityDetailsMap.dash.name}</span>`
             }
         ];
         let playerGeneticOrigin = null; // Will store the selected genetic origin object
@@ -1104,8 +1215,8 @@
             {
                 name: 'Tough Skin',
                 stats: ['maxHp', 'defense'], // Use an array for stats impacted by this ability
-                activeAbilityReward: { name: 'Jump', key: 'jump', hotbarIcon: '🏃' },
-                getDescription: (boost1, boost2) => `+${boost1.toFixed(1)} HP, +${boost2.toFixed(1)} Defense`,
+                activeAbilityReward: { name: 'Pounce', key: 'pounce', hotbarIcon: '🏃' }, // Renamed from Jump
+                getDescription: (boost1, boost2) => `⬆<span style='color:${colorNeonGreen};'>${boost1.toFixed(0)}%</span> to <span style='color:${colorNeonGreen};'>Max HP</span> & <span style='color:${colorNeonGreen};'>Defense</span>`,
                 applyBoost: (boost1, boost2) => {
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
@@ -1122,23 +1233,22 @@
                 },
                 getPreview: (boost1, boost2, currentStats) => {
                     const previewLines = [];
-                    let previewBoost1 = boost1;
-                    let previewBoost2 = boost2;
+                    // Apply genetic origin bonuses to the *boosts* for preview calculation
+                    let effectiveBoost1 = boost1;
+                    let effectiveBoost2 = boost2;
 
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.maxHp) previewBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
-                        if (playerGeneticOrigin.bonusStats.defense) previewBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
+                        if (playerGeneticOrigin.bonusStats.maxHp) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
+                        if (playerGeneticOrigin.bonusStats.defense) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
                     }
 
-                    const oldHp = currentStats.maxHp;
-                    const newHp = oldHp + previewBoost1;
-                    const deltaHpClass = previewBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">HP</span>: ${oldHp.toFixed(1)} ➡ <span class="${deltaHpClass}">${newHp.toFixed(1)}</span>`);
+                    const newHp = currentStats.maxHp + effectiveBoost1;
+                    const deltaHpClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">HP</span>: ${currentStats.maxHp.toFixed(1)} ➡ <span class="${deltaHpClass}">${newHp.toFixed(1)}</span>`);
 
-                    const oldDef = currentStats.defense;
-                    const newDef = oldDef + previewBoost2;
-                    const deltaDefClass = previewBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Defense</span>: ${oldDef.toFixed(1)}% ➡ <span class="${deltaDefClass}">${newDef.toFixed(1)}%</span>`);
+                    const newDef = currentStats.defense + effectiveBoost2;
+                    const deltaDefClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Defense</span>: ${currentStats.defense.toFixed(1)}% ➡ <span class="${deltaDefClass}">${newDef.toFixed(1)}%</span>`);
 
                     return previewLines;
                 }
@@ -1147,7 +1257,7 @@
                 name: 'Reflexes',
                 stats: ['speed', 'stealth'],
                 activeAbilityReward: { name: 'Dash', key: 'dash', hotbarIcon: '💨' },
-                getDescription: (boost1, boost2) => `+${boost1.toFixed(1)} Speed, +${boost2.toFixed(1)} Stealth`,
+                getDescription: (boost1, boost2) => `⬆<span style='color:${colorNeonGreen};'>${boost1.toFixed(0)}%</span> to <span style='color:${colorNeonGreen};'>Speed</span> & <span style='color:${colorNeonGreen};'>Stealth</span>`,
                 applyBoost: (boost1, boost2) => {
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
@@ -1162,23 +1272,22 @@
                 },
                 getPreview: (boost1, boost2, currentStats) => {
                     const previewLines = [];
-                    let previewBoost1 = boost1;
-                    let previewBoost2 = boost2;
+                    // Apply genetic origin bonuses to the *boosts* for preview calculation
+                    let effectiveBoost1 = boost1;
+                    let effectiveBoost2 = boost2;
 
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.speed) previewBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
-                        if (playerGeneticOrigin.bonusStats.stealth) previewBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
+                        if (playerGeneticOrigin.bonusStats.speed) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
+                        if (playerGeneticOrigin.bonusStats.stealth) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
                     }
 
-                    const oldSpd = currentStats.speed;
-                    const newSpd = oldSpd + previewBoost1;
-                    const deltaSpdClass = previewBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Speed</span>: ${oldSpd.toFixed(1)}% ➡ <span class="${deltaSpdClass}">${newSpd.toFixed(1)}%</span>`);
+                    const newSpd = currentStats.speed + effectiveBoost1;
+                    const deltaSpdClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Speed</span>: ${currentStats.speed.toFixed(1)}% ➡ <span class="${deltaSpdClass}">${newSpd.toFixed(1)}%</span>`);
 
-                    const oldStl = currentStats.stealth;
-                    const newStl = oldStl + previewBoost2;
-                    const deltaStlClass = previewBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${oldStl.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}%</span>`);
+                    const newStl = currentStats.stealth + effectiveBoost2;
+                    const deltaStlClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${currentStats.stealth.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}%</span>`);
 
                     return previewLines;
                 }
@@ -1187,7 +1296,7 @@
                 name: 'Instinct',
                 stats: ['stamina', 'attack'],
                 activeAbilityReward: { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' },
-                getDescription: (boost1, boost2) => `+${boost1.toFixed(1)} Stamina, +${boost2.toFixed(1)} Attack`,
+                getDescription: (boost1, boost2) => `⬆<span style='color:${colorNeonGreen};'>${boost1.toFixed(0)}%</span> to <span style='color:${colorNeonGreen};'>Stamina</span> & <span style='color:${colorNeonGreen};'>Attack</span>`,
                 applyBoost: (boost1, boost2) => {
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
@@ -1202,23 +1311,22 @@
                 },
                 getPreview: (boost1, boost2, currentStats) => {
                     const previewLines = [];
-                    let previewBoost1 = boost1;
-                    let previewBoost2 = boost2;
+                    // Apply genetic origin bonuses to the *boosts* for preview calculation
+                    let effectiveBoost1 = boost1;
+                    let effectiveBoost2 = boost2;
 
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.stamina) previewBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
-                        if (playerGeneticOrigin.bonusStats.attack) previewBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
+                        if (playerGeneticOrigin.bonusStats.stamina) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
+                        if (playerGeneticOrigin.bonusStats.attack) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
                     }
 
-                    const oldSta = currentStats.stamina;
-                    const newSta = oldSta + previewBoost1;
-                    const deltaStaClass = previewBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Stamina</span>: ${oldSta.toFixed(1)}% ➡ <span class="${deltaStaClass}">${newSta.toFixed(1)}%</span>`);
+                    const newSta = currentStats.stamina + effectiveBoost1;
+                    const deltaStaClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Stamina</span>: ${currentStats.stamina.toFixed(1)}% ➡ <span class="${deltaStaClass}">${newSta.toFixed(1)}%</span>`);
 
-                    const oldAtk = currentStats.attack;
-                    const newAtk = oldAtk + previewBoost2;
-                    const deltaAtkClass = previewBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Attack</span>: ${oldAtk.toFixed(1)} ➡ <span class="${deltaAtkClass}">${newAtk.toFixed(1)}</span>`);
+                    const newAtk = currentStats.attack + effectiveBoost2;
+                    const deltaAtkClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
+                    previewLines.push(`<span class="stat-name-bold-orange">Attack</span>: ${currentStats.attack.toFixed(1)} ➡ <span class="${deltaAtkClass}">${newAtk.toFixed(1)}</span>`);
 
                     return previewLines;
                 }
@@ -1243,7 +1351,7 @@
         // but keeps the percentage-based logic for XP if needed later, though for now XP is fixed blue.
         function getBarColor(percentage, type) {
             if (type === 'hp') {
-                return colorGreen; // Always green for HP bar fill
+                return colorNeonGreen; // Always green for HP bar fill
             } else if (type === 'hunger') {
                 return colorRed; // Always red for Hunger bar fill
             } else if (type === 'xp') {
@@ -1328,6 +1436,37 @@
             });
         }
 
+        // --- NPC Pathing Generation Functions ---
+        function generateLinePath(centerX, centerY, radius) {
+            const startX = centerX - radius;
+            const endX = centerX + radius;
+            return [{ x: startX, y: centerY }, { x: endX, y: centerY }];
+        }
+
+        function generateCirclePath(centerX, centerY, radius, numSegments = 8) {
+            const waypoints = [];
+            for (let i = 0; i < numSegments; i++) {
+                const angle = (i / numSegments) * Math.PI * 2;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                waypoints.push({ x, y });
+            }
+            return waypoints;
+        }
+
+        function generatePolygonPath(centerX, centerY, radius, minVertices = 3, maxVertices = 6) {
+            const numVertices = Math.floor(Math.random() * (maxVertices - minVertices + 1)) + minVertices;
+            const waypoints = [];
+            for (let i = 0; i < numVertices; i++) {
+                const angle = Math.random() * Math.PI * 2; // Random angle for irregular polygon
+                const currentRadius = radius * (0.8 + Math.random() * 0.2); // Vary radius slightly
+                const x = centerX + currentRadius * Math.cos(angle);
+                const y = centerY + currentRadius * Math.sin(angle);
+                waypoints.push({ x, y });
+            }
+            return waypoints;
+        }
+
         function createSingleNPC() {
             const minNpcNpcDistance = 100;
             let newNpcX, newNpcY;
@@ -1349,18 +1488,16 @@
             const playerViewWorldY_min = cameraY - screenBuffer;
             const playerViewWorldY_max = cameraY + (canvas.height / zoomScale) + screenBuffer;
 
+            let chosenOrigin = patrolOrigins[Math.floor(Math.random() * patrolOrigins.length)];
+            let patrolWaypoints = [];
+            let pathingType;
+            let patrolRadius = 75 + Math.random() * 50; // Base radius for patrol area
 
             while (!validSpawn && attempts < maxAttempts) {
-                const areaIndex = Math.floor(Math.random() * patrolOrigins.length);
-                const origin = patrolOrigins[areaIndex];
-                const basePatrolAreaSize = 100;
-                const randomSizeVariation = 50;
-                const areaWidth = basePatrolAreaSize + Math.random() * randomSizeVariation;
-                const areaHeight = basePatrolAreaSize + Math.random() * randomSizeVariation;
+                newNpcX = chosenOrigin.x + (Math.random() - 0.5) * patrolRadius * 2;
+                newNpcY = chosenOrigin.y + (Math.random() - 0.5) * patrolRadius * 2;
 
-                newNpcX = origin.x + (Math.random() * areaWidth);
-                newNpcY = origin.y + (Math.random() * areaHeight);
-
+                // Ensure initial spawn is within world bounds and not too close to edges
                 newNpcX = Math.max(npcSize / 2, Math.min(newNpcX, worldWidth - npcSize / 2));
                 newNpcY = Math.max(npcSize / 2, Math.min(newNpcY, worldHeight - npcSize / 2));
 
@@ -1395,14 +1532,21 @@
                 console.warn("Could not find a valid off-screen spawn location for NPC after multiple attempts. Spawning randomly within world.");
                 newNpcX = Math.random() * worldWidth;
                 newNpcY = Math.random() * worldHeight;
+                patrolRadius = 100; // Reset patrol radius if forced spawn
+                chosenOrigin = { x: newNpcX, y: newNpcY }; // Base patrol around forced spawn point
             }
 
-            const patrolWaypoints = [
-                { x: newNpcX - 50, y: newNpcY },
-                { x: newNpcX + 50, y: newNpcY },
-                { x: newNpcX + 50, y: newNpcY + 50 },
-                { x: newNpcX - 50, y: newNpcY + 50 }
-            ];
+            // Determine pathing type and generate waypoints
+            const pathingTypes = ['line', 'circle', 'polygon'];
+            pathingType = pathingTypes[Math.floor(Math.random() * pathingTypes.length)];
+
+            if (pathingType === 'line') {
+                patrolWaypoints = generateLinePath(chosenOrigin.x, chosenOrigin.y, patrolRadius);
+            } else if (pathingType === 'circle') {
+                patrolWaypoints = generateCirclePath(chosenOrigin.x, chosenOrigin.y, patrolRadius, 8); // 8 segments for circle
+            } else if (pathingType === 'polygon') {
+                patrolWaypoints = generatePolygonPath(chosenOrigin.x, chosenOrigin.y, patrolRadius, 3, 6);
+            }
 
             const chosenEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
             const chosenName = npcEmojiNames[chosenEmoji] || `NPC #${npcs.length + 1}`;
@@ -1413,7 +1557,7 @@
                 x: newNpcX,
                 y: newNpcY,
                 size: npcSize,
-                radius: npcRadius, // Use the new radius property
+                radius: npcRadius,
                 emoji: chosenEmoji,
                 currentHp: Math.floor(Math.random() * 20) + 10,
                 maxHp: Math.floor(Math.random() * 20) + 10,
@@ -1423,7 +1567,9 @@
                 stealth: Math.floor(Math.random() * 5) + 1,
                 speed: Math.floor(Math.random() * 5) + 1,
                 patrolWaypoints: patrolWaypoints,
+                pathingType: pathingType, // Store the chosen pathing type
                 currentPatrolPointIndex: 0,
+                patrolDirection: 1, // For line pathing: 1 for forward, -1 for backward
                 patrolTargetX: patrolWaypoints[0].x,
                 patrolTargetY: patrolWaypoints[0].y,
                 inCombat: false,
@@ -1431,9 +1577,8 @@
                 totalDamageDealtToPlayer: 0,
                 totalDamageReceivedFromPlayer: 0,
                 dashedThrough: false,
-                // NPC specific attack timing and animation
                 lastAttackTime: 0,
-                attackCooldown: 500, // Default 0.5s
+                attackCooldown: 500,
                 isAttacking: false,
                 attackAnimStartTime: 0
             };
@@ -1468,7 +1613,7 @@
             return Math.atan2(Math.sin(angle), Math.cos(angle));
         }
 
-        function dealDamage(attacker, defender) {
+        function dealDamage(attacker, defender, currentTime) { // Added currentTime parameter
             let rawDamage = attacker.attack;
             let defenseReduction = rawDamage * (defender.defense / 100);
 
@@ -1518,7 +1663,7 @@
                     x: textX,
                     y: textY,
                     color: 'red', // Player receives red damage
-                    timestamp: performance.now(),
+                    timestamp: currentTime,
                     duration: duration,
                     floatDuration: duration
                 });
@@ -1529,16 +1674,62 @@
             if (!isBurrowing) return;
 
             isBurrowing = false;
-            canMoveFreeLy = false;
+            canMoveFreeLy = false; // Player is briefly immobilized after unburrowing
+            showTargetIndicator = false; // Clear target indicator on unburrow
 
-            playerVisualScale = 1.5;
+            playerVisualScale = 1.5; // Short visual flourish
             setTimeout(() => {
                 playerVisualScale = 1;
                 setTimeout(() => {
                     canMoveFreeLy = true;
                 }, postMovementImmobilityDuration);
             }, 100);
+
+            // Check for collision with NPCs on unburrow
+            let foundNpcToTarget = null;
+            for (const npc of npcs) {
+                if (checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
+                    foundNpcToTarget = npc;
+                    break; // Target the first one found
+                }
+            }
+
+            if (foundNpcToTarget) {
+                targetedNpc = foundNpcToTarget;
+                isMoving = true; // Player will attempt to engage this target
+                // showTargetIndicator is handled above, so not explicitly set here
+
+                if (!inCombat || combatTarget !== targetedNpc) { // Initiate combat if not already in combat with this target
+                    inCombat = true;
+                    combatTarget = targetedNpc;
+                    combatTarget.inCombat = true;
+                    determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
+                    console.log(`Combat initiated by unburrowing with ${combatTarget.name}.`);
+                }
+            } else {
+                targetedNpc = null; // Clear target if no NPC is found
+            }
+
+            // Update player direction based on mouse when unburrowing (ending burrow)
+            const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+            const currentMouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+            playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX);
         }
+
+        // New function to stop Dash early
+        function endDash() {
+            if (!isPerformingMovementAbility || lastActivatedAbilityRef !== 'dash') return;
+
+            isPerformingMovementAbility = false;
+            canMoveFreeLy = true; // Player is immediately able to move
+            showTargetIndicator = false; // Hide the 'X'
+            playerVisualScale = 1; // Reset scale if it was changed
+            npcs.forEach(npc => npc.dashedThrough = false); // Reset dash-through status
+            startCooldown('dash'); // Apply cooldown for early termination
+            lastActivatedAbilityRef = null;
+            console.log("Dash stopped early.");
+        }
+
 
         // New global variables for hunger mechanic
         let lastHungerIncreaseTime = 0;
@@ -1644,13 +1835,13 @@
                     playerX = Math.max(playerSize / 2, Math.min(playerX, worldWidth - playerSize / 2));
                     playerY = Math.max(playerSize / 2, Math.min(playerY, worldHeight - playerSize / 2));
 
-                    if (lastActivatedAbilityRef === 'jump') {
+                    if (lastActivatedAbilityRef === 'pounce') { // Updated from jump
                         playerVisualScale = 1 + Math.sin(progress * Math.PI) * 0.5;
                     } else if (lastActivatedAbilityRef === 'dash') {
                         playerVisualScale = 1;
                         npcs.forEach(npc => {
                             if (!npc.dashedThrough && checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
-                                dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc);
+                                dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc, currentTime); // Pass currentTime
                                 npc.dashedThrough = true;
                                 if (npc.currentHp <= 0) {
                                     playerStats.currentXp += 2;
@@ -1690,10 +1881,35 @@
                     if (progress >= 1) {
                         isPerformingMovementAbility = false;
                         playerVisualScale = 1;
+                        showTargetIndicator = false; // Clear target indicator after ability completion
 
-                        if (lastActivatedAbilityRef === 'jump') {
-                            showJumpLandingIndicator = false;
+                        if (lastActivatedAbilityRef === 'pounce') { // Updated from jump
                             postMovementImmobilityDuration = 250;
+
+                            // NEW: Check for collision with NPCs on pounce landing
+                            let foundNpcToTarget = null;
+                            for (const npc of npcs) {
+                                if (checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
+                                    foundNpcToTarget = npc;
+                                    break; // Target the first one found
+                                }
+                            }
+
+                            if (foundNpcToTarget) {
+                                targetedNpc = foundNpcToTarget;
+                                isMoving = true; // Player will attempt to engage this target
+                                // showTargetIndicator handled above
+                                if (!inCombat || combatTarget !== targetedNpc) { // Initiate combat if not already in combat with this target
+                                    inCombat = true;
+                                    combatTarget = targetedNpc;
+                                    combatTarget.inCombat = true;
+                                    determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
+                                    console.log(`Combat initiated by pounce landing with ${combatTarget.name}.`); // Updated from jump
+                                }
+                            } else {
+                                targetedNpc = null; // Clear target if no NPC is found
+                            }
+
                         } else if (lastActivatedAbilityRef === 'dash') {
                             postMovementImmobilityDuration = 0;
                             npcs.forEach(npc => npc.dashedThrough = false);
@@ -1783,9 +1999,21 @@
                         }
 
                         if (distance < currentCalculatedNpcSpeed) {
-                            npc.x = currentWaypoint.x;
-                            npc.y = currentWaypoint.y;
-                            npc.currentPatrolPointIndex = (npc.currentPatrolPointIndex + 1) % npc.patrolWaypoints.length;
+                            // Reached current waypoint, move to next
+                            if (npc.pathingType === 'line') {
+                                // For line pathing, reverse direction when reaching an endpoint
+                                if (npc.currentPatrolPointIndex === npc.patrolWaypoints.length - 1) {
+                                    npc.patrolDirection = -1; // Move backward
+                                } else if (npc.currentPatrolPointIndex === 0) {
+                                    npc.patrolDirection = 1; // Move forward
+                                }
+                                npc.currentPatrolPointIndex += npc.patrolDirection;
+
+                            } else { // 'circle' or 'polygon'
+                                npc.currentPatrolPointIndex = (npc.currentPatrolPointIndex + 1) % npc.patrolWaypoints.length;
+                            }
+                            npc.patrolTargetX = npc.patrolWaypoints[npc.currentPatrolPointIndex].x;
+                            npc.patrolTargetY = npc.patrolWaypoints[npc.currentPatrolPointIndex].y;
                         } else {
                             const ratio = currentCalculatedNpcSpeed / distance;
                             npc.x += dx * ratio;
@@ -1798,7 +2026,7 @@
                 });
 
                 // NPC automatic combat initiation if player is in range and not already in combat with that NPC
-                if (!inCombat && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'jump')) {
+                if (!inCombat && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce')) { // Updated from jump
                     for (const npc of npcs) {
                         if (checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
                             // NPCs should initiate combat automatically when in range, regardless of player's `targetedNpc` state.
@@ -1816,11 +2044,8 @@
 
                 if (inCombat && combatTarget) {
                     // Check if player moved away from combat target or used a mobility ability
-                    // Also check if targetedNpc is null or not the current combatTarget (player moved away or changed target)
-                    // Combat only ends if player explicitly moves away or changes target, or uses certain abilities.
-                    // If player is attacked by NPC but not targeting it, combat should *continue* for the NPC,
-                    // but player won't retaliate until right-clicked.
-                    const combatShouldContinue = checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'jump');
+                    // Combat only ends if player explicitly moves away or uses certain abilities (burrow, pounce).
+                    const combatShouldContinue = checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce'); // Updated from jump
 
                     if (!combatShouldContinue) {
                         inCombat = false;
@@ -1828,8 +2053,8 @@
                         combatTarget = null;
                         isMoving = false; // Stop any ongoing player movement if combat ends this way
                         showTargetIndicator = false;
-                        targetedNpc = null; // Clear target on combat end
-                        console.log("Combat ended: distance or ability used or target changed.");
+                        // targetedNpc is *not* cleared here, as player might still want to target the NPC without being in combat
+                        console.log("Combat ended: distance or ability used.");
                         return; // Stop processing combat for this frame if it ended
                     }
 
@@ -1839,7 +2064,7 @@
                         if (currentTime - playerLastAttackTime >= playerAttackCooldown) {
                             // Orient player towards target before attacking
                             playerDirectionAngle = Math.atan2(combatTarget.y - playerY, combatTarget.x - playerX);
-                            dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, combatTarget);
+                            dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, combatTarget, currentTime); // Pass currentTime
                             playerLastAttackTime = currentTime;
                             playerAttackCooldown = combatDelay; // Subsequent attacks every 0.5 seconds
                             playerIsAttacking = true;
@@ -1860,7 +2085,7 @@
                                 y: playerY, // Pass player's current y
                                 isPlayer: false, // Indicate defender is player
                                 radius: playerRadius
-                            });
+                            }, currentTime); // Pass currentTime
                             combatTarget.isAttacking = true;
                             combatTarget.attackAnimStartTime = currentTime;
                         }
@@ -2004,7 +2229,7 @@
             // Determine fill color based on type
             let fillColor; // Declare here so it's scoped correctly
             if (type === 'hp') {
-                fillColor = colorGreen; // Always green for HP
+                fillColor = colorNeonGreen; // Always green for HP
             } else if (type === 'hunger') {
                 fillColor = colorRed; // Always red for Hunger
             } else if (type === 'xp') {
@@ -2474,6 +2699,7 @@
                 }
                 ctx.restore();
 
+                // Draw the single red X target indicator
                 if (showTargetIndicator && !isMapModeActive) { // Only show target in normal play, not map mode
                     ctx.globalAlpha = 1;
                     const indicatorSize = 10;
@@ -2489,19 +2715,7 @@
                     ctx.stroke();
                 }
 
-                if (showJumpLandingIndicator && !isMapModeActive) { // Only show landing in normal play, not map mode
-                    const indicatorSize = 10;
-                    ctx.strokeStyle = 'grey';
-                    ctx.lineWidth = Math.max(1, 3 / zoomScale);
-                    ctx.beginPath();
-                    ctx.moveTo(jumpLandingX - indicatorSize / 2, jumpLandingY - indicatorSize / 2);
-                    ctx.lineTo(jumpLandingX + indicatorSize / 2, jumpLandingY + indicatorSize / 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(jumpLandingX + indicatorSize / 2, jumpLandingY - indicatorSize / 2);
-                    ctx.lineTo(jumpLandingX - indicatorSize / 2, jumpLandingY + indicatorSize / 2);
-                    ctx.stroke();
-                }
+                // Removed the separate showPounceLandingIndicator drawing block.
 
                 // Draw NPCs and their hitcircles
                 npcs.forEach(npc => {
@@ -2549,7 +2763,17 @@
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText('🦴', deadNpc.x, deadNpc.y);
+
+                    // Draw loot interaction radius if showHitCircles is true
+                    if (showHitCircles) {
+                        ctx.strokeStyle = 'lime';
+                        ctx.lineWidth = Math.max(1, 1 / zoomScale); // Adjust line width for zoom
+                        ctx.beginPath();
+                        ctx.arc(deadNpc.x, deadNpc.y, LOOT_INTERACTION_RADIUS, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
                 });
+
 
                 ctx.restore(); // Restore context after world transformations
 
@@ -2707,7 +2931,7 @@
 
 
             playerAbilities = {
-                jump: 0,
+                pounce: 0,
                 dash: 0,
                 burrow: 0,
             };
@@ -2724,7 +2948,7 @@
                 }
             });
 
-            cooldowns.jump.lastUsed = 0;
+            cooldowns.pounce.lastUsed = 0; // Updated from jump
             cooldowns.dash.lastUsed = 0;
             cooldowns.burrow.lastUsed = 0;
 
@@ -2758,9 +2982,6 @@
             isBurrowing = false;
             canMoveFreeLy = true;
             playerVisualScale = 1;
-            showJumpLandingIndicator = false;
-            jumpLandingX = 0;
-            jumpLandingY = 0;
             lastActivatedAbilityRef = null;
 
             generateForestElements();
@@ -2805,20 +3026,53 @@
             return clone;
         }
 
-        function updateHotbarSlot(slotIndex, ability) {
-            const currentSlot = hotbarSlots[slotIndex];
-            if (currentSlot.abilityRef === ability.key) {
-                playerAbilities[ability.key]++;
-            } else {
-                if (currentSlot.abilityRef) {
-                    playerAbilities[currentSlot.abilityRef] = 0;
+        // Updated updateHotbarSlot function
+        function updateHotbarSlot(newSlotIndex, newAbility) {
+            const newAbilityKey = newAbility.key;
+
+            // Find the current hotbar slot where newAbility is ALREADY assigned (if any).
+            let oldSlotIndex = -1;
+            for (let i = 0; i < hotbarSlots.length; i++) {
+                if (hotbarSlots[i].abilityRef === newAbilityKey) {
+                    oldSlotIndex = i;
+                    break;
                 }
-                playerAbilities[ability.key] = 1;
             }
-            currentSlot.abilityRef = ability.key;
-            currentSlot.abilityName = ability.name;
-            currentSlot.icon = ability.hotbarIcon;
+
+            // If the new ability is found in an existing slot, and it's not the target slot
+            if (oldSlotIndex !== -1 && oldSlotIndex !== newSlotIndex) {
+                // Swap abilities: move the ability from the newSlotIndex to the oldSlotIndex
+                const abilityInNewSlot = hotbarSlots[newSlotIndex].abilityRef;
+                const nameInNewSlot = hotbarSlots[newSlotIndex].abilityName;
+                const iconInNewSlot = hotbarSlots[newSlotIndex].icon;
+
+                hotbarSlots[oldSlotIndex].abilityRef = abilityInNewSlot;
+                hotbarSlots[oldSlotIndex].abilityName = nameInNewSlot || 'Empty';
+                hotbarSlots[oldSlotIndex].icon = iconInNewSlot || '';
+
+                // If the old slot had a real ability (not empty), ensure its playerAbilities level is 1.
+                // If it was empty ('Empty'), its playerAbilities level for that key remains 0 (or undefined).
+                if (hotbarSlots[oldSlotIndex].abilityRef) {
+                    playerAbilities[hotbarSlots[oldSlotIndex].abilityRef] = 1;
+                }
+            } else {
+                // If the new ability was NOT found in an existing slot,
+                // or it was already in the newSlotIndex (meaning no move/swap needed for it),
+                // then if there's an ability currently in the newSlotIndex, it's about to be replaced.
+                // This means its playerAbility level should be set to 0 (unlearned/unbound).
+                const abilityToReplaceKey = hotbarSlots[newSlotIndex].abilityRef;
+                if (abilityToReplaceKey && abilityToReplaceKey !== newAbilityKey) {
+                    playerAbilities[abilityToReplaceKey] = 0; // Unlearn the replaced ability
+                }
+            }
+
+            // Finally, assign the new ability to the newSlotIndex, always at level 1
+            hotbarSlots[newSlotIndex].abilityRef = newAbilityKey;
+            hotbarSlots[newSlotIndex].abilityName = newAbility.name;
+            hotbarSlots[newSlotIndex].icon = newAbility.hotbarIcon;
+            playerAbilities[newAbilityKey] = 1; // Always set to level 1 from these rewards
         }
+
 
         function presentActiveAbilityChoice(passiveRewardAbility) {
             const activeChoiceSection = document.createElement('div');
@@ -2828,6 +3082,7 @@
             activeChoiceSection.style.flexDirection = 'column';
             activeChoiceSection.style.alignItems = 'center';
             activeChoiceSection.innerHTML = `
+                <h2 class="popup-subtitle">Choose an Active Ability:</h2>
                 <div id="activeAbilityRow" class="ability-row"></div>
             `;
             popupContentArea.appendChild(activeChoiceSection);
@@ -2842,11 +3097,19 @@
                 return;
             }
 
+            // The level will always be 1 for now, as per new rules.
+            const abilityLevel = 1;
+
             // Create the left button (Assign to F)
             const optionFElement = createAbilityOptionElement(templateAbilityOption);
             optionFElement.id = `activeAbilityOption-F`;
-            optionFElement.querySelector('.ability-name').textContent = passiveRewardAbility.name;
-            optionFElement.querySelector('.stat-details').innerHTML = `<p class="stat-line"><span class="stat-name-bold-orange">Assign to:</span> F</p>`;
+            // Updated text for ability name and level, now neon orange
+            optionFElement.querySelector('.ability-name').innerHTML = `<span style='color:${colorOrange};'>${passiveRewardAbility.name} (Lv. ${abilityLevel})</span>`;
+            // Clear passive-description-text as it's not applicable here (element already removed from template)
+            // Updated text for "Assign to:" and the key, with key larger and neon orange
+            optionFElement.querySelector('.stat-details').innerHTML = `
+                <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>F</span></p>
+            `;
             optionFElement.onclick = () => {
                 if (activeChoiceMade) return;
                 console.log(`Chose active ability: ${passiveRewardAbility.name} for slot F`);
@@ -2872,8 +3135,13 @@
             // Create the right button (Assign to R)
             const optionRElement = createAbilityOptionElement(templateAbilityOption);
             optionRElement.id = `activeAbilityOption-R`;
-            optionRElement.querySelector('.ability-name').textContent = passiveRewardAbility.name;
-            optionRElement.querySelector('.stat-details').innerHTML = `<p class="stat-line"><span class="stat-name-bold-orange">Assign to:</span> R</p>`;
+            // Updated text for ability name and level, now neon orange
+            optionRElement.querySelector('.ability-name').innerHTML = `<span style='color:${colorOrange};'>${passiveRewardAbility.name} (Lv. ${abilityLevel})</span>`;
+            // Clear passive-description-text as it's not applicable here (element already removed from template)
+            // Updated text for "Assign to:" and the key, with key larger and neon orange
+            optionRElement.querySelector('.stat-details').innerHTML = `
+                <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>R</span></p>
+            `;
             optionRElement.onclick = () => {
                 if (activeChoiceMade) return;
                 console.log(`Chose active ability: ${passiveRewardAbility.name} for slot R`);
@@ -2962,11 +3230,13 @@
             const passiveLeftOption = createAbilityOptionElement(templateAbilityOption);
             passiveLeftOption.id = 'passiveOptionLeft';
             const passiveLeftName = passiveLeftOption.querySelector('.ability-name');
+            // Removed passiveLeftDescription from here
             const passiveLeftStats = passiveLeftOption.querySelector('.stat-details');
             const passiveLeftDnaBg = passiveLeftOption.querySelector('.dna-background');
             if (passiveLeftDnaBg) passiveLeftDnaBg.classList.remove('flipped-dna');
 
             passiveLeftName.textContent = abilityOption1Data.name;
+            // Removed passiveLeftDescription.innerHTML assignment
             passiveLeftStats.innerHTML = '';
             abilityOption1Data.getPreview(boost1_1, boost1_2, currentStats).forEach(line => {
                 const p = document.createElement('p');
@@ -2981,10 +3251,9 @@
                 passiveAbilityChoiceData.ability.applyBoost(passiveAbilityChoiceData.boosts.boost1, passiveAbilityChoiceData.boosts.boost2);
                 passiveChoiceMade = true;
 
+                // Dead NPC is removed *after* choice made
                 const index = deadNpcs.indexOf(clickedDeadNpc);
                 if (index > -1) { deadNpcs.splice(index, 1); }
-
-                disableButtonRow(passiveRow, passiveLeftOption.id);
 
                 if (playerStats.playerLevel >= 2) {
                     presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
@@ -2992,6 +3261,7 @@
                     activeChoiceMade = true; // No active ability choice offered at this level
                     checkAndClosePopup();
                 }
+                disableButtonRow(passiveRow, passiveLeftOption.id); // Disable other options in this row after selection
             };
             passiveRow.appendChild(passiveLeftOption);
 
@@ -3003,22 +3273,26 @@
                 passiveChoiceMade = true;
                 passiveAbilityChoiceData = null;
 
+                // Dead NPC is removed *after* choice made
                 const index = deadNpcs.indexOf(clickedDeadNpc);
                 if (index > -1) { deadNpcs.splice(index, 1); }
 
                 activeChoiceMade = true; // If passive declined, no active is offered from this interaction
                 checkAndClosePopup();
+                disableButtonRow(passiveRow, declinePassiveButton.id); // Disable other options in this row after selection
             };
             passiveRow.appendChild(declinePassiveButton);
 
             const passiveRightOption = createAbilityOptionElement(templateAbilityOption);
             passiveRightOption.id = 'passiveOptionRight';
             const passiveRightName = passiveRightOption.querySelector('.ability-name');
+            // Removed passiveRightDescription from here
             const passiveRightStats = passiveRightOption.querySelector('.stat-details');
             const passiveRightDnaBg = passiveRightOption.querySelector('.dna-background');
             if (passiveRightDnaBg) passiveRightDnaBg.classList.add('flipped-dna');
 
             passiveRightName.textContent = abilityOption2Data.name;
+            // Removed passiveRightDescription.innerHTML assignment
             passiveRightStats.innerHTML = '';
             abilityOption2Data.getPreview(boost2_1, boost2_2, currentStats).forEach(line => {
                 const p = document.createElement('p');
@@ -3033,10 +3307,9 @@
                 passiveAbilityChoiceData.ability.applyBoost(passiveAbilityChoiceData.boosts.boost1, passiveAbilityChoiceData.boosts.boost2);
                 passiveChoiceMade = true;
 
+                // Dead NPC is removed *after* choice made
                 const index = deadNpcs.indexOf(clickedDeadNpc);
                 if (index > -1) { deadNpcs.splice(index, 1); }
-
-                disableButtonRow(passiveRow, passiveRightOption.id);
 
                 if (playerStats.playerLevel >= 2) {
                     presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
@@ -3044,6 +3317,7 @@
                     activeChoiceMade = true; // No active ability choice offered at this level
                     checkAndClosePopup();
                 }
+                disableButtonRow(passiveRow, passiveRightOption.id); // Disable other options in this row after selection
             };
             passiveRow.appendChild(passiveRightOption);
         }
@@ -3144,7 +3418,7 @@
                     inputRow.appendChild(decrementButton);
 
                     // Create the increment button
-                    const incrementButton = document.createElement('button');
+                    const incrementButton = document.createElement('button'); // Changed to const
                     incrementButton.className = 'admin-panel-button';
                     incrementButton.textContent = '+';
                     incrementButton.onclick = () => {
@@ -3186,34 +3460,28 @@
                     numValue = Math.max(0, numValue); // Abilities cannot go below 0
                     const oldAbilityLevel = playerAbilities[key];
                     playerAbilities[key] = numValue; // Directly set ability level
-                    // Handle hotbar assignment/removal
-                    if (oldAbilityLevel === 0 && numValue > 0) {
+                    // Hotbar logic is now handled more robustly by `updateHotbarSlot` in loot screen.
+                    // For admin panel, we simply assign/unassign the ability.
+                    if (oldAbilityLevel === 0 && numValue > 0) { // Ability was unlocked
                         const abilityDetails = abilityDetailsMap[key];
                         if (abilityDetails) {
                             let assigned = false;
-                            const hotbarOrder = ['F', 'R', 'E', 'Q', 'C', 'X', 'Z'];
-                            for (const keybind of hotbarOrder) {
-                                const slotIndex = hotbarSlots.findIndex(slot => slot.keybind === keybind);
-                                if (slotIndex !== -1 && hotbarSlots[slotIndex].abilityRef === null) {
-                                    let isAlreadyAssignedToActiveSlot = false;
-                                    for (let i = 0; i < hotbarSlots.length; i++) {
-                                        if (hotbarSlots[i].abilityRef === key && i !== slotIndex) {
-                                            isAlreadyAssignedToActiveSlot = true;
-                                            break;
-                                        }
-                                    }
-                                    if (!isAlreadyAssignedToActiveSlot) {
-                                        updateHotbarSlot(slotIndex, { key: key, name: abilityDetails.name, hotbarIcon: abilityDetails.hotbarIcon });
-                                        assigned = true;
-                                        break;
-                                    }
+                            // Try to assign to the first empty slot
+                            for (let i = 0; i < hotbarSlots.length; i++) {
+                                if (hotbarSlots[i].abilityRef === null) {
+                                    hotbarSlots[i].abilityRef = key;
+                                    hotbarSlots[i].abilityName = abilityDetails.name;
+                                    hotbarSlots[i].icon = abilityDetails.hotbarIcon;
+                                    assigned = true;
+                                    break;
                                 }
                             }
                             if (!assigned) {
                                 console.warn(`Ability '${key}' unlocked but no empty hotbar slot available.`);
                             }
                         }
-                    } else if (numValue === 0 && oldAbilityLevel > 0) {
+                    } else if (numValue === 0 && oldAbilityLevel > 0) { // Ability was unlearned
+                        // Find and clear from hotbar
                         for (let i = 0; i < hotbarSlots.length; i++) {
                             if (hotbarSlots[i].abilityRef === key) {
                                 hotbarSlots[i].abilityRef = null;
@@ -3289,7 +3557,7 @@
                     const rect = input.getBoundingClientRect();
                     // Check for input fields specifically
                     if (globalMouseX >= rect.left && globalMouseX <= rect.right &&
-                        globalMouseY >= rect.top && globalMouseY <= rect.bottom) {
+                        globalMouseY >= rect.top && globalMouseY >= rect.bottom) {
                         isHoveringButton = true;
                     }
                 });
@@ -3372,19 +3640,21 @@
             if (abilityKey === 'burrow' && isBurrowing) {
                 endBurrow();
                 startCooldown('burrow');
-                // Update player direction based on mouse when unburrowing (ending burrow)
-                const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
-                const currentMouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
-                playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX);
                 return;
+            }
+
+            // NEW: Stop Dash if it's active and Dash hotkey is pressed again
+            if (abilityKey === 'dash' && isPerformingMovementAbility && lastActivatedAbilityRef === 'dash') {
+                endDash(); // Stop the dash immediately
+                return; // Consume the key press
             }
 
             if (isPerformingMovementAbility) {
                 console.log("Player is currently performing another movement ability.");
                 return;
             }
-            if (isBurrowing && (abilityKey === 'jump' || abilityKey === 'dash')) {
-                 console.log("Cannot perform Jump/Dash while burrowed.");
+            if (isBurrowing && (abilityKey === 'pounce' || abilityKey === 'dash')) { // Updated from jump
+                 console.log("Cannot perform Pounce/Dash while burrowed.");
                  return;
             }
 
@@ -3397,8 +3667,9 @@
                 isBurrowing = true;
                 burrowStartTime = performance.now();
                 canMoveFreeLy = true;
+                showTargetIndicator = false; // Hide target indicator during burrow
                 startCooldown('burrow');
-            } else if (abilityKey === 'jump' || abilityKey === 'dash') {
+            } else if (abilityKey === 'pounce' || abilityKey === 'dash') { // Updated from jump
                 if (!canMoveFreeLy) {
                     console.log("Player is immobilized after a previous movement ability.");
                     return;
@@ -3407,51 +3678,53 @@
                 startCooldown(abilityKey);
                 lastActivatedAbilityRef = abilityKey;
 
-                const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
-                const currentMouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+                let actualTravelDistance = 0;
+                let dx = 0;
+                let dy = 0;
 
-                const dx = currentMouseWorldX - playerX;
-                const dy = currentMouseWorldY - playerY;
+                if (abilityKey === 'pounce') {
+                    const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+                    const currentMouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+                    const distanceToMouse = Math.sqrt(Math.pow(currentMouseWorldX - playerX, 2) + Math.pow(currentMouseWorldY - playerY, 2));
 
-                const distanceToMouse = Math.sqrt(dx * dx + dy * dy);
-
-                if (distanceToMouse === 0) {
-                    console.log("Cannot perform ability: mouse is on the player.");
-                    return;
-                }
-
-                playerDirectionAngle = Math.atan2(dy, dx); // Update direction on ability use
-
-                let currentAbilityMaxDistance = 0;
-                if (abilityKey === 'jump') {
-                    currentAbilityMaxDistance = JUMP_BASE_DISTANCE;
-                    showJumpLandingIndicator = true;
+                    if (distanceToMouse === 0) {
+                        console.log("Cannot perform Pounce: mouse is on the player.");
+                        return;
+                    }
+                    playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX); // Update direction on Pounce
+                    actualTravelDistance = Math.min(POUNCE_BASE_DISTANCE, distanceToMouse);
+                    dx = (currentMouseWorldX - playerX) / distanceToMouse;
+                    dy = (currentMouseWorldY - playerY) / distanceToMouse;
                 } else if (abilityKey === 'dash') {
-                    currentAbilityMaxDistance = DASH_BASE_DISTANCE;
-                    showJumpLandingIndicator = false;
+                    // Dash moves in player's current facing direction
+                    actualTravelDistance = DASH_BASE_DISTANCE;
+                    dx = Math.cos(playerDirectionAngle);
+                    dy = Math.sin(playerDirectionAngle);
                 }
-
-                const actualTravelDistance = Math.min(currentAbilityMaxDistance, distanceToMouse);
 
                 movementAbilityStartX = playerX;
                 movementAbilityStartY = playerY;
-                movementAbilityEndX = playerX + (dx / distanceToMouse) * actualTravelDistance;
-                movementAbilityEndY = playerY + (dy / distanceToMouse) * actualTravelDistance;
+                movementAbilityEndX = playerX + dx * actualTravelDistance;
+                movementAbilityEndY = playerY + dy * actualTravelDistance;
 
                 movementAbilityEndX = Math.max(playerSize / 2, Math.min(movementAbilityEndX, worldWidth - playerSize / 2));
                 movementAbilityEndY = Math.max(playerSize / 2, Math.min(movementAbilityEndY, worldHeight - playerSize / 2));
 
+                // Set the target indicator to the ability's end location
+                targetX = movementAbilityEndX;
+                targetY = movementAbilityEndY;
+                showTargetIndicator = true; // Show the 'X' at the end destination
+
                 const playerActualSpeedPerFrame = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
 
-                if (abilityKey === 'jump') {
-                    jumpLandingX = movementAbilityEndX;
-                    jumpLandingY = movementAbilityEndY;
-                    currentMovementAbilityDuration = JUMP_FIXED_DURATION;
+                if (abilityKey === 'pounce') {
+                    currentMovementAbilityDuration = POUNCE_FIXED_DURATION;
                 } else if (abilityKey === 'dash') {
                     const dashSpeedFactor = 2;
                     const effectiveSpeed = playerActualSpeedPerFrame * dashSpeedFactor;
-                    const framesToComplete = actualTravelDistance / effectiveSpeed;
-                    currentMovementAbilityDuration = framesToComplete * (1000 / 60);
+                    // Distance for duration calculation should be the actual distance traveled by dash
+                    const distanceTravelledByDash = Math.sqrt(Math.pow(movementAbilityEndX - movementAbilityStartX, 2) + Math.pow(movementAbilityEndY - movementAbilityStartY, 2));
+                    currentMovementAbilityDuration = (distanceTravelledByDash / effectiveSpeed) * (1000 / 60);
                 }
 
                 if (currentMovementAbilityDuration === 0) currentMovementAbilityDuration = 1;
@@ -3459,8 +3732,7 @@
                 isPerformingMovementAbility = true;
                 movementAbilityStartTime = performance.now();
                 canMoveFreeLy = false;
-                isMoving = false;
-                showTargetIndicator = true;
+                isMoving = false; // Stop normal movement during ability
             }
         });
 
@@ -3607,13 +3879,17 @@
             // Check for dead NPC clicks first (for ability selection)
             for (let i = 0; i < deadNpcs.length; i++) {
                 const deadNpc = deadNpcs[i];
-                const boneCanvasX = (deadNpc.x - cameraX) * zoomScale;
-                const boneCanvasY = (deadNpc.y - cameraY) * zoomScale;
+                const boneWorldX = deadNpc.x;
+                const boneWorldY = deadNpc.y;
 
-                const deadNpcHitboxSize = 40;
-                const dist = Math.sqrt(Math.pow(mouseX - boneCanvasX, 2) + Math.pow(mouseY - boneCanvasY, 2));
+                const clickWorldX = mouseX / zoomScale + cameraX;
+                const clickWorldY = mouseY / zoomScale + cameraY;
 
-                if (dist < deadNpcHitboxSize / 2) {
+                const distPlayerToBone = Math.sqrt(Math.pow(playerX - boneWorldX, 2) + Math.pow(playerY - boneWorldY, 2));
+                const distClickToBone = Math.sqrt(Math.pow(clickWorldX - boneWorldX, 2) + Math.pow(clickWorldY - boneWorldY, 2));
+
+                // Only allow interaction if click is within bone's visual area AND player is within interaction range
+                if (distClickToBone < 20 && distPlayerToBone <= (playerRadius + LOOT_INTERACTION_RADIUS)) {
                     clickedDeadNpc = deadNpc;
                     showAbilitySelectionPopup(); // This shows the loot menu
                     clickedOnNpc = true;
@@ -3772,6 +4048,7 @@
                         <span class="origin-emoji">${origin.emoji}</span>
                     </div>
                     <div class="origin-bonus">${origin.getBonusText()}</div>
+                    <div class="origin-starting-ability">${origin.getStartingAbilityText()}</div>
                 `;
                 div.onclick = () => {
                     // Remove selected class from all
@@ -3818,16 +4095,31 @@
 
 
             playerAbilities = {
-                jump: 0,
+                pounce: 0,
                 dash: 0,
                 burrow: 0,
             };
 
+            // Assign initial ability based on chosen origin
+            if (playerGeneticOrigin.startingAbilityKey) {
+                const initialAbility = abilityDetailsMap[playerGeneticOrigin.startingAbilityKey];
+                if (initialAbility) {
+                    playerAbilities[initialAbility.key] = 1; // Set level to 1
+                    updateHotbarSlot(0, initialAbility); // Assign to first hotbar slot (F)
+                    console.log(`Assigned initial ability: ${initialAbility.name} to hotbar F.`);
+                }
+            }
+
+
             hotbarSlots.forEach(slot => {
                 if (slot.keybind === 'F' || slot.keybind === 'R') {
-                    slot.abilityRef = null;
-                    slot.abilityName = 'Empty';
-                    slot.icon = '';
+                    // Skip F for now as it's handled by initial ability.
+                    // If R should also be initially empty, this is fine.
+                    // If F wasn't assigned an ability, it remains 'Empty'
+                    if (slot.abilityRef === null) {
+                        slot.abilityName = 'Empty';
+                        slot.icon = '';
+                    }
                 } else {
                     slot.abilityRef = null;
                     slot.abilityName = '';
