@@ -511,7 +511,7 @@
                 <div class="resupply-item-box">
                     <span id="decoys-label" class="item-name">ADC Mk 5 Decoys</span>
                     <div class="button-container">
-                        <button id="restock-decoys-btn" class="resupply-button">Re-stock: 0</button>
+                        <button id="restock-decoys-btn" class="resupply-button">Re-stock</button>
                         <div class="progress-bar-container"><div id="decoys-progress-bar" class="progress-bar"></div></div>
                     </div>
                 </div>
@@ -519,7 +519,7 @@
                 <div class="resupply-item-box">
                     <span id="mk48-label" class="item-name">Mk 48 Torpedoes</span>
                     <div class="button-container">
-                        <button id="restock-mk48-btn" class="resupply-button">Re-stock: 0</button>
+                        <button id="restock-mk48-btn" class="resupply-button">Re-stock</button>
                         <div class="progress-bar-container"><div id="mk48-progress-bar" class="progress-bar"></div></div>
                     </div>
                 </div>
@@ -527,7 +527,7 @@
                 <div class="resupply-item-box">
                     <span id="tomahawk-label" class="item-name">Tomahawk Missiles</span>
                     <div class="button-container">
-                        <button id="restock-tomahawk-btn" class="resupply-button">Re-stock: 0</button>
+                        <button id="restock-tomahawk-btn" class="resupply-button">Re-stock</button>
                         <div class="progress-bar-container"><div id="tomahawk-progress-bar" class="progress-bar"></div></div>
                     </div>
                 </div>
@@ -958,29 +958,30 @@
             function updateResupplyMenu() {
                 const menu = document.getElementById('resupplyMenu');
                 if (!menu.classList.contains('show')) return;
-
-                // Update Decoys
+            
+                // --- Update Ammo and Decoys ---
                 const decoysNeeded = submarine.maxDecoys - submarine.decoysRemaining;
-                const decoysBtn = document.getElementById('restock-decoys-btn');
                 document.getElementById('decoys-label').textContent = `ADC Mk 5: ${submarine.decoysRemaining}/${submarine.maxDecoys}`;
-                decoysBtn.textContent = resupplyState.decoys.inProgress ? "Cancel" : `Re-stock: ${decoysNeeded}`;
+                const decoysBtn = document.getElementById('restock-decoys-btn');
+                decoysBtn.textContent = resupplyState.decoys.inProgress ? "Cancel" : "Re-stock";
                 decoysBtn.disabled = !resupplyState.decoys.inProgress && decoysNeeded === 0;
-
-                // Update Torpedoes
+            
                 const mk48Needed = submarine.maxAmmoMk48 - submarine.ammoMk48;
-                const mk48Btn = document.getElementById('restock-mk48-btn');
+                console.log(`--- Updating Resupply Menu ---`);
+                console.log(`Decoys Needed: ${decoysNeeded}, In Progress: ${resupplyState.decoys.inProgress}`);
+                console.log(`Mk 48 Needed: ${mk48Needed}, In Progress: ${resupplyState.mk48.inProgress}`);
                 document.getElementById('mk48-label').textContent = `Mk 48: ${submarine.ammoMk48}/${submarine.maxAmmoMk48}`;
-                mk48Btn.textContent = resupplyState.mk48.inProgress ? "Cancel" : `Re-stock: ${mk48Needed}`;
+                const mk48Btn = document.getElementById('restock-mk48-btn');
+                mk48Btn.textContent = resupplyState.mk48.inProgress ? "Cancel" : "Re-stock";
                 mk48Btn.disabled = !resupplyState.mk48.inProgress && mk48Needed === 0;
-
-                // Update Missiles
+            
                 const tomahawkNeeded = submarine.maxAmmoTomahawk - submarine.ammoTomahawk;
-                const tomahawkBtn = document.getElementById('restock-tomahawk-btn');
                 document.getElementById('tomahawk-label').textContent = `Tomahawk: ${submarine.ammoTomahawk}/${submarine.maxAmmoTomahawk}`;
-                tomahawkBtn.textContent = resupplyState.tomahawk.inProgress ? "Cancel" : `Re-stock: ${tomahawkNeeded}`;
+                const tomahawkBtn = document.getElementById('restock-tomahawk-btn');
+                tomahawkBtn.textContent = resupplyState.tomahawk.inProgress ? "Cancel" : "Re-stock";
                 tomahawkBtn.disabled = !resupplyState.tomahawk.inProgress && tomahawkNeeded === 0;
-
-                // Update Repairs Button
+            
+                // --- Update Repairs Button ---
                 const repairBtn = document.getElementById('make-repairs-btn');
                 const timeSinceRepair = performance.now() - lastRepairTime;
                 if (repairState.inProgress) {
@@ -992,7 +993,7 @@
                     repairBtn.disabled = true;
                 } else {
                     repairBtn.textContent = "Make Repairs";
-                    repairBtn.disabled = submarine.currentHealth === submarine.maxHealth;
+                    repairBtn.disabled = submarine.currentHealth >= submarine.maxHealth;
                 }
             }
 
@@ -1730,6 +1731,7 @@
                             orbitAngle: 0,         // Add for fallback behavior
                             orbitDirection: Math.random() < 0.5 ? 1 : -1, // Add for fallback behavior
                             stateTimer: 0,         // A timer for states like HUNTING
+                            avoidanceTurnDirection: 0,
                             isRevealedBySonar: false,
                             revealedSonarEndTime: 0,
                             isDetected: false,
@@ -2103,78 +2105,78 @@
              * @returns {boolean} True if the ship is actively revealed, false otherwise.
              */
             function isShipActivelyRevealed(ship, submarine, islands, patrolShips) {
-            // NEW: Condition -1: Permanently revealed by Spy Network
-            if (ship.isSpyNetworkRevealed) {
-                // While permanently revealed, always update its last known coordinates
-                ship.lastKnownWorldX = ship.worldX;
-                ship.lastKnownWorldY = ship.worldY;
-                return true;
-            }
-
-            const currentTime = performance.now();
-            const isAtSurface = submarine.depth <= FADE_START_DEPTH;
-        
-            // Condition 0: Revealed by active satellite scan
-            for (const area of revealedAreas) {
-                if (area.type === 'satellite-scan-active' && currentTime < area.endTime) {
-                    const distSq = (ship.worldX - area.x)**2 + (ship.worldY - area.y)**2;
-                    if (distSq < area.radius**2) {
-                        ship.lastKnownWorldX = ship.worldX;
-                        ship.lastKnownWorldY = ship.worldY;
-                        return true;
-                    }
+                // NEW: Condition -1: Permanently revealed by Spy Network
+                if (ship.isSpyNetworkRevealed) {
+                    // While permanently revealed, always update its last known coordinates
+                    ship.lastKnownWorldX = ship.worldX;
+                    ship.lastKnownWorldY = ship.worldY;
+                    return true;
                 }
-            }
-        
-            // Condition 1: Revealed by Submarine's Sonar Ping (temporary)
-            if (ship.isRevealedBySonar && currentTime < ship.revealedSonarEndTime) {
-                return true;
-            }
-        
-            // Condition 2: Revealed by Submarine's Periscope
-            if (submarine.periscopeDeployed && !submarine.isPeriscopeAnimating &&
-                (submarine.depth >= MIN_PERISCOPE_DEPTH && submarine.depth <= MAX_PERISCOPE_DEPTH) &&
-                (Math.abs(submarine.speed) < MAX_PERISCOPE_SPEED)) {
-        
-                const subHeadingRad = degreesToRadians(submarine.heading);
-                const periscopeWorldPointX = submarine.worldX - COCKPIT_OFFSET_Y * Math.sin(subHeadingRad);
-                const periscopeWorldPointY = submarine.worldY + COCKPIT_OFFSET_Y * Math.cos(subHeadingRad);
-                const dxWorld = submarine.worldMouseX - periscopeWorldPointX;
-                const dyWorld = submarine.worldMouseY - periscopeWorldPointY;
-                const periscopeToMouseWorldAngle = Math.atan2(dyWorld, dxWorld);
-                const fovAngleRad = degreesToRadians(PERISCOPE_FOV_ANGLE_DEG);
-                const fovStartAngle = periscopeToMouseWorldAngle - fovAngleRad;
-                const fovEndAngle = periscopeToMouseWorldAngle + fovAngleRad;
-        
-                const distToShipCenter = Math.sqrt((ship.worldX - periscopeWorldPointX)**2 + (ship.worldY - periscopeWorldPointY)**2);
-        
-                if (distToShipCenter <= PERISCOPE_SURFACE_VIEW_RANGE) {
-                    const angleToShip = Math.atan2(ship.worldY - periscopeWorldPointY, ship.worldX - periscopeWorldPointX);
-                    if (isAngleBetween(angleToShip, fovStartAngle, fovEndAngle)) {
-                        if (!isLineOfSightBlocked(periscopeWorldPointX, periscopeWorldPointY, ship.worldX, ship.worldY, ship, islands, patrolShips, true)) {
+    
+                const currentTime = performance.now();
+                const isAtSurface = submarine.depth <= FADE_START_DEPTH;
+            
+                // Condition 0: Revealed by active satellite scan
+                for (const area of revealedAreas) {
+                    if (area.type === 'satellite-scan-active' && currentTime < area.endTime) {
+                        const distSq = (ship.worldX - area.x)**2 + (ship.worldY - area.y)**2;
+                        if (distSq < area.radius**2) {
+                            ship.lastKnownWorldX = ship.worldX;
+                            ship.lastKnownWorldY = ship.worldY;
                             return true;
                         }
                     }
                 }
-            }
-        
-            // Condition 3: Revealed by direct visual line of sight at surface
-            if (isAtSurface && !submarine.isMapModeActive) {
-                const distToShip = Math.sqrt((ship.worldX - submarine.worldX)**2 + (ship.worldY - submarine.worldY)**2);
-                if (distToShip <= SURFACE_DETECTION_RANGE && isShipInCurrentView(ship)) {
-                    if (!isLineOfSightBlocked(submarine.worldX, submarine.worldY, ship.worldX, ship.worldY, ship, islands, patrolShips, true)) {
-                        return true;
+            
+                // Condition 1: Revealed by Submarine's Sonar Ping (temporary)
+                if (ship.isRevealedBySonar && currentTime < ship.revealedSonarEndTime) {
+                    return true;
+                }
+            
+                // Condition 2: Revealed by Submarine's Periscope
+                if (submarine.periscopeDeployed && !submarine.isPeriscopeAnimating &&
+                    (submarine.depth >= MIN_PERISCOPE_DEPTH && submarine.depth <= MAX_PERISCOPE_DEPTH) &&
+                    (Math.abs(submarine.speed) < MAX_PERISCOPE_SPEED)) {
+            
+                    const subHeadingRad = degreesToRadians(submarine.heading);
+                    const periscopeWorldPointX = submarine.worldX - COCKPIT_OFFSET_Y * Math.sin(subHeadingRad);
+                    const periscopeWorldPointY = submarine.worldY + COCKPIT_OFFSET_Y * Math.cos(subHeadingRad);
+                    const dxWorld = submarine.worldMouseX - periscopeWorldPointX;
+                    const dyWorld = submarine.worldMouseY - periscopeWorldPointY;
+                    const periscopeToMouseWorldAngle = Math.atan2(dyWorld, dxWorld);
+                    const fovAngleRad = degreesToRadians(PERISCOPE_FOV_ANGLE_DEG);
+                    const fovStartAngle = periscopeToMouseWorldAngle - fovAngleRad;
+                    const fovEndAngle = periscopeToMouseWorldAngle + fovAngleRad;
+            
+                    const distToShipCenter = Math.sqrt((ship.worldX - periscopeWorldPointX)**2 + (ship.worldY - periscopeWorldPointY)**2);
+            
+                    if (distToShipCenter <= PERISCOPE_SURFACE_VIEW_RANGE) {
+                        const angleToShip = Math.atan2(ship.worldY - periscopeWorldPointY, ship.worldX - periscopeWorldPointX);
+                        if (isAngleBetween(angleToShip, fovStartAngle, fovEndAngle)) {
+                            if (!isLineOfSightBlocked(periscopeWorldPointX, periscopeWorldPointY, ship.worldX, ship.worldY, ship, islands, patrolShips, true)) {
+                                return true;
+                            }
+                        }
                     }
                 }
+            
+                // Condition 3: Revealed by direct visual line of sight at surface
+                if (isAtSurface && !submarine.isMapModeActive) {
+                    const distToShip = Math.sqrt((ship.worldX - submarine.worldX)**2 + (ship.worldY - submarine.worldY)**2);
+                    if (distToShip <= SURFACE_DETECTION_RANGE && isShipInCurrentView(ship)) {
+                        if (!isLineOfSightBlocked(submarine.worldX, submarine.worldY, ship.worldX, ship.worldY, ship, islands, patrolShips, true)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
             }
-            return false;
-        }
             /**
              * Determines if an enemy submarine is currently actively revealed.
              * @param {object} enemySub - The enemy submarine object to check.
              * @returns {boolean} True if the sub is actively revealed, false otherwise.
              */
-                         function isEnemySubActivelyRevealed(enemySub) {
+            function isEnemySubActivelyRevealed(enemySub) {
                 const currentTime = performance.now();
             
                 // A sub is revealed if it was recently hit by a sonar ping.
@@ -2316,20 +2318,66 @@
              * @param {number} deltaTimeInSeconds - The time elapsed since the last frame.
              */
 
-            // Enemy Sub AI State
             function updateEnemySubmarineAI(enemySub, deltaTimeInSeconds) {
-                switch (enemySub.aiState) {
-                    case 'PATROLLING': {
-                        // Check if the current target is invalid (e.g., destroyed)
-                        if (!enemySub.patrolTargetIsland || !enemySub.patrolTargetIsland.hasHeadquarters || enemySub.patrolTargetIsland.hqHealth <= 0) {
-                            findNewPatrolTarget(enemySub); // Try to find a new one
+                const WHISKER_LENGTH = 150; // How far the sub "looks" ahead
+                const sideWhiskerAngle = 45; // Angle of the side whiskers
             
-                            // If no valid HQ targets are left, switch to fallback orbit mode
+                // --- Whisker Collision Detection ---
+                let isCollisionImminent = false;
+                const subHeadingRad = degreesToRadians(enemySub.heading - 90);
+            
+                // Define whiskers
+                const whiskers = {
+                    front: { angle: 0, hit: false },
+                    left: { angle: -sideWhiskerAngle, hit: false },
+                    right: { angle: sideWhiskerAngle, hit: false }
+                };
+            
+                for (const key in whiskers) {
+                    const whisker = whiskers[key];
+                    const angleRad = degreesToRadians(whisker.angle) + subHeadingRad;
+                    const whiskerEndX = enemySub.worldX + WHISKER_LENGTH * Math.cos(angleRad);
+                    const whiskerEndY = enemySub.worldY + WHISKER_LENGTH * Math.sin(angleRad);
+            
+                    for (const island of islands) {
+                        if (lineSegmentIntersectsPolygon({ x: enemySub.worldX, y: enemySub.worldY }, { x: whiskerEndX, y: whiskerEndY }, island.points) !== Infinity) {
+                            whisker.hit = true;
+                            isCollisionImminent = true;
+                            break;
+                        }
+                    }
+                }
+            
+                // --- State Machine Logic ---
+                // If whiskers detect an obstacle and we aren't already avoiding, switch to AVOIDING state
+                if (isCollisionImminent && enemySub.aiState !== 'AVOIDING') {
+                    enemySub.aiState = 'AVOIDING';
+                    // Decide which way to turn. If the front is blocked, pick a random direction. Otherwise, turn away from the side whisker that got hit.
+                    if (whiskers.front.hit) {
+                         enemySub.avoidanceTurnDirection = (Math.random() < 0.5) ? -1 : 1;
+                    } else {
+                         enemySub.avoidanceTurnDirection = whiskers.left.hit ? 1 : -1; // Turn right if left whisker hit, and vice-versa
+                    }
+                } 
+                // If no collision is detected and we were avoiding, switch back to patrolling
+                else if (!isCollisionImminent && enemySub.aiState === 'AVOIDING') {
+                    enemySub.aiState = 'PATROLLING';
+                }
+            
+            
+                switch (enemySub.aiState) {
+                    case 'AVOIDING': {
+                        // Turn sharply in the predetermined avoidance direction
+                        enemySub.heading = normalizeDegreeAngle(enemySub.heading + (ENEMY_SUB_TURN_RATE * 2 * enemySub.avoidanceTurnDirection * deltaTimeInSeconds));
+                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.20; // Slow down while turning
+                        break;
+                    }
+            
+                    case 'PATROLLING': {
+                        if (!enemySub.patrolTargetIsland || !enemySub.patrolTargetIsland.hasHeadquarters || enemySub.patrolTargetIsland.hqHealth <= 0) {
+                            findNewPatrolTarget(enemySub);
                             if (!enemySub.patrolTargetIsland) {
-                                console.log("Enemy sub has no HQs to target, switching to fallback orbit mode.");
                                 enemySub.aiState = 'ORBITING_ISLAND';
-                                findClosestIsland(enemySub); // Find the first island to orbit
-                                return; // Exit to process the new state on the next frame
                             }
                         }
             
@@ -2350,7 +2398,7 @@
                         if (!enemySub.patrolTargetIsland) {
                             findClosestIsland(enemySub);
                             if (!enemySub.patrolTargetIsland) {
-                                enemySub.speed = 0; // No islands left, stop moving
+                                enemySub.speed = 0; 
                                 return; 
                             }
                         }
@@ -2362,7 +2410,6 @@
                         const nextX = islandCentroid.x + enemySub.orbitRadius * Math.cos(enemySub.orbitAngle);
                         const nextY = islandCentroid.y + enemySub.orbitRadius * Math.sin(enemySub.orbitAngle);
             
-                        // Simple collision check for the fallback orbit
                         let willCollide = false;
                         for(const island of islands) {
                             if (island !== enemySub.patrolTargetIsland && circlePolygonCollision({x: nextX, y: nextY, radius: SUBMARINE_WIDTH}, island.points)) {
@@ -2372,7 +2419,7 @@
                         }
             
                         if (willCollide) {
-                            enemySub.orbitDirection *= -1; // Reverse direction
+                            enemySub.orbitDirection *= -1;
                         } else {
                             enemySub.worldX = nextX;
                             enemySub.worldY = nextY;
@@ -2380,14 +2427,14 @@
             
                         const velocityAngleRad = enemySub.orbitAngle + (enemySub.orbitDirection * (Math.PI / 2));
                         enemySub.heading = normalizeDegreeAngle(radiansToDegrees(velocityAngleRad) + 90);
-                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.2; // Slower orbit speed
+                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.2;
                         break;
                     }
                 }
             
                 // Apply movement based on the speed set by the AI state
                 const moveDistance = enemySub.speed * deltaTimeInSeconds;
-                if (moveDistance > 0) {
+                if (moveDistance > 0 && enemySub.aiState !== 'ORBITING_ISLAND') { // Orbiting has its own movement logic
                     const moveRadians = degreesToRadians(enemySub.heading - 90);
                     enemySub.worldX += moveDistance * Math.cos(moveRadians);
                     enemySub.worldY += moveDistance * Math.sin(moveRadians);
@@ -2554,13 +2601,10 @@
                         return; // Stop update loop
                     } else {
                         // Low-speed collision (scrape along / halt)
-                        // If trying to move FORWARD into collision, halt
-                        // If reversing, allow reverse.
-                        if (distanceMoved > 0) { // If calculated movement was forward
-                            submarine.speed = 0; // Prevent forward movement
-                            submarine.acceleration = 0;
-                            submarine.targetAcceleration = 0;
-                        }
+                        // This now stops the sub whether moving forward or backward.
+                        submarine.speed = 0; 
+                        submarine.acceleration = 0;
+                        submarine.targetAcceleration = 0;
                     }
                 }
                 // Apply position update after collision handling
@@ -3841,6 +3885,22 @@
                             tender.worldY += moveDistance * Math.sin(moveRadians);
                         }
                     }
+                    else if (tender.state === 'departing') {
+                    // Move away from the player a short distance
+                    const moveDistance = (TENDER_SPEED / 2) * deltaTimeInSeconds;
+                    const moveRadians = degreesToRadians(tender.heading - 90);
+                    tender.worldX -= moveDistance * Math.cos(moveRadians);
+                    tender.worldY -= moveDistance * Math.sin(moveRadians);
+                
+                    // After moving away for a moment (e.g., 2 seconds), switch to 'arrived'
+                    // This simple timer prevents it from instantly becoming available again.
+                    if (!tender.departTime) tender.departTime = currentTime;
+                    if (currentTime - tender.departTime > 2000) {
+                         tender.state = 'arrived';
+                         delete tender.departTime; // Clean up the temporary property
+                         console.log("Tender has departed and is now holding at a new position.");
+                    }
+                }
                     // State: 'approaching' - Moving from the holding position to a parallel docking spot.
                     else if (tender.state === 'approaching') {
                         // (This logic remains the same as before)
@@ -3855,8 +3915,13 @@
                             tender.heading = tender.targetHeading;
                             tender.speed = 0;
                             if (tender.state !== 'docked') {
+                                console.log("TENDER FINISHED APPROACH. Setting state to docked and opening menu.");
                                 tender.state = 'docked';
                                 console.log("Tender is docked.");
+                                resupplyState = { decoys: { inProgress: false, progress: 0 }, mk48: { inProgress: false, progress: 0 }, tomahawk: { inProgress: false, progress: 0 } };
+                                repairState = { inProgress: false, progress: 0 };
+                                selectedIntelOption = null;
+                                
                                 updateIntelUI();
                                 updateResupplyMenu();
                                 document.getElementById('resupplyMenu').classList.add('show');
@@ -5794,9 +5859,11 @@
                             isResupplyAvailable = false;
                             updateUI();
                         } else if (resupplyTender && resupplyTender.state === 'arrived') {
+                            console.log(`RE-DOCK CLICKED. Tender state is: '${resupplyTender.state}'. Attempting final approach.`);
                             const distSq = (submarine.worldX - resupplyTender.worldX)**2 + (submarine.worldY - resupplyTender.worldY)**2;
                             if (distSq < DOCKING_ACTIVATION_RANGE**2 && Math.abs(submarine.speed) < 10) {
                                 console.log("Tender beginning final approach! Submarine engines stopped.");
+
                                 submarine.speed = 0;
                                 submarine.acceleration = 0;
                                 submarine.targetAcceleration = 0;
@@ -5863,7 +5930,8 @@
                                 submarine.isMapModeActive = true;
                                 console.log("Satellite Intelligence armed. Click on the map to designate a scan area.");
                             } else if (activeIntelAbility === 'spy-network') {
-                                const unrevealedShips = patrolShips.filter(ship => !ship.isSpyNetworkRevealed);
+                                const allEnemyUnits = [...patrolShips, ...enemySubmarines];
+                                const unrevealedShips = allEnemyUnits.filter(unit => !unit.isSpyNetworkRevealed);
                                 if (unrevealedShips.length > 0) {
                                     const numToReveal = Math.max(1, Math.ceil(unrevealedShips.length / 5));
                                     const shuffledShips = unrevealedShips.sort(() => 0.5 - Math.random());
@@ -5885,7 +5953,8 @@
                             selectedIntelOption = null;
                         }
                         if (resupplyTender) {
-                            resupplyTender.state = 'arrived';
+                            resupplyTender.state = 'departing'; // Change to a new 'departing' state
+                            console.log("Tender is in departing state")
                         }
                     });
                     document.getElementById('tryAgainButton').addEventListener('click', async () => {
