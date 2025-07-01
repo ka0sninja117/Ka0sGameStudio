@@ -459,7 +459,7 @@
                     <li>Tomahawk cruise missiles require the player to be not too deep in the water and need a location selected before they can be fired (right click).</li>
 
                 <h2>Intel</h2>
-                <li>Get information about the world around you with sonar pings (f) and periscope view (g). Be careful, enemies near an HQ will know when they have been pinged!</li>
+                <li>Get information about the world around you with sonar pings (f) and periscope view (g). Patrol boats stay near islands but enemy submarines will try to ambush you!</li>
                 <li>See what information you've uncovered with the map view (m).</li>
 
                 <h2>Defense & Resupply</h2>
@@ -1666,7 +1666,7 @@
             function spawnEnemySubmarines() {
                 enemySubmarines = []; // Clear out subs from the previous level
             
-                // if (currentLevel <= 1) return; //This is commented out for rapid testing
+                if (currentLevel <= 1) return; //This can be commented out for Level 1 enemy sub testing
             
                 let numToSpawn = 0;
                 if (currentLevel === 1) {
@@ -1746,7 +1746,9 @@
                             lastHuntPingTime: 0,
                             lastHuntTriggerTime: 0,
                             torpedoesFiredInVolley: 0,
-                            fleeingFromThreat: false
+                            fleeingFromThreat: false,
+                            isFleeingToResupply: false,
+                            fleeTargetHq: null,
                         };
                         findNewPatrolTarget(newSub);
                         enemySubmarines.push(newSub);
@@ -2368,7 +2370,7 @@
                 const ENEMY_SUB_FIRE_COOLDOWN_MS = 3000;
                 const FLEE_DURATION_MS = 5000;
             
-                // --- Emergency Unstuck Logic (Highest Priority) ---
+                // --- Emergency Unstuck Logic ---
                 let isCurrentlyStuck = false;
                 let stuckInIsland = null;
                 for (const island of islands) {
@@ -2396,7 +2398,7 @@
             
                 // High-priority transitions
                 if (canSeePlayer && enemySub.aiState !== 'FLEEING') {
-                    if (enemySub.aiState !== 'COMBAT') enemySub.torpedoesFiredInVolley = 0;
+                    if (enemySub.aiState !== 'COMBAT') { enemySub.torpedoesFiredInVolley = 0; }
                     enemySub.aiState = 'COMBAT';
                     enemySub.lastCombatTriggerTime = currentTime;
                     enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
@@ -2404,7 +2406,7 @@
                     enemySub.aiState = 'FLEEING';
                     enemySub.fleeingFromThreat = true;
                     enemySub.lastHuntTriggerTime = currentTime;
-                } else if (enemySub.aiState !== 'AVOIDING' && enemySub.aiState !== 'FLEEING') {
+                } else if (enemySub.aiState !== 'AVOIDING' && enemySub.aiState !== 'FLEEING' && enemySub.aiState !== 'COMBAT') {
                     let huntTriggered = false;
                     let disturbanceLocation = null;
                     for (const torpedo of torpedoes) { if (torpedo.type === 'player-torpedo' && (currentTime - torpedo.launchTime < 1000)) { if (Math.sqrt((enemySub.worldX - torpedo.worldX)**2 + (enemySub.worldY - torpedo.worldY)**2) < 800) { huntTriggered = true; disturbanceLocation = { x: torpedo.worldX, y: torpedo.worldY }; break; } } }
@@ -2413,13 +2415,14 @@
                     if (!huntTriggered && enemySub.patrolTargetIsland && enemySub.patrolTargetIsland.isBoosting) { huntTriggered = true; disturbanceLocation = getPolygonCentroid(enemySub.patrolTargetIsland.points); }
                     if (!huntTriggered) { for (const ship of patrolShips) { if (ship.isDetectingPlayer && Math.sqrt((enemySub.worldX - ship.worldX)**2 + (enemySub.worldY - ship.worldY)**2) < 800) { huntTriggered = true; disturbanceLocation = { x: ship.lockedOnTargetX, y: ship.lockedOnTargetY }; break; } } }
                     if (huntTriggered) {
-                        if (enemySub.aiState !== 'HUNTING') enemySub.aiState = 'HUNTING';
+                        if (enemySub.aiState !== 'HUNTING') console.log(`Enemy Sub #${enemySub.assignedMasterId} entering HUNT state.`);
+                        enemySub.aiState = 'HUNTING';
                         enemySub.lastHuntTriggerTime = currentTime;
                         enemySub.huntLocation = disturbanceLocation;
                     }
                 }
-            
-                // Collision Avoidance (runs for most states)
+                
+                // Collision Avoidance
                 if (enemySub.aiState !== 'ORBITING_ISLAND' && enemySub.aiState !== 'FLEEING') {
                     const WHISKER_LENGTH = 150;
                     const subHeadingRad = degreesToRadians(enemySub.heading - 90);
@@ -2427,11 +2430,8 @@
                     const whiskerEndY = enemySub.worldY + WHISKER_LENGTH * Math.sin(subHeadingRad);
                     let isCollisionImminent = false;
                     for (const island of islands) { if (lineSegmentIntersectsPolygon({ x: enemySub.worldX, y: enemySub.worldY }, { x: whiskerEndX, y: whiskerEndY }, island.points) !== Infinity) { isCollisionImminent = true; break; } }
-                    
                     if (isCollisionImminent && enemySub.aiState !== 'AVOIDING') {
-                        enemySub.previousAiState = enemySub.aiState;
-                        enemySub.aiState = 'AVOIDING';
-                        enemySub.avoidanceTurnDirection = (Math.random() < 0.5) ? -1 : 1;
+                        enemySub.previousAiState = enemySub.aiState; enemySub.aiState = 'AVOIDING'; enemySub.avoidanceTurnDirection = (Math.random() < 0.5) ? -1 : 1;
                     } else if (!isCollisionImminent && enemySub.aiState === 'AVOIDING') {
                         enemySub.aiState = enemySub.previousAiState || 'PATROLLING';
                     }
@@ -2443,36 +2443,84 @@
                         const distToPlayer = Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2);
                         const targetBearingCombat = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 90);
                         enemySub.heading = turnTowards(enemySub.heading, targetBearingCombat, ENEMY_SUB_TURN_RATE * 1.5, deltaTimeInSeconds);
+            
                         if (distToPlayer > 500) { enemySub.speed = ENEMY_SUB_MAX_SPEED; } 
                         else if (distToPlayer < 400) { enemySub.speed = -ENEMY_SUB_MAX_SPEED * 0.5; } 
                         else { enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.1; }
+            
                         if (currentTime - enemySub.lastFireTime > ENEMY_SUB_FIRE_COOLDOWN_MS && enemySub.torpedoesFiredInVolley < 4) {
                             const angleDiff = Math.abs(normalizeDegreeAngle(enemySub.heading - targetBearingCombat));
                             if (angleDiff < 15 || angleDiff > 345) { fireEnemySubTorpedo(enemySub, currentTime); }
                         } else if (enemySub.torpedoesFiredInVolley >= 4) {
-                            enemySub.aiState = 'FLEEING';
-                            enemySub.fleeingFromThreat = false;
-                            enemySub.lastHuntTriggerTime = currentTime;
+                            // --- NEW: Decide which type of flee to perform ---
+                            const aliveHqs = islands.filter(i => i.hasHeadquarters && i.hqHealth > 0);
+                            if (enemySub.ammoMk48 < 4 && aliveHqs.length > 0) {
+                                enemySub.aiState = 'FLEEING';
+                                enemySub.isFleeingToResupply = true;
+                                // Find the closest HQ to flee to
+                                let closestHq = null;
+                                let minHqDist = Infinity;
+                                aliveHqs.forEach(hqIsland => {
+                                    const dist = Math.sqrt((enemySub.worldX - getPolygonCentroid(hqIsland.points).x)**2 + (enemySub.worldY - getPolygonCentroid(hqIsland.points).y)**2);
+                                    if (dist < minHqDist) {
+                                        minHqDist = dist;
+                                        closestHq = hqIsland;
+                                    }
+                                });
+                                enemySub.fleeTargetHq = closestHq;
+                                console.log(`Sub #${enemySub.assignedMasterId} is low on ammo and fleeing to HQ for resupply.`);
+                            } else {
+                                // Standard flee
+                                enemySub.aiState = 'FLEEING';
+                                enemySub.fleeingFromThreat = false;
+                                enemySub.lastHuntTriggerTime = currentTime;
+                            }
                         }
                         if (currentTime - enemySub.lastCombatTriggerTime > COMBAT_TIMEOUT_MS && !canSeePlayer) {
                             enemySub.aiState = 'PATROLLING';
-                            findNewPatrolTarget(enemySub);
                         }
                         break;
-            
+                        
                     case 'FLEEING':
-                        if (enemySub.fleeingFromThreat && enemySub.decoysRemaining > 0) {
-                            decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: 0, launchTime: currentTime });
-                            enemySub.decoysRemaining--;
-                            enemySub.fleeingFromThreat = false;
-                        }
-                        const fleeBearing = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 180 + 90);
-                        enemySub.heading = turnTowards(enemySub.heading, fleeBearing, ENEMY_SUB_TURN_RATE * 2, deltaTimeInSeconds);
-                        enemySub.speed = ENEMY_SUB_MAX_SPEED;
-                        if (currentTime - enemySub.lastHuntTriggerTime > FLEE_DURATION_MS) {
-                            enemySub.aiState = 'HUNTING';
-                            enemySub.lastHuntTriggerTime = currentTime;
-                            enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
+                        if (enemySub.isFleeingToResupply) {
+                            if (!enemySub.fleeTargetHq || enemySub.fleeTargetHq.hqHealth <= 0) {
+                                // Target HQ was destroyed, revert to hunting
+                                enemySub.aiState = 'HUNTING';
+                                enemySub.lastHuntTriggerTime = currentTime;
+                                enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
+                                break;
+                            }
+                            const hqCoords = getPolygonCentroid(enemySub.fleeTargetHq.points);
+                            const distToHq = Math.sqrt((enemySub.worldX - hqCoords.x)**2 + (enemySub.worldY - hqCoords.y)**2);
+                            if (distToHq < 300) {
+                                // Arrived at HQ, replenish ammo
+                                enemySub.ammoMk48 = ENEMY_SUB_AMMO_MK48;
+                                console.log(`Sub #${enemySub.assignedMasterId} has been resupplied at HQ.`);
+                                enemySub.isFleeingToResupply = false;
+                                enemySub.aiState = 'HUNTING'; // End flee and go back to hunting
+                                enemySub.lastHuntTriggerTime = currentTime;
+                                enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
+                            } else {
+                                // Move towards HQ
+                                const fleeToHqBearing = normalizeDegreeAngle(radiansToDegrees(Math.atan2(hqCoords.y - enemySub.worldY, hqCoords.x - enemySub.worldX)) + 90);
+                                enemySub.heading = turnTowards(enemySub.heading, fleeToHqBearing, ENEMY_SUB_TURN_RATE, deltaTimeInSeconds);
+                                enemySub.speed = ENEMY_SUB_MAX_SPEED;
+                            }
+                        } else {
+                            // Original flee logic
+                            if (enemySub.fleeingFromThreat && enemySub.decoysRemaining > 0) {
+                                decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: 0, launchTime: currentTime });
+                                enemySub.decoysRemaining--;
+                                enemySub.fleeingFromThreat = false;
+                            }
+                            const fleeBearing = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 180 + 90);
+                            enemySub.heading = turnTowards(enemySub.heading, fleeBearing, ENEMY_SUB_TURN_RATE * 2, deltaTimeInSeconds);
+                            enemySub.speed = ENEMY_SUB_MAX_SPEED;
+                            if (currentTime - enemySub.lastHuntTriggerTime > FLEE_DURATION_MS) {
+                                enemySub.aiState = 'HUNTING';
+                                enemySub.lastHuntTriggerTime = currentTime;
+                                enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
+                            }
                         }
                         break;
             
@@ -4042,7 +4090,7 @@
                 
                 // --- NEW: Update Docked Resupply & Repair Logic ---
                 if (resupplyTender && resupplyTender.state === 'docked') {
-                    let menuNeedsUpdate = false;
+                    let menuNeedsUpdate = true;
                     const deltaTimeInMs = deltaTime;
     
                     // Handle Ammo Resupply
@@ -6049,6 +6097,39 @@
                                 } else {
                                     console.log("Spy network activated, but no unrevealed targets were available.");
                                 }
+                            }
+                            else if (activeIntelAbility === 'aerial-patrol') {
+                                console.log("Aerial Patrol activated: revealing half of unknown islands.");
+                            
+                                // 1. Find all islands that are not already revealed.
+                                const unrevealedIslands = islands.filter(island => {
+                                    const islandCentroid = getPolygonCentroid(island.points);
+                                    // An island is considered revealed if a persistent reveal area exists at its center.
+                                    return !revealedAreas.some(ra => 
+                                        ra.isPersistent && 
+                                        ra.x === islandCentroid.x && 
+                                        ra.y === islandCentroid.y
+                                    );
+                                });
+                            
+                                // 2. Shuffle the list of unrevealed islands and determine how many to reveal.
+                                const shuffledUnrevealed = [...unrevealedIslands].sort(() => 0.5 - Math.random());
+                                const countToReveal = Math.ceil(shuffledUnrevealed.length / 2);
+                                const islandsToReveal = shuffledUnrevealed.slice(0, countToReveal);
+                            
+                                console.log(`Found ${unrevealedIslands.length} unrevealed islands. Revealing ${islandsToReveal.length}.`);
+                            
+                                // 3. Add a new persistent revealed area for each selected island.
+                                islandsToReveal.forEach(island => {
+                                    const islandCentroid = getPolygonCentroid(island.points);
+                                    revealedAreas.push({
+                                        x: islandCentroid.x,
+                                        y: islandCentroid.y,
+                                        radius: REVEAL_AREA_RADIUS,
+                                        type: 'ping', // Using 'ping' type reveals the terrain without showing units.
+                                        isPersistent: true
+                                    });
+                                });
                             }
                             selectedIntelOption = null;
                         }
