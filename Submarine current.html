@@ -1732,11 +1732,21 @@
                             orbitDirection: Math.random() < 0.5 ? 1 : -1, // Add for fallback behavior
                             stateTimer: 0,         // A timer for states like HUNTING
                             avoidanceTurnDirection: 0,
+                            isStuck: false,
+                            stuckStartTime: 0,
+                            previousAiState: null,
                             isRevealedBySonar: false,
                             revealedSonarEndTime: 0,
                             isDetected: false,
                             isMasterIdAssigned: false,
-                            assignedMasterId: null
+                            assignedMasterId: null,
+                            lastFireTime: 0,
+                            lastCombatTriggerTime: 0,
+                            huntLocation: null,
+                            lastHuntPingTime: 0,
+                            lastHuntTriggerTime: 0,
+                            torpedoesFiredInVolley: 0,
+                            fleeingFromThreat: false
                         };
                         findNewPatrolTarget(newSub);
                         enemySubmarines.push(newSub);
@@ -1798,7 +1808,7 @@
                 generateIslands();
                 spawnPatrolShips();
                 spawnEnemySubmarines();
-                initialEnemyCount = patrolShips.length + islands.filter(i => i.hasHeadquarters).length;
+                initialEnemyCount = patrolShips.length + enemySubmarines.length + islands.filter(i => i.hasHeadquarters).length;
                 updateLevelProgress(); // Update UI for the new level
             }
             /**
@@ -2261,6 +2271,38 @@
                 };
                 torpedoes.push(enemyTorpedo);
             }
+            function fireEnemySubTorpedo(enemySub, currentTime) {
+                if (enemySub.ammoMk48 <= 0) {
+                    console.log(`Enemy Sub (Master #${enemySub.assignedMasterId}) is out of torpedoes!`);
+                    return;
+                }
+                enemySub.ammoMk48--;
+                enemySub.torpedoesFiredInVolley++;
+            
+                console.log(`Enemy Sub (Master #${enemySub.assignedMasterId}) is firing torpedo #${enemySub.torpedoesFiredInVolley} of its volley!`);
+            
+                const launchRadians = degreesToRadians(enemySub.heading - 90);
+                const torpedoSpawnX = enemySub.worldX + (ENEMY_SUB_WIDTH / 2) * Math.cos(launchRadians);
+                const torpedoSpawnY = enemySub.worldY + (ENEMY_SUB_WIDTH / 2) * Math.sin(launchRadians);
+            
+                const newTorpedo = {
+                    id: ++torpedoCounter,
+                    worldX: torpedoSpawnX,
+                    worldY: torpedoSpawnY,
+                    speed: ENEMY_TORPEDO_INITIAL_SPEED_BONUS,
+                    initialSpeed: ENEMY_TORPEDO_INITIAL_SPEED_BONUS,
+                    maxAccelerationBonus: ENEMY_TORPEDO_MAX_ACCELERATION_BONUS,
+                    heading: enemySub.heading,
+                    launchTime: currentTime,
+                    targetSubmarine: true, // This torpedo targets the player
+                    lastKnownTargetWorldX: submarine.worldX,
+                    lastKnownTargetWorldY: submarine.worldY,
+                    lastPingTime: currentTime,
+                    type: 'enemy-torpedo'
+                };
+                torpedoes.push(newTorpedo);
+                enemySub.lastFireTime = currentTime;
+            }
             
             /**
              * Finds a new, random, active HQ for an enemy submarine to patrol towards.
@@ -2319,127 +2361,185 @@
              */
 
             function updateEnemySubmarineAI(enemySub, deltaTimeInSeconds) {
-                const WHISKER_LENGTH = 150; // How far the sub "looks" ahead
-                const sideWhiskerAngle = 45; // Angle of the side whiskers
+                const currentTime = performance.now();
+                const HUNT_DURATION_MS = 15000;
+                const HUNT_PING_INTERVAL_MS = 7000;
+                const COMBAT_TIMEOUT_MS = 15000;
+                const ENEMY_SUB_FIRE_COOLDOWN_MS = 3000;
+                const FLEE_DURATION_MS = 5000;
             
-                // --- Whisker Collision Detection ---
-                let isCollisionImminent = false;
-                const subHeadingRad = degreesToRadians(enemySub.heading - 90);
+                // --- Emergency Unstuck Logic (Highest Priority) ---
+                let isCurrentlyStuck = false;
+                let stuckInIsland = null;
+                for (const island of islands) {
+                    if (circlePolygonCollision({ x: enemySub.worldX, y: enemySub.worldY, radius: ENEMY_SUB_WIDTH / 2 }, island.points)) {
+                        isCurrentlyStuck = true; stuckInIsland = island; break;
+                    }
+                }
+                if (isCurrentlyStuck) {
+                    if (!enemySub.isStuck) { enemySub.isStuck = true; enemySub.stuckStartTime = currentTime; }
+                    if (currentTime - enemySub.stuckStartTime > 2000) {
+                        const islandCentroid = getPolygonCentroid(stuckInIsland.points);
+                        const angleFromCenter = Math.atan2(enemySub.worldY - islandCentroid.y, enemySub.worldX - islandCentroid.x);
+                        enemySub.worldX += 30 * Math.cos(angleFromCenter);
+                        enemySub.worldY += 30 * Math.sin(angleFromCenter);
+                        enemySub.isStuck = false;
+                    }
+                    return; 
+                } else {
+                    enemySub.isStuck = false;
+                }
             
-                // Define whiskers
-                const whiskers = {
-                    front: { angle: 0, hit: false },
-                    left: { angle: -sideWhiskerAngle, hit: false },
-                    right: { angle: sideWhiskerAngle, hit: false }
-                };
+                // --- State Transition & AI Logic ---
+                const canSeePlayer = (submarine.depth <= 0 && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
+                let playerTorpedoIsTracking = torpedoes.some(t => t.type === 'enemy-torpedo' && t.targetSubmarine && t.masterIdToTrack === enemySub.assignedMasterId);
             
-                for (const key in whiskers) {
-                    const whisker = whiskers[key];
-                    const angleRad = degreesToRadians(whisker.angle) + subHeadingRad;
-                    const whiskerEndX = enemySub.worldX + WHISKER_LENGTH * Math.cos(angleRad);
-                    const whiskerEndY = enemySub.worldY + WHISKER_LENGTH * Math.sin(angleRad);
-            
-                    for (const island of islands) {
-                        if (lineSegmentIntersectsPolygon({ x: enemySub.worldX, y: enemySub.worldY }, { x: whiskerEndX, y: whiskerEndY }, island.points) !== Infinity) {
-                            whisker.hit = true;
-                            isCollisionImminent = true;
-                            break;
-                        }
+                // High-priority transitions
+                if (canSeePlayer && enemySub.aiState !== 'FLEEING') {
+                    if (enemySub.aiState !== 'COMBAT') enemySub.torpedoesFiredInVolley = 0;
+                    enemySub.aiState = 'COMBAT';
+                    enemySub.lastCombatTriggerTime = currentTime;
+                    enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
+                } else if (enemySub.aiState === 'COMBAT' && playerTorpedoIsTracking) {
+                    enemySub.aiState = 'FLEEING';
+                    enemySub.fleeingFromThreat = true;
+                    enemySub.lastHuntTriggerTime = currentTime;
+                } else if (enemySub.aiState !== 'AVOIDING' && enemySub.aiState !== 'FLEEING') {
+                    let huntTriggered = false;
+                    let disturbanceLocation = null;
+                    for (const torpedo of torpedoes) { if (torpedo.type === 'player-torpedo' && (currentTime - torpedo.launchTime < 1000)) { if (Math.sqrt((enemySub.worldX - torpedo.worldX)**2 + (enemySub.worldY - torpedo.worldY)**2) < 800) { huntTriggered = true; disturbanceLocation = { x: torpedo.worldX, y: torpedo.worldY }; break; } } }
+                    if (!huntTriggered) { for (const ping of sonarPings) { if (ping.type === 'ping' && (currentTime - (ping.startTime || 0) < 1000)) { if (Math.sqrt((enemySub.worldX - ping.x)**2 + (enemySub.worldY - ping.y)**2) < 800) { huntTriggered = true; disturbanceLocation = { x: ping.x, y: ping.y }; break; } } } }
+                    if (!huntTriggered) { for (const missile of missiles) { if (missile.type === 'player-missile' && (currentTime - missile.launchTime < 1000)) { if (Math.sqrt((enemySub.worldX - missile.worldX)**2 + (enemySub.worldY - missile.worldY)**2) < 1000) { huntTriggered = true; disturbanceLocation = { x: missile.worldX, y: missile.worldY }; break; } } } }
+                    if (!huntTriggered && enemySub.patrolTargetIsland && enemySub.patrolTargetIsland.isBoosting) { huntTriggered = true; disturbanceLocation = getPolygonCentroid(enemySub.patrolTargetIsland.points); }
+                    if (!huntTriggered) { for (const ship of patrolShips) { if (ship.isDetectingPlayer && Math.sqrt((enemySub.worldX - ship.worldX)**2 + (enemySub.worldY - ship.worldY)**2) < 800) { huntTriggered = true; disturbanceLocation = { x: ship.lockedOnTargetX, y: ship.lockedOnTargetY }; break; } } }
+                    if (huntTriggered) {
+                        if (enemySub.aiState !== 'HUNTING') enemySub.aiState = 'HUNTING';
+                        enemySub.lastHuntTriggerTime = currentTime;
+                        enemySub.huntLocation = disturbanceLocation;
                     }
                 }
             
-                // --- State Machine Logic ---
-                // If whiskers detect an obstacle and we aren't already avoiding, switch to AVOIDING state
-                if (isCollisionImminent && enemySub.aiState !== 'AVOIDING') {
-                    enemySub.aiState = 'AVOIDING';
-                    // Decide which way to turn. If the front is blocked, pick a random direction. Otherwise, turn away from the side whisker that got hit.
-                    if (whiskers.front.hit) {
-                         enemySub.avoidanceTurnDirection = (Math.random() < 0.5) ? -1 : 1;
-                    } else {
-                         enemySub.avoidanceTurnDirection = whiskers.left.hit ? 1 : -1; // Turn right if left whisker hit, and vice-versa
+                // Collision Avoidance (runs for most states)
+                if (enemySub.aiState !== 'ORBITING_ISLAND' && enemySub.aiState !== 'FLEEING') {
+                    const WHISKER_LENGTH = 150;
+                    const subHeadingRad = degreesToRadians(enemySub.heading - 90);
+                    const whiskerEndX = enemySub.worldX + WHISKER_LENGTH * Math.cos(subHeadingRad);
+                    const whiskerEndY = enemySub.worldY + WHISKER_LENGTH * Math.sin(subHeadingRad);
+                    let isCollisionImminent = false;
+                    for (const island of islands) { if (lineSegmentIntersectsPolygon({ x: enemySub.worldX, y: enemySub.worldY }, { x: whiskerEndX, y: whiskerEndY }, island.points) !== Infinity) { isCollisionImminent = true; break; } }
+                    
+                    if (isCollisionImminent && enemySub.aiState !== 'AVOIDING') {
+                        enemySub.previousAiState = enemySub.aiState;
+                        enemySub.aiState = 'AVOIDING';
+                        enemySub.avoidanceTurnDirection = (Math.random() < 0.5) ? -1 : 1;
+                    } else if (!isCollisionImminent && enemySub.aiState === 'AVOIDING') {
+                        enemySub.aiState = enemySub.previousAiState || 'PATROLLING';
                     }
-                } 
-                // If no collision is detected and we were avoiding, switch back to patrolling
-                else if (!isCollisionImminent && enemySub.aiState === 'AVOIDING') {
-                    enemySub.aiState = 'PATROLLING';
                 }
             
-            
+                // --- State Actions ---
                 switch (enemySub.aiState) {
-                    case 'AVOIDING': {
-                        // Turn sharply in the predetermined avoidance direction
-                        enemySub.heading = normalizeDegreeAngle(enemySub.heading + (ENEMY_SUB_TURN_RATE * 2 * enemySub.avoidanceTurnDirection * deltaTimeInSeconds));
-                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.20; // Slow down while turning
+                    case 'COMBAT':
+                        const distToPlayer = Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2);
+                        const targetBearingCombat = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 90);
+                        enemySub.heading = turnTowards(enemySub.heading, targetBearingCombat, ENEMY_SUB_TURN_RATE * 1.5, deltaTimeInSeconds);
+                        if (distToPlayer > 500) { enemySub.speed = ENEMY_SUB_MAX_SPEED; } 
+                        else if (distToPlayer < 400) { enemySub.speed = -ENEMY_SUB_MAX_SPEED * 0.5; } 
+                        else { enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.1; }
+                        if (currentTime - enemySub.lastFireTime > ENEMY_SUB_FIRE_COOLDOWN_MS && enemySub.torpedoesFiredInVolley < 4) {
+                            const angleDiff = Math.abs(normalizeDegreeAngle(enemySub.heading - targetBearingCombat));
+                            if (angleDiff < 15 || angleDiff > 345) { fireEnemySubTorpedo(enemySub, currentTime); }
+                        } else if (enemySub.torpedoesFiredInVolley >= 4) {
+                            enemySub.aiState = 'FLEEING';
+                            enemySub.fleeingFromThreat = false;
+                            enemySub.lastHuntTriggerTime = currentTime;
+                        }
+                        if (currentTime - enemySub.lastCombatTriggerTime > COMBAT_TIMEOUT_MS && !canSeePlayer) {
+                            enemySub.aiState = 'PATROLLING';
+                            findNewPatrolTarget(enemySub);
+                        }
                         break;
-                    }
             
-                    case 'PATROLLING': {
+                    case 'FLEEING':
+                        if (enemySub.fleeingFromThreat && enemySub.decoysRemaining > 0) {
+                            decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: 0, launchTime: currentTime });
+                            enemySub.decoysRemaining--;
+                            enemySub.fleeingFromThreat = false;
+                        }
+                        const fleeBearing = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 180 + 90);
+                        enemySub.heading = turnTowards(enemySub.heading, fleeBearing, ENEMY_SUB_TURN_RATE * 2, deltaTimeInSeconds);
+                        enemySub.speed = ENEMY_SUB_MAX_SPEED;
+                        if (currentTime - enemySub.lastHuntTriggerTime > FLEE_DURATION_MS) {
+                            enemySub.aiState = 'HUNTING';
+                            enemySub.lastHuntTriggerTime = currentTime;
+                            enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
+                        }
+                        break;
+            
+                    case 'HUNTING':
+                        if (enemySub.huntLocation) {
+                            const targetBearingHunt = normalizeDegreeAngle(radiansToDegrees(Math.atan2(enemySub.huntLocation.y - enemySub.worldY, enemySub.huntLocation.x - enemySub.worldX)) + 90);
+                            enemySub.heading = turnTowards(enemySub.heading, targetBearingHunt, ENEMY_SUB_TURN_RATE, deltaTimeInSeconds);
+                        }
+                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.5;
+                        if (currentTime - enemySub.lastHuntPingTime > HUNT_PING_INTERVAL_MS) {
+                            sonarPings.push({ x: enemySub.worldX, y: enemySub.worldY, radius: 0, prevRadius: 0, maxRadius: 600, speed: SONAR_PING_SPEED, color: 'red', type: 'enemy-sub-ping', startTime: currentTime });
+                            enemySub.lastHuntPingTime = currentTime;
+                        }
+                        if (currentTime - enemySub.lastHuntTriggerTime > HUNT_DURATION_MS) {
+                            enemySub.aiState = 'PATROLLING';
+                            findNewPatrolTarget(enemySub);
+                        }
+                        break;
+            
+                    case 'AVOIDING':
+                        enemySub.heading = normalizeDegreeAngle(enemySub.heading + (ENEMY_SUB_TURN_RATE * 2 * enemySub.avoidanceTurnDirection * deltaTimeInSeconds));
+                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.20;
+                        break;
+            
+                    case 'PATROLLING':
                         if (!enemySub.patrolTargetIsland || !enemySub.patrolTargetIsland.hasHeadquarters || enemySub.patrolTargetIsland.hqHealth <= 0) {
                             findNewPatrolTarget(enemySub);
-                            if (!enemySub.patrolTargetIsland) {
-                                enemySub.aiState = 'ORBITING_ISLAND';
+                            if (!enemySub.patrolTargetIsland) { enemySub.aiState = 'ORBITING_ISLAND'; }
+                        }
+                        if (enemySub.patrolTargetIsland) {
+                            const targetCoords = getPolygonCentroid(enemySub.patrolTargetIsland.points);
+                            if (Math.sqrt((enemySub.worldX - targetCoords.x)**2 + (enemySub.worldY - targetCoords.y)**2) < 500) { 
+                                findNewPatrolTarget(enemySub);
+                            } else {
+                                const targetBearingPatrol = normalizeDegreeAngle(radiansToDegrees(Math.atan2(targetCoords.y - enemySub.worldY, targetCoords.x - enemySub.worldX)) + 90);
+                                enemySub.heading = turnTowards(enemySub.heading, targetBearingPatrol, ENEMY_SUB_TURN_RATE, deltaTimeInSeconds);
                             }
-                        }
-            
-                        const targetCoords = getPolygonCentroid(enemySub.patrolTargetIsland.points);
-                        const distToTarget = Math.sqrt((enemySub.worldX - targetCoords.x)**2 + (enemySub.worldY - targetCoords.y)**2);
-            
-                        if (distToTarget < 500) {
-                            findNewPatrolTarget(enemySub);
-                        }
-            
-                        const targetBearing = normalizeDegreeAngle(radiansToDegrees(Math.atan2(targetCoords.y - enemySub.worldY, targetCoords.x - enemySub.worldX)) + 90);
-                        enemySub.heading = turnTowards(enemySub.heading, targetBearing, ENEMY_SUB_TURN_RATE, deltaTimeInSeconds);
-                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.25;
+                            enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.25;
+                        } else { enemySub.speed = 0; }
                         break;
+                
+                    case 'ORBITING_ISLAND': 
+                        // Orbiting has its own movement logic.
+                        break;
+                }
+            
+                // Apply movement
+                if (enemySub.aiState !== 'ORBITING_ISLAND') {
+                    const moveDistance = enemySub.speed * deltaTimeInSeconds;
+                    if (moveDistance !== 0) {
+                        const moveRadians = degreesToRadians(enemySub.heading - 90);
+                        enemySub.worldX += moveDistance * Math.cos(moveRadians);
+                        enemySub.worldY += moveDistance * Math.sin(moveRadians);
+                        enemySub.worldX = wrap(enemySub.worldX, WORLD_WIDTH);
+                        enemySub.worldY = wrap(enemySub.worldY, WORLD_HEIGHT);
                     }
-            
-                    case 'ORBITING_ISLAND': {
-                        if (!enemySub.patrolTargetIsland) {
-                            findClosestIsland(enemySub);
-                            if (!enemySub.patrolTargetIsland) {
-                                enemySub.speed = 0; 
-                                return; 
-                            }
-                        }
-            
+                } else {
+                    // Apply orbiting movement logic
+                    if (enemySub.patrolTargetIsland) {
                         const islandCentroid = getPolygonCentroid(enemySub.patrolTargetIsland.points);
                         const angularSpeedRad = (ENEMY_SUB_MAX_SPEED * 0.2) / enemySub.orbitRadius;
                         enemySub.orbitAngle += angularSpeedRad * enemySub.orbitDirection * deltaTimeInSeconds;
-            
-                        const nextX = islandCentroid.x + enemySub.orbitRadius * Math.cos(enemySub.orbitAngle);
-                        const nextY = islandCentroid.y + enemySub.orbitRadius * Math.sin(enemySub.orbitAngle);
-            
-                        let willCollide = false;
-                        for(const island of islands) {
-                            if (island !== enemySub.patrolTargetIsland && circlePolygonCollision({x: nextX, y: nextY, radius: SUBMARINE_WIDTH}, island.points)) {
-                                willCollide = true;
-                                break;
-                            }
-                        }
-            
-                        if (willCollide) {
-                            enemySub.orbitDirection *= -1;
-                        } else {
-                            enemySub.worldX = nextX;
-                            enemySub.worldY = nextY;
-                        }
-            
+                        enemySub.worldX = islandCentroid.x + enemySub.orbitRadius * Math.cos(enemySub.orbitAngle);
+                        enemySub.worldY = islandCentroid.y + enemySub.orbitRadius * Math.sin(enemySub.orbitAngle);
                         const velocityAngleRad = enemySub.orbitAngle + (enemySub.orbitDirection * (Math.PI / 2));
                         enemySub.heading = normalizeDegreeAngle(radiansToDegrees(velocityAngleRad) + 90);
-                        enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.2;
-                        break;
                     }
-                }
-            
-                // Apply movement based on the speed set by the AI state
-                const moveDistance = enemySub.speed * deltaTimeInSeconds;
-                if (moveDistance > 0 && enemySub.aiState !== 'ORBITING_ISLAND') { // Orbiting has its own movement logic
-                    const moveRadians = degreesToRadians(enemySub.heading - 90);
-                    enemySub.worldX += moveDistance * Math.cos(moveRadians);
-                    enemySub.worldY += moveDistance * Math.sin(moveRadians);
-                    enemySub.worldX = wrap(enemySub.worldX, WORLD_WIDTH);
-                    enemySub.worldY = wrap(enemySub.worldY, WORLD_HEIGHT);
                 }
             }
 
@@ -5276,7 +5376,7 @@
                 
                 const currentHqCount = islands.filter(i => i.hasHeadquarters && i.hqHealth > 0).length;
                 const currentShipCount = patrolShips.length;
-                const currentEnemyCount = currentHqCount + currentShipCount;
+                const currentEnemyCount = currentHqCount + currentShipCount + enemySubmarines.length;
             
                 const enemiesDefeated = initialEnemyCount - currentEnemyCount;
                 const percentage = (enemiesDefeated / initialEnemyCount) * 100;
