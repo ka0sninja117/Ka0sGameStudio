@@ -193,7 +193,7 @@
         /* --- Genetic Origin Selection Specific Styles --- */
         .origin-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); /* Adjusted for 2-3 columns on larger screens */
+            grid-template-columns: 1fr 1fr;
             gap: 15px; /* Spacing between origin options */
             justify-content: center;
             align-items: stretch;
@@ -737,7 +737,7 @@
                 font-size: 0.8em;
             }
             .origin-grid {
-                grid-template-columns: 1fr; /* Single column for mobile */
+                grid-template-columns: 1fr 1fr; /* Two columns for mobile */
             }
             .game-title {
                 font-size: 4em;
@@ -912,10 +912,11 @@
 
         // --- Game Variables ---
         // Player properties (world coordinates, size at zoomLevel 1)
-        const playerSize = 16;
-        const playerCollisionPadding = playerSize * 0.5;
+        const BASE_PLAYER_SIZE = 16; // The player's starting size at Level 1
+        let playerSize = BASE_PLAYER_SIZE;
+        let playerCollisionPadding = playerSize * 0.5;
         // Adjusted to be radius
-        const playerRadius = playerSize / 2 + playerCollisionPadding;
+        let playerRadius = playerSize / 2 + playerCollisionPadding;
 
 
         const basePlayerSpeed = 2;
@@ -946,8 +947,32 @@
         // --- Game State ---
         let gameState = 'startScreen'; // 'startScreen', 'originSelection', 'inGame', 'pausedMap', 'gameOver'
 
+        const PLAYER_LEVEL_STATS = {
+            1: { maxHp: 20, attack: 8, defense: 1.0, stamina: 1, stealth: 1, speed: 1 },
+            2: { maxHp: 100, attack: 40, defense: 10.0, stamina: 5, stealth: 5, speed: 5 },
+            3: { maxHp: 600, attack: 240, defense: 90.0, stamina: 25, stealth: 25, speed: 25 },
+            4: { maxHp: 4200, attack: 1680, defense: 840.0, stamina: 55, stealth: 55, speed: 55 }
+        };
+
+        const NPC_XP_REWARDS = {
+            1: 1,
+            2: 10,
+            3: 100,
+            4: 1000
+        };
+        
+        let playerStatBonuses = {
+            maxHp: 0,
+            attack: 0,
+            defense: 0,
+            stamina: 0,
+            stealth: 0,
+            speed: 0
+        };
+        
         // Character Stats (Consolidated into an object)
         let playerStats = {
+            isPlayer: true,
             currentHp: 50,
             maxHp: 50,
             attack: 20,
@@ -1018,9 +1043,9 @@
         // Updated NPC emojis and names
         const npcEmojis = ['🐞', '🕷️', '🦋'];
         const npcEmojiNames = {
-            '🐞': 'Ladybug Scuttler',
-            '🕷️': 'Spider Lurker',
-            '🦋': 'Butterfly Flitter'
+            '🐞': 'Ladybug',
+            '🕷️': 'Spider',
+            '🦋': 'Butterfly'
         };
         const MAX_ENEMIES = 5; // Maximum number of enemies allowed on the map
         let closestNpcAngle = 0; // Angle to the closest NPC for the radial indicator
@@ -1215,41 +1240,42 @@
             {
                 name: 'Tough Skin',
                 stats: ['maxHp', 'defense'], // Use an array for stats impacted by this ability
-                activeAbilityReward: { name: 'Pounce', key: 'pounce', hotbarIcon: '🏃' }, // Renamed from Jump
+                activeAbilityReward: { name: 'Pounce', key: 'pounce', hotbarIcon: '🏃' },
                 getDescription: (boost1, boost2) => `⬆<span style='color:${colorNeonGreen};'>${boost1.toFixed(0)}%</span> to <span style='color:${colorNeonGreen};'>Max HP</span> & <span style='color:${colorNeonGreen};'>Defense</span>`,
                 applyBoost: (boost1, boost2) => {
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
-
-                    // Apply genetic origin bonuses if applicable
+        
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
                         if (playerGeneticOrigin.bonusStats.maxHp) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
                         if (playerGeneticOrigin.bonusStats.defense) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
                     }
-
-                    playerStats.maxHp = Math.round((playerStats.maxHp + actualBoost1) * 10) / 10;
-                    playerStats.currentHp = Math.min(playerStats.maxHp, Math.round((playerStats.currentHp + actualBoost1) * 10) / 10);
-                    playerStats.defense = Math.round((playerStats.defense + actualBoost2) * 10) / 10;
+        
+                    // Instead of modifying playerStats, we now add to the bonuses
+                    playerStatBonuses.maxHp += actualBoost1;
+                    playerStatBonuses.defense += actualBoost2;
+        
+                    // Recalculate final stats after applying the bonus
+                    updatePlayerStatsForLevel();
                 },
                 getPreview: (boost1, boost2, currentStats) => {
                     const previewLines = [];
-                    // Apply genetic origin bonuses to the *boosts* for preview calculation
                     let effectiveBoost1 = boost1;
                     let effectiveBoost2 = boost2;
-
+        
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
                         if (playerGeneticOrigin.bonusStats.maxHp) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
                         if (playerGeneticOrigin.bonusStats.defense) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
                     }
-
+        
                     const newHp = currentStats.maxHp + effectiveBoost1;
                     const deltaHpClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
                     previewLines.push(`<span class="stat-name-bold-orange">HP</span>: ${currentStats.maxHp.toFixed(1)} ➡ <span class="${deltaHpClass}">${newHp.toFixed(1)}</span>`);
-
+        
                     const newDef = currentStats.defense + effectiveBoost2;
                     const deltaDefClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Defense</span>: ${currentStats.defense.toFixed(1)}% ➡ <span class="${deltaDefClass}">${newDef.toFixed(1)}%</span>`);
-
+                    previewLines.push(`<span class="stat-name-bold-orange">Defense</span>: ${currentStats.defense.toFixed(1)} ➡ <span class="${deltaDefClass}">${newDef.toFixed(1)}</span>`);
+        
                     return previewLines;
                 }
             },
@@ -1261,34 +1287,37 @@
                 applyBoost: (boost1, boost2) => {
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
-
+        
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
                         if (playerGeneticOrigin.bonusStats.speed) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
                         if (playerGeneticOrigin.bonusStats.stealth) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
                     }
-
-                    playerStats.speed = Math.round((playerStats.speed + actualBoost1) * 10) / 10;
-                    playerStats.stealth = Math.round((playerStats.stealth + actualBoost2) * 10) / 10;
+        
+                    // Add to bonuses instead of directly to stats
+                    playerStatBonuses.speed += actualBoost1;
+                    playerStatBonuses.stealth += actualBoost2;
+        
+                    // Recalculate final stats
+                    updatePlayerStatsForLevel();
                 },
                 getPreview: (boost1, boost2, currentStats) => {
                     const previewLines = [];
-                    // Apply genetic origin bonuses to the *boosts* for preview calculation
                     let effectiveBoost1 = boost1;
                     let effectiveBoost2 = boost2;
-
+        
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
                         if (playerGeneticOrigin.bonusStats.speed) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
                         if (playerGeneticOrigin.bonusStats.stealth) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
                     }
-
+        
                     const newSpd = currentStats.speed + effectiveBoost1;
                     const deltaSpdClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
                     previewLines.push(`<span class="stat-name-bold-orange">Speed</span>: ${currentStats.speed.toFixed(1)}% ➡ <span class="${deltaSpdClass}">${newSpd.toFixed(1)}%</span>`);
-
+        
                     const newStl = currentStats.stealth + effectiveBoost2;
                     const deltaStlClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${currentStats.stealth.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}%</span>`);
-
+                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${currentStats.stealth.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}</span>`);
+        
                     return previewLines;
                 }
             },
@@ -1300,39 +1329,41 @@
                 applyBoost: (boost1, boost2) => {
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
-
+        
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
                         if (playerGeneticOrigin.bonusStats.stamina) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
                         if (playerGeneticOrigin.bonusStats.attack) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
                     }
-
-                    playerStats.stamina = Math.round((playerStats.stamina + actualBoost1) * 10) / 10;
-                    playerStats.attack = Math.round((playerStats.attack + actualBoost2) * 10) / 10;
+        
+                    // Add to bonuses instead of directly to stats
+                    playerStatBonuses.stamina += actualBoost1;
+                    playerStatBonuses.attack += actualBoost2;
+        
+                    // Recalculate final stats
+                    updatePlayerStatsForLevel();
                 },
                 getPreview: (boost1, boost2, currentStats) => {
                     const previewLines = [];
-                    // Apply genetic origin bonuses to the *boosts* for preview calculation
                     let effectiveBoost1 = boost1;
                     let effectiveBoost2 = boost2;
-
+        
                     if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
                         if (playerGeneticOrigin.bonusStats.stamina) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
                         if (playerGeneticOrigin.bonusStats.attack) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
                     }
-
+        
                     const newSta = currentStats.stamina + effectiveBoost1;
                     const deltaStaClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
                     previewLines.push(`<span class="stat-name-bold-orange">Stamina</span>: ${currentStats.stamina.toFixed(1)}% ➡ <span class="${deltaStaClass}">${newSta.toFixed(1)}%</span>`);
-
+        
                     const newAtk = currentStats.attack + effectiveBoost2;
                     const deltaAtkClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
                     previewLines.push(`<span class="stat-name-bold-orange">Attack</span>: ${currentStats.attack.toFixed(1)} ➡ <span class="${deltaAtkClass}">${newAtk.toFixed(1)}</span>`);
-
+        
                     return previewLines;
                 }
             }
         ];
-
         // Map NPC emoji to their preferred passive ability name
         const npcPreferredAbilityMap = {
             '🐞': 'Tough Skin',
@@ -1341,9 +1372,58 @@
         };
 
         // Helper to generate boost amount (1.0 to 5.0, rounded to nearest tenth)
-        function generateBoostAmount() {
-            let boost = (Math.random() * 4) + 1; // Range [1, 5)
-            return Math.round(boost * 10) / 10;
+        const LOOT_BONUS_RANGES = {
+            1: {
+                maxHp:   { min: 1.5,     max: 3.9 },
+                attack:  { min: 0.6,     max: 1.56 },
+                defense: { min: 0.2,     max: 0.52 },
+                stamina: { min: 0.75,    max: 1.95 },
+                stealth: { min: 0.75,    max: 1.95 },
+                speed:   { min: 0.75,    max: 1.95 }
+            },
+            2: {
+                maxHp:   { min: 10,      max: 26 },
+                attack:  { min: 4,       max: 10.4 },
+                defense: { min: 1.75,    max: 4.55 },
+                stamina: { min: 5.0,     max: 13.0 },
+                stealth: { min: 5.0,     max: 13.0 },
+                speed:   { min: 5.0,     max: 13.0 }
+            },
+            3: {
+                maxHp:   { min: 75,      max: 195 },
+                attack:  { min: 30,      max: 78 },
+                defense: { min: 16.5,    max: 42.9 },
+                stamina: { min: 7.5,     max: 19.5 },
+                stealth: { min: 7.5,     max: 19.5 },
+                speed:   { min: 7.5,     max: 19.5 }
+            },
+            4: {
+                maxHp:   { min: 630,     max: 1638 },
+                attack:  { min: 252,     max: 655.2 },
+                defense: { min: 168,     max: 436.8 },
+                stamina: { min: 10.0,    max: 26.0 },
+                stealth: { min: 10.0,    max: 26.0 },
+                speed:   { min: 10.0,    max: 26.0 }
+            }
+        };
+        
+        function generateLootBonus(statKey, playerLevel) {
+            // Find the correct ranges for the player's level and the specific stat
+            const ranges = LOOT_BONUS_RANGES[playerLevel]?.[statKey];
+        
+            // If for some reason we can't find a range, return a default small value
+            if (!ranges) {
+                console.error(`Could not find loot bonus range for stat: ${statKey} at level: ${playerLevel}`);
+                return 1;
+            }
+        
+            const { min, max } = ranges;
+        
+            // Calculate a random number within the specified min/max range
+            const boost = (Math.random() * (max - min)) + min;
+        
+            // Return the value rounded to a reasonable number of decimal places
+            return Math.round(boost * 100) / 100;
         }
 
         // --- Helper Function for Bar Colors ---
@@ -1467,52 +1547,62 @@
             return waypoints;
         }
 
-        function createSingleNPC() {
-            const minNpcNpcDistance = 100;
+        function createSingleNPC(level = 1) {
+            // --- NEW: Get player base stats for the given level ---
+            const baseStats = PLAYER_LEVEL_STATS[level];
+            if (!baseStats) {
+                console.error(`Cannot create NPC: No stats found for player level ${level}`);
+                return; // Exit if the level is invalid
+            }
+    
+            // --- NEW: Helper function to get the random stat multiplier (-20% to +50%) ---
+            const getRandomStatMultiplier = () => {
+                return (Math.random() * 0.5) + 0.7;
+            };
+    
+            // --- NEW: Calculate final stats using the base stats and a random multiplier ---
+            const finalHp = Math.round(baseStats.maxHp * getRandomStatMultiplier());
+            const finalAttack = Math.round(baseStats.attack * getRandomStatMultiplier());
+            const finalDefense = Math.round(baseStats.defense * getRandomStatMultiplier());
+            const finalStamina = Math.round(baseStats.stamina * getRandomStatMultiplier());
+            const finalStealth = Math.round(baseStats.stealth * getRandomStatMultiplier());
+            const finalSpeed = Math.round(baseStats.speed * getRandomStatMultiplier());
+    
+            // --- EXISTING: All of your spawning logic is preserved below ---
+            const minNpcNpcDistance = 300;
             let newNpcX, newNpcY;
             let validSpawn = false;
             let attempts = 0;
             const maxAttempts = 100;
-
-            const patrolOrigins = [
-                { x: worldWidth * 0.1, y: worldHeight * 0.1 },
-                { x: worldWidth * 0.7, y: worldHeight * 0.1 },
-                { x: worldWidth * 0.4, y: worldHeight * 0.7 },
-                { x: worldWidth * 0.2, y: worldHeight * 0.8 },
-                { x: worldWidth * 0.9, y: worldHeight * 0.5 }
-            ];
-
+    
             const screenBuffer = 100;
             const playerViewWorldX_min = cameraX - screenBuffer;
             const playerViewWorldX_max = cameraX + (canvas.width / zoomScale) + screenBuffer;
             const playerViewWorldY_min = cameraY - screenBuffer;
             const playerViewWorldY_max = cameraY + (canvas.height / zoomScale) + screenBuffer;
-
-            let chosenOrigin = patrolOrigins[Math.floor(Math.random() * patrolOrigins.length)];
-            let patrolWaypoints = [];
-            let pathingType;
-            let patrolRadius = 75 + Math.random() * 50; // Base radius for patrol area
-
+    
             while (!validSpawn && attempts < maxAttempts) {
-                newNpcX = chosenOrigin.x + (Math.random() - 0.5) * patrolRadius * 2;
-                newNpcY = chosenOrigin.y + (Math.random() - 0.5) * patrolRadius * 2;
-
-                // Ensure initial spawn is within world bounds and not too close to edges
-                newNpcX = Math.max(npcSize / 2, Math.min(newNpcX, worldWidth - npcSize / 2));
-                newNpcY = Math.max(npcSize / 2, Math.min(newNpcY, worldHeight - npcSize / 2));
-
+                newNpcX = Math.random() * worldWidth;
+                newNpcY = Math.random() * worldHeight;
+    
+                const distToPlayer = Math.sqrt(Math.pow(newNpcX - playerX, 2) + Math.pow(newNpcY - playerY, 2));
+                if (distToPlayer < 700) {
+                    attempts++;
+                    continue;
+                }
+    
                 const isInsidePlayerView = (
                     newNpcX + npcSize / 2 > playerViewWorldX_min &&
                     newNpcX - npcSize / 2 < playerViewWorldX_max &&
                     newNpcY + npcSize / 2 > playerViewWorldY_min &&
                     newNpcY + npcSize / 2 < playerViewWorldY_max
                 );
-
+    
                 if (isInsidePlayerView) {
                     attempts++;
                     continue;
                 }
-
+    
                 let tooCloseToOtherNpc = false;
                 for (const existingNpc of npcs) {
                     const distFromOtherNpc = Math.sqrt(Math.pow(newNpcX - existingNpc.x, 2) + Math.pow(newNpcY - existingNpc.y, 2));
@@ -1521,37 +1611,49 @@
                         break;
                     }
                 }
-
+    
                 if (!tooCloseToOtherNpc) {
                     validSpawn = true;
                 }
                 attempts++;
             }
-
+    
             if (!validSpawn) {
-                console.warn("Could not find a valid off-screen spawn location for NPC after multiple attempts. Spawning randomly within world.");
+                console.warn("Could not find a valid spawn location for NPC after multiple attempts. Spawning randomly within world.");
                 newNpcX = Math.random() * worldWidth;
                 newNpcY = Math.random() * worldHeight;
-                patrolRadius = 100; // Reset patrol radius if forced spawn
-                chosenOrigin = { x: newNpcX, y: newNpcY }; // Base patrol around forced spawn point
             }
-
-            // Determine pathing type and generate waypoints
+    
+            newNpcX = Math.max(npcSize / 2, Math.min(newNpcX, worldWidth - npcSize / 2));
+            newNpcY = Math.max(npcSize / 2, Math.min(newNpcY, worldHeight - npcSize / 2));
+    
             const pathingTypes = ['line', 'circle', 'polygon'];
-            pathingType = pathingTypes[Math.floor(Math.random() * pathingTypes.length)];
-
+            const pathingType = pathingTypes[Math.floor(Math.random() * pathingTypes.length)];
+            const patrolRadius = 75 + Math.random() * 50;
+            let patrolWaypoints = [];
+    
+            // Pathing types
             if (pathingType === 'line') {
-                patrolWaypoints = generateLinePath(chosenOrigin.x, chosenOrigin.y, patrolRadius);
+                patrolWaypoints = generateLinePath(newNpcX, newNpcY, patrolRadius);
             } else if (pathingType === 'circle') {
-                patrolWaypoints = generateCirclePath(chosenOrigin.x, chosenOrigin.y, patrolRadius, 8); // 8 segments for circle
+                patrolWaypoints = generateCirclePath(newNpcX, newNpcY, patrolRadius, 8);
             } else if (pathingType === 'polygon') {
-                patrolWaypoints = generatePolygonPath(chosenOrigin.x, chosenOrigin.y, patrolRadius, 3, 6);
+                patrolWaypoints = generatePolygonPath(newNpcX, newNpcY, patrolRadius, 3, 6);
             }
-
+            
+            // --- Clamp all generated waypoints to be within the world bounds ---
+            patrolWaypoints.forEach(waypoint => {
+                waypoint.x = Math.max(npcSize / 2, Math.min(waypoint.x, worldWidth - npcSize / 2));
+                waypoint.y = Math.max(npcSize / 2, Math.min(waypoint.y, worldHeight - npcSize / 2));
+            });
+    
             const chosenEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
-            const chosenName = npcEmojiNames[chosenEmoji] || `NPC #${npcs.length + 1}`;
-
+            const speciesName = npcEmojiNames[chosenEmoji] || 'Creature';
+            const levelDescriptor = LEVEL_DESCRIPTIONS[level - 1] || 'Unknown';
+            const chosenName = `${speciesName} ${levelDescriptor}`;
+    
             return {
+                level: level,
                 id: npcs.length + 1,
                 name: chosenName,
                 x: newNpcX,
@@ -1559,17 +1661,17 @@
                 size: npcSize,
                 radius: npcRadius,
                 emoji: chosenEmoji,
-                currentHp: Math.floor(Math.random() * 20) + 10,
-                maxHp: Math.floor(Math.random() * 20) + 10,
-                attack: Math.floor(Math.random() * 5) + 5,
-                defense: Math.floor(Math.random() * 10) + 1,
-                stamina: Math.floor(Math.random() * 5) + 1,
-                stealth: Math.floor(Math.random() * 5) + 1,
-                speed: Math.floor(Math.random() * 5) + 1,
+                currentHp: finalHp,
+                maxHp: finalHp,
+                attack: finalAttack,
+                defense: finalDefense,
+                stamina: finalStamina,
+                stealth: finalStealth,
+                speed: finalSpeed,
                 patrolWaypoints: patrolWaypoints,
-                pathingType: pathingType, // Store the chosen pathing type
+                pathingType: pathingType,
                 currentPatrolPointIndex: 0,
-                patrolDirection: 1, // For line pathing: 1 for forward, -1 for backward
+                patrolDirection: 1,
                 patrolTargetX: patrolWaypoints[0].x,
                 patrolTargetY: patrolWaypoints[0].y,
                 inCombat: false,
@@ -1583,12 +1685,12 @@
                 attackAnimStartTime: 0
             };
         }
-
+            
         function generateNPCs() {
             npcs = [];
             const numNPCsToGenerate = 3;
             for (let i = 0; i < numNPCsToGenerate; i++) {
-                npcs.push(createSingleNPC());
+                npcs.push(createSingleNPC(1));
             }
         }
 
@@ -1613,61 +1715,90 @@
             return Math.atan2(Math.sin(angle), Math.cos(angle));
         }
 
-        function dealDamage(attacker, defender, currentTime) { // Added currentTime parameter
-            let rawDamage = attacker.attack;
-            let defenseReduction = rawDamage * (defender.defense / 100);
-
-            let effectiveDamage = Math.round((rawDamage - defenseReduction) * 10) / 10;
-            effectiveDamage = Math.max(0, effectiveDamage);
-
+        function dealDamage(attacker, defender, currentTime) {
+            // 1. Calculate raw damage with flat defense.
+            // Calculate damage and ensure it is always at least 1.0
+            let effectiveDamage = Math.max(1.0, attacker.attack - defender.defense);
+        
+            // 2. Ensure that if any damage is done, it's at least 0.1.
+            if (effectiveDamage > 0) {
+                effectiveDamage = Math.max(0.1, effectiveDamage);
+            } else {
+                effectiveDamage = 0; // Otherwise, ensure damage is exactly 0.
+            }
+        
+            // 3. Round to one decimal place for clean numbers.
+            effectiveDamage = Math.round(effectiveDamage * 10) / 10;
+        
+            // 4. Add the console log for debugging.
+            const attackerName = attacker.isPlayer ? "Player" : attacker.name;
+            const defenderName = defender.isPlayer ? "Player" : defender.name;
+            console.log(`${attackerName} attacks ${defenderName}: ${attacker.attack.toFixed(1)} Attack - ${defender.defense.toFixed(1)} Defense = ${effectiveDamage.toFixed(1)} Damage`);
+        
             const actualHpReduction = Math.min(effectiveDamage, defender.currentHp);
-
-            defender.currentHp -= effectiveDamage;
-            defender.currentHp = Math.max(0, Math.round(defender.currentHp * 10) / 10);
-
+        
+            // 5. *** THE CORE BUG FIX ***
+            //    Apply damage directly to the correct object by checking the 'isPlayer' tag.
+            if (defender.isPlayer) {
+                playerStats.currentHp -= effectiveDamage;
+                playerStats.currentHp = Math.max(0, Math.round(playerStats.currentHp * 10) / 10);
+            } else {
+                defender.currentHp -= effectiveDamage;
+                defender.currentHp = Math.max(0, Math.round(defender.currentHp * 10) / 10);
+            }
+        
             const isKillingBlow = defender.currentHp <= 0;
             const duration = isKillingBlow ? 1000 : 500;
-
             let textX, textY;
-
+        
             if (attacker.isPlayer) {
-                // Player is attacker, NPC is defender
+                // This part for Player attacking NPC is fully preserved.
                 defender.totalDamageReceivedFromPlayer += actualHpReduction;
-                // Damage text for NPC (defender) should appear adjacent to NPC, opposite from player
                 const anglePlayerToNpc = Math.atan2(defender.y - attacker.y, defender.x - attacker.x);
                 const offsetDistance = defender.radius + 15;
                 textX = defender.x + Math.cos(anglePlayerToNpc + Math.PI) * offsetDistance;
                 textY = defender.y + Math.sin(anglePlayerToNpc + Math.PI) * offsetDistance;
-
+        
                 floatingDamageTexts.push({
                     value: effectiveDamage.toFixed(1),
-                    x: textX,
-                    y: textY,
-                    color: 'yellow', // Player's damage is yellow
-                    timestamp: performance.now(),
-                    duration: duration,
-                    floatDuration: duration
+                    x: textX, y: textY, color: 'yellow',
+                    timestamp: performance.now(), duration: duration, floatDuration: duration
                 });
-
+        
             } else { // NPC is attacker, player is defender
-                playerStats.currentHp = defender.currentHp;
                 attacker.totalDamageDealtToPlayer += actualHpReduction;
-                // Damage text for Player (defender) should appear adjacent to player, opposite from NPC
-                const angleNpcToPlayer = Math.atan2(defender.y - attacker.y, defender.x - attacker.x);
-                const offsetDistance = defender.radius + 15; // Using playerRadius here
-                textX = defender.x + Math.cos(angleNpcToPlayer + Math.PI) * offsetDistance;
-                textY = defender.y + Math.sin(angleNpcToPlayer + Math.PI) * offsetDistance;
-
+        
+                // This part now correctly uses playerX/playerY for text position.
+                const angleNpcToPlayer = Math.atan2(playerY - attacker.y, playerX - attacker.x);
+                const offsetDistance = playerRadius + 15;
+                textX = playerX + Math.cos(angleNpcToPlayer + Math.PI) * offsetDistance;
+                textY = playerY + Math.sin(angleNpcToPlayer + Math.PI) * offsetDistance;
+        
                 floatingDamageTexts.push({
                     value: effectiveDamage.toFixed(1),
-                    x: textX,
-                    y: textY,
-                    color: 'red', // Player receives red damage
-                    timestamp: currentTime,
-                    duration: duration,
-                    floatDuration: duration
+                    x: textX, y: textY, color: 'red',
+                    timestamp: currentTime, duration: duration, floatDuration: duration
                 });
             }
+        }
+
+        function reducePlayerHunger(xpGained) {
+            let hungerDivisor = 1;
+            // Determine the divisor based on the player's current level
+            switch (playerStats.playerLevel) {
+                case 2:
+                    hungerDivisor = 10;
+                    break;
+                case 3:
+                    hungerDivisor = 100;
+                    break;
+                case 4:
+                    hungerDivisor = 1000;
+                    break;
+            }
+        
+            const hungerReduced = xpGained / hungerDivisor;
+            playerStats.currentHunger = Math.max(0, playerStats.currentHunger - hungerReduced);
         }
 
         function endBurrow() {
@@ -1844,14 +1975,15 @@
                                 dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc, currentTime); // Pass currentTime
                                 npc.dashedThrough = true;
                                 if (npc.currentHp <= 0) {
-                                    playerStats.currentXp += 2;
+                                    const xpGained = NPC_XP_REWARDS[npc.level] || 0;
+                                    playerStats.currentXp += xpGained;
                                     updatePlayerLevel();
-
-                                    // Hunger reduction on enemy defeat
-                                    const xpGained = 2; // XP gained is currently always 2
-                                    playerStats.currentHunger = Math.max(0, playerStats.currentHunger - xpGained); // Hunger can now go down to 0%
+                                
+                                    // Hunger is reduced by the amount of XP gained, adjusted per level.
+                                    reducePlayerHunger(xpGained);
 
                                     deadNpcs.push({
+                                        level: npc.level,
                                         x: npc.x,
                                         y: npc.y,
                                         maxHp: npc.maxHp,
@@ -1869,10 +2001,16 @@
                                         showTargetIndicator = false;
                                         targetedNpc = null; // Clear target on death
                                     }
-                                    // Ensure new NPCs are spawned when one dies
+                                // Ensure new NPCs are spawned when one dies
                                     while (npcs.length < MAX_ENEMIES) {
-                                        npcs.push(createSingleNPC());
-                                    }
+                                // Determine what level of NPC to spawn
+                                let levelOfNpcToSpawn = playerStats.playerLevel;
+                                if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
+                                    levelOfNpcToSpawn = playerStats.playerLevel + 1;
+                                    console.log(`Player is close to leveling! Spawning a Level ${levelOfNpcToSpawn} NPC.`);
+                                }
+                                npcs.push(createSingleNPC(levelOfNpcToSpawn));
+                            }
                                 }
                             }
                         });
@@ -2077,15 +2215,8 @@
                         if (!(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) { // Prevent NPC attack if player just dashed through
                             // Orient NPC towards player before attacking
                             combatTarget.directionAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
-                            dealDamage(combatTarget, {
-                                currentHp: playerStats.currentHp,
-                                defense: playerStats.defense,
-                                attack: combatTarget.attack,
-                                x: playerX, // Pass player's current x
-                                y: playerY, // Pass player's current y
-                                isPlayer: false, // Indicate defender is player
-                                radius: playerRadius
-                            }, currentTime); // Pass currentTime
+                            // This is the NEW, SIMPLIFIED code
+                            dealDamage(combatTarget, playerStats, currentTime);
                             combatTarget.isAttacking = true;
                             combatTarget.attackAnimStartTime = currentTime;
                         }
@@ -2096,16 +2227,17 @@
 
                     if (combatTarget.currentHp <= 0) {
                         console.log(`NPC ${combatTarget.name} defeated.`);
-
-                        playerStats.currentXp += 2;
+                    
+                        // Look up the XP reward based on the defeated NPC's level
+                        const xpGained = NPC_XP_REWARDS[combatTarget.level] || 0;
+                        playerStats.currentXp += xpGained;
                         updatePlayerLevel(); // This also updates xpToNextLevel
-
-                        // Hunger reduction on enemy defeat
-                        const xpGained = 2; // XP gained is currently always 2
-                        playerStats.currentHunger = Math.max(0, playerStats.currentHunger - xpGained); // Hunger cannot go below 0%
-
+                    
+                        // Hunger is now reduced by the amount of XP gained adjusted per the user's level
+                        reducePlayerHunger(xpGained);
 
                         deadNpcs.push({
+                            level: combatTarget.level,
                             x: combatTarget.x,
                             y: combatTarget.y,
                             maxHp: combatTarget.maxHp,
@@ -2123,34 +2255,43 @@
                         targetedNpc = null; // Clear target on death
 
                         while (npcs.length < MAX_ENEMIES) {
-                            npcs.push(createSingleNPC());
+                            // Determine what level of NPC to spawn
+                            let levelOfNpcToSpawn = playerStats.playerLevel;
+                            if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
+                                levelOfNpcToSpawn = playerStats.playerLevel + 1;
+                                console.log(`Player is close to leveling! Spawning a Level ${levelOfNpcToSpawn} NPC.`);
+                            }
+                            npcs.push(createSingleNPC(levelOfNpcToSpawn));
                         }
                     }
                 }
             }
 
 
-            // Camera and Zoom (always run, even if game logic is paused for admin/origin panel)
-            if (isMapModeActive) { // If in map mode, zoom out
-                zoomScale = Math.min(canvas.width / worldWidth, canvas.height / worldHeight);
-                cameraX = 0;
-                cameraY = 0;
-            } else { // Otherwise, zoom in on player
-                zoomScale = 1;
+        // Camera and Zoom (always run, even if game logic is paused for admin/origin panel)
+        if (isMapModeActive) { // If in map mode, zoom out
+            zoomScale = Math.min(canvas.width / worldWidth, canvas.height / worldHeight);
+            cameraX = 0;
+            cameraY = 0;
+        } else { // Otherwise, zoom in on player
+            zoomScale = 1;
 
-                let desiredCameraX = playerX - canvas.width / 2;
-                let desiredCameraY = playerY - canvas.height / 2;
+            let desiredCameraX = playerX - canvas.width / 2;
+            let desiredCameraY = playerY - canvas.height / 2;
 
-                cameraX = Math.max(0, Math.min(desiredCameraX, worldWidth - canvas.width));
-                cameraY = Math.max(0, Math.min(desiredCameraY, worldHeight - canvas.height));
+            const overpan = 150; // This is the buffer in pixels.
 
-                if (canvas.width > worldWidth) {
-                    cameraX = (worldWidth - canvas.width) / 2;
-                }
-                if (canvas.height > worldHeight) {
-                    cameraY = (worldHeight - canvas.height) / 2;
-                }
+            // These two lines are updated to include the 'overpan' buffer.
+            cameraX = Math.max(0 - overpan, Math.min(desiredCameraX, worldWidth - canvas.width + overpan));
+            cameraY = Math.max(0 - overpan, Math.min(desiredCameraY, worldHeight - canvas.height + overpan));
+
+            if (canvas.width > worldWidth) {
+                cameraX = (worldWidth - canvas.width) / 2;
             }
+            if (canvas.height > worldHeight) {
+                cameraY = (worldHeight - canvas.height) / 2;
+            }
+        }
 
             // Update closest NPC for radial indicator even if game logic is paused by menu
             // Only if inGame state and not map mode
@@ -2487,7 +2628,7 @@
             }
 
             drawStatLine('Attack', playerStats.attack);
-            drawStatLine('Defense', playerStats.defense, true);
+            drawStatLine('Defense', playerStats.defense, false);
             drawStatLine('Stamina', playerStats.stamina, true);
             drawStatLine('Stealth', playerStats.stealth, true);
             drawStatLine('Speed', playerStats.speed, true);
@@ -2545,11 +2686,13 @@
 
             // Adjust level if XP goes beyond or below thresholds
             while (playerStats.currentXp >= playerStats.xpToNextLevel && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
-                playerStats.playerLevel++;
-                playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
-                playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel];
-                console.log(`Player leveled up to Lv.${playerStats.playerLevel}! Evolution: ${playerStats.playerEvolutionState}`);
-            }
+                    playerStats.playerLevel++;
+                    updatePlayerStatsForLevel();
+                    updatePlayerSize();
+                    playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
+                    playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel];
+                    console.log(`Player leveled up to Lv.${playerStats.playerLevel}! Evolution: ${playerStats.playerEvolutionState}`);
+                }
 
             while (playerStats.playerLevel > 1 && playerStats.currentXp < XP_THRESHOLDS[playerStats.playerLevel - 1]) {
                 playerStats.playerLevel--;
@@ -2624,7 +2767,32 @@
             ctx.textBaseline = 'middle';
             ctx.fillText(messageToDisplay, bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2);
         }
+        function drawTargetedNpcIndicator() {
+            // 1. Exit if there is no target, if we are in map mode, or if the game is over.
+            if (!targetedNpc || isMapModeActive || gameOver) {
+                return;
+            }
 
+            // 2. Calculate the NPC's position on the canvas, accounting for camera and zoom.
+            const canvasX = (targetedNpc.x - cameraX) * zoomScale;
+            const canvasY = (targetedNpc.y - cameraY) * zoomScale;
+            
+            // 3. Define the circle's radius (slightly larger than the NPC's radius).
+            const indicatorRadius = targetedNpc.radius * 1.5;
+
+            // 4. Save the current drawing context to not affect other elements.
+            ctx.save();
+            
+            // 5. Draw the red circle.
+            ctx.strokeStyle = 'red'; // Set the circle color to red.
+            ctx.lineWidth = 2;       // Set the line thickness.
+            ctx.beginPath();
+            ctx.arc(canvasX, canvasY, indicatorRadius * zoomScale, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // 6. Restore the context to its original state.
+            ctx.restore();
+        }
 
         function draw() {
             const currentTime = performance.now(); // Get current time once per draw call
@@ -2776,6 +2944,8 @@
 
 
                 ctx.restore(); // Restore context after world transformations
+                
+                drawTargetedNpcIndicator();
 
                 // UI elements (not scaled by zoomScale)
                 if (!isMapModeActive && !gameOver) { // Hide UI if in map mode or game over
@@ -2783,50 +2953,50 @@
                     drawHotbar();
                 }
 
-                // Radial indicator only in normal play, not map mode and not game over
-                if (!isMapModeActive && closestNpcDistance !== Infinity && !gameOver) {
-                    const ringRadius = STATIC_RADIAL_INDICATOR_RADIUS;
-                    const ringCenterX = canvas.width / 2;
-                    const ringCenterY = canvas.height / 2;
+            // Radial indicator only in normal play, not map mode and not game over
+            if (!isMapModeActive && closestNpcDistance !== Infinity && !gameOver) {
+                // Calculate the player's current position on the canvas.
+                const playerCanvasX = (playerX - cameraX) * zoomScale;
+                const playerCanvasY = (playerY - cameraY) * zoomScale;
 
-                    const maxIndicatorDistance = 2 * canvas.width;
-                    const effectiveMinIndicatorDistance = ringRadius + 50;
+                const ringRadius = STATIC_RADIAL_INDICATOR_RADIUS;
+                const maxIndicatorDistance = 2 * canvas.width;
+                const effectiveMinIndicatorDistance = ringRadius + 50;
 
-                    if (closestNpcDistance > ringRadius) {
-                        const minLineThickness = 1.5;
-                        const maxLineThickness = 6;
-                        const minArcDegrees = 15;
-                        const maxArcDegrees = 45;
+                if (closestNpcDistance > ringRadius) {
+                    const minLineThickness = 1.5;
+                    const maxLineThickness = 6;
+                    const minArcDegrees = 15;
+                    const maxArcDegrees = 45;
 
+                    const t = lerp(0, 1, (closestNpcDistance - effectiveMinIndicatorDistance) / (maxIndicatorDistance - effectiveMinIndicatorDistance));
 
-                        const t = lerp(0, 1, (closestNpcDistance - effectiveMinIndicatorDistance) / (maxIndicatorDistance - effectiveMinIndicatorDistance));
+                    const indicatorLineWidth = lerp(maxLineThickness, minLineThickness, t);
 
-                        const indicatorLineWidth = lerp(maxLineThickness, minLineThickness, t);
+                    const currentArcDegrees = lerp(minArcDegrees, maxArcDegrees, t);
+                    const currentArcRadians = currentArcDegrees * Math.PI / 180;
+                    const halfArcRadians = currentArcRadians / 2;
 
-                        const currentArcDegrees = lerp(minArcDegrees, maxArcDegrees, t);
-                        const currentArcRadians = currentArcDegrees * Math.PI / 180;
-                        const halfArcRadians = currentArcRadians / 2;
+                    const numSegments = 30;
+                    const segmentArcLength = currentArcRadians / numSegments;
 
-                        const numSegments = 30;
-                        const segmentArcLength = currentArcRadians / numSegments;
+                    for (let i = 0; i < numSegments; i++) {
+                        const segStartAngle = closestNpcAngle - halfArcRadians + i * segmentArcLength;
+                        const segEndAngle = segStartAngle + segmentArcLength;
+                        const midSegmentAngle = (segStartAngle + segEndAngle) / 2;
 
-                        for (let i = 0; i < numSegments; i++) {
-                            const segStartAngle = closestNpcAngle - halfArcRadians + i * segmentArcLength;
-                            const segEndAngle = segStartAngle + segmentArcLength;
-                            const midSegmentAngle = (segStartAngle + segEndAngle) / 2;
+                        const normalizedPosition = Math.abs(midSegmentAngle - closestNpcAngle) / halfArcRadians;
+                        const alpha = Math.max(0, Math.cos(normalizedPosition * Math.PI / 2));
 
-                            const normalizedPosition = Math.abs(midSegmentAngle - closestNpcAngle) / halfArcRadians;
-                            const alpha = Math.max(0, Math.cos(normalizedPosition * Math.PI / 2));
-
-                            ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
-                            ctx.lineWidth = indicatorLineWidth;
-                            ctx.beginPath();
-                            ctx.arc(ringCenterX, ringCenterY, ringRadius, segStartAngle, segEndAngle);
-                            ctx.stroke();
-                        }
+                        ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+                        ctx.lineWidth = indicatorLineWidth;
+                        ctx.beginPath();
+                        // Use the player's calculated canvas position as the center of the ring.
+                        ctx.arc(playerCanvasX, playerCanvasY, ringRadius, segStartAngle, segEndAngle);
+                        ctx.stroke();
                     }
                 }
-
+            }
                 if (gameOver) {
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -2906,21 +3076,20 @@
             isMapModeActive = false; // Reset map mode
             playerDirectionAngle = 0;
 
-            playerStats = {
-                currentHp: 50,
-                maxHp: 50,
-                attack: 20,
-                defense: 5,
-                stamina: 0,
-                stealth: 0,
-                speed: 0,
-                currentHunger: 1, // Hunger starts at 1%
-                maxHunger: 100,
-                currentXp: 0,
-                playerLevel: 1,
-                xpToNextLevel: 10,
-                playerEvolutionState: 'Grub'
-            };
+            // Reset player bonuses to zero for a new game
+            playerStatBonuses = { maxHp: 0, attack: 0, defense: 0, stamina: 0, stealth: 0, speed: 0 };
+            
+            // Reset non-stat values
+            playerStats.currentHunger = 1;
+            playerStats.currentXp = 0;
+            playerStats.playerLevel = 1;
+            playerStats.xpToNextLevel = XP_THRESHOLDS[1]; // Set XP for level 2
+            playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[0];
+            
+            // Set the initial Level 1 stats
+            updatePlayerStatsForLevel();
+            // Fully heal the player at the start of the game
+            playerStats.currentHp = playerStats.maxHp;
             lastHungerIncreaseTime = performance.now(); // Reset hunger timer
 
             // Reset player attack and animation state
@@ -3018,6 +3187,44 @@
             swapSourceSlotIndex = -1;
             swapMessage = null; // Clear swap message
             if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
+        }
+        
+        function updatePlayerStatsForLevel() {
+            const level = playerStats.playerLevel;
+            const baseStats = PLAYER_LEVEL_STATS[level];
+        
+            // If for some reason we don't have stats for this level, do nothing.
+            if (!baseStats) return;
+        
+            // Calculate the difference in max HP to heal the player on level up
+            const oldMaxHp = playerStats.maxHp;
+            const newMaxHp = baseStats.maxHp + playerStatBonuses.maxHp;
+            const hpGained = newMaxHp - oldMaxHp;
+        
+            // Update all stats by adding the base for the level and any collected bonuses
+            playerStats.maxHp = newMaxHp;
+            playerStats.attack = baseStats.attack + playerStatBonuses.attack;
+            playerStats.defense = baseStats.defense + playerStatBonuses.defense;
+            playerStats.stamina = baseStats.stamina + playerStatBonuses.stamina;
+            playerStats.stealth = baseStats.stealth + playerStatBonuses.stealth;
+            playerStats.speed = baseStats.speed + playerStatBonuses.speed;
+        
+            // When max HP increases, heal the player by the amount gained
+            if (hpGained > 0) {
+                playerStats.currentHp += hpGained;
+            }
+            // Ensure current HP doesn't exceed the new max HP
+            playerStats.currentHp = Math.min(playerStats.currentHp, playerStats.maxHp);
+        }
+        
+        function updatePlayerSize() {
+            // Calculate the new size with a 30% compounding increase per level
+            // Math.pow(1.3, playerStats.playerLevel - 1) handles the compounding
+            playerSize = BASE_PLAYER_SIZE * Math.pow(1.3, playerStats.playerLevel - 1);
+        
+            // Recalculate padding and hitbox radius based on the new size
+            playerCollisionPadding = playerSize * 0.5;
+            playerRadius = playerSize / 2 + playerCollisionPadding;
         }
 
         function createAbilityOptionElement(template) {
@@ -3211,10 +3418,16 @@
                 abilityOption2Data = remainingAbilities.splice(randomIndex, 1)[0];
             }
 
-            let boost1_1 = generateBoostAmount();
-            let boost1_2 = generateBoostAmount();
-            let boost2_1 = generateBoostAmount();
-            let boost2_2 = generateBoostAmount();
+            // Get the stat keys for the first loot option (e.g., ['maxHp', 'defense'])
+            const stats1 = abilityOption1Data.stats;
+            // Generate boosts specifically for those stats based on the DEFEATED NPC's level
+            let boost1_1 = generateLootBonus(stats1[0], clickedDeadNpc.level);
+            let boost1_2 = generateLootBonus(stats1[1], clickedDeadNpc.level);
+            
+            // Do the same for the second loot option
+            const stats2 = abilityOption2Data.stats;
+            let boost2_1 = generateLootBonus(stats2[0], clickedDeadNpc.level);
+            let boost2_2 = generateLootBonus(stats2[1], clickedDeadNpc.level);
 
             const currentStats = {
                 maxHp: playerStats.maxHp,
@@ -4076,21 +4289,21 @@
 
             playerX = worldWidth / 2;
             playerY = worldHeight / 2;
-            playerStats = {
-                currentHp: 50,
-                maxHp: 50,
-                attack: 20,
-                defense: 5,
-                stamina: 0,
-                stealth: 0,
-                speed: 0,
-                currentHunger: 1,
-                maxHunger: 100,
-                currentXp: 0,
-                playerLevel: 1,
-                xpToNextLevel: 10,
-                playerEvolutionState: 'Grub'
-            };
+            // Reset player bonuses to zero for a new game
+            playerStatBonuses = { maxHp: 0, attack: 0, defense: 0, stamina: 0, stealth: 0, speed: 0 };
+            
+            // Reset non-stat values
+            playerStats.currentHunger = 1;
+            playerStats.currentXp = 0;
+            playerStats.playerLevel = 1;
+            playerStats.xpToNextLevel = XP_THRESHOLDS[1]; // Set XP for level 2
+            playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[0];
+            
+            // Set the initial Level 1 stats
+            updatePlayerStatsForLevel();
+            updatePlayerSize();
+            // Fully heal the player at the start of the game
+            playerStats.currentHp = playerStats.maxHp;
             lastHungerIncreaseTime = performance.now(); // Initialize hunger timer
 
 
