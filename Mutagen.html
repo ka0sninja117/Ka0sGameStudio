@@ -1043,9 +1043,9 @@
         // Updated NPC emojis and names
         const npcEmojis = ['🐞', '🕷️', '🦋'];
         const npcEmojiNames = {
-            '🐞': 'Ladybug',
-            '🕷️': 'Spider',
-            '🦋': 'Butterfly'
+            '🐞': { name: 'Ladybug',   rotation: Math.PI / 2 },
+            '🕷️': { name: 'Spider',    rotation: Math.PI / 2 },
+            '🦋': { name: 'Butterfly', rotation: Math.PI / 2 }
         };
         const MAX_ENEMIES = 5; // Maximum number of enemies allowed on the map
         let closestNpcAngle = 0; // Angle to the closest NPC for the radial indicator
@@ -1167,7 +1167,7 @@
                 name: 'Arachnoid',
                 emoji: '🦂',
                 rotation: 0,
-                bonusStats: { attack: 0.02, defense: 0.02 },
+                bonusStats: { attack: 0.1, defense: 0.1 },
                 startingAbilityKey: 'burrow',
                 getBonusText: () => {
                     const bonusAttack = geneticOrigins.find(o => o.key === 'arachnoid').bonusStats.attack * 100;
@@ -1181,7 +1181,7 @@
                 name: 'Reptilian',
                 emoji: '🦎',
                 rotation: -Math.PI / 2,
-                bonusStats: { stealth: 0.02, speed: 0.02 },
+                bonusStats: { stealth: 0.1, speed: 0.1 },
                 startingAbilityKey: 'dash',
                 getBonusText: () => {
                     const bonusStealth = geneticOrigins.find(o => o.key === 'reptilian').bonusStats.stealth * 100;
@@ -1195,7 +1195,7 @@
                 name: 'Raptorial',
                 emoji: '🦖',
                 rotation: -Math.PI / 2,
-                bonusStats: { speed: 0.02, attack: 0.02 },
+                bonusStats: { speed: 0.1, attack: 0.1 },
                 startingAbilityKey: 'pounce',
                 getBonusText: () => {
                     const bonusSpeed = geneticOrigins.find(o => o.key === 'raptorial').bonusStats.speed * 100;
@@ -1209,7 +1209,7 @@
                 name: 'Simian',
                 emoji: '🦍',
                 rotation: -Math.PI / 2,
-                bonusStats: { maxHp: 0.02, defense: 0.02 },
+                bonusStats: { maxHp: 0.1, defense: 0.1 },
                 startingAbilityKey: 'pounce',
                 getBonusText: () => {
                     const bonusMaxHp = geneticOrigins.find(o => o.key === 'simian').bonusStats.maxHp * 100;
@@ -1223,12 +1223,12 @@
                 name: 'Synthetic',
                 emoji: '🤖',
                 rotation: 0,
-                bonusStats: { currentXp: 0.02, stamina: 0.02 },
+                bonusStats: { speed: 0.1, stamina: 0.1 },
                 startingAbilityKey: 'dash',
                 getBonusText: () => {
-                    const bonusCurrentXp = geneticOrigins.find(o => o.key === 'synthetic').bonusStats.currentXp * 100;
+                    const bonusSpeed = geneticOrigins.find(o => o.key === 'synthetic').bonusStats.speed * 100;
                     const bonusStamina = geneticOrigins.find(o => o.key === 'synthetic').bonusStats.stamina * 100;
-                    return `<span style='color:${colorNeonGreen};'>⬆${bonusCurrentXp.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>XP</span> & <span style='color:${colorNeonGreen};'>Stamina</span> gains`;
+                    return `<span style='color:${colorNeonGreen};'>⬆${bonusSpeed.toFixed(0)}%</span> all <span style='color:${colorNeonGreen};'>Speed</span> & <span style='color:${colorNeonGreen};'>Stamina</span> gains`;
                 },
                 getStartingAbilityText: () => `Starts with: <span style='color:${colorOrange};'>${abilityDetailsMap.dash.name}</span>`
             }
@@ -1246,12 +1246,7 @@
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
         
-                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.maxHp) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
-                        if (playerGeneticOrigin.bonusStats.defense) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
-                    }
-        
-                    // Instead of modifying playerStats, we now add to the bonuses
+                    // Add to bonuses instead of directly to stats
                     playerStatBonuses.maxHp += actualBoost1;
                     playerStatBonuses.defense += actualBoost2;
         
@@ -1262,11 +1257,6 @@
                     const previewLines = [];
                     let effectiveBoost1 = boost1;
                     let effectiveBoost2 = boost2;
-        
-                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.maxHp) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.maxHp);
-                        if (playerGeneticOrigin.bonusStats.defense) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.defense);
-                    }
         
                     const newHp = currentStats.maxHp + effectiveBoost1;
                     const deltaHpClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
@@ -1288,11 +1278,6 @@
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
         
-                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.speed) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
-                        if (playerGeneticOrigin.bonusStats.stealth) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
-                    }
-        
                     // Add to bonuses instead of directly to stats
                     playerStatBonuses.speed += actualBoost1;
                     playerStatBonuses.stealth += actualBoost2;
@@ -1304,11 +1289,6 @@
                     const previewLines = [];
                     let effectiveBoost1 = boost1;
                     let effectiveBoost2 = boost2;
-        
-                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.speed) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.speed);
-                        if (playerGeneticOrigin.bonusStats.stealth) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.stealth);
-                    }
         
                     const newSpd = currentStats.speed + effectiveBoost1;
                     const deltaSpdClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
@@ -1330,11 +1310,6 @@
                     let actualBoost1 = boost1;
                     let actualBoost2 = boost2;
         
-                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.stamina) actualBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
-                        if (playerGeneticOrigin.bonusStats.attack) actualBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
-                    }
-        
                     // Add to bonuses instead of directly to stats
                     playerStatBonuses.stamina += actualBoost1;
                     playerStatBonuses.attack += actualBoost2;
@@ -1346,11 +1321,6 @@
                     const previewLines = [];
                     let effectiveBoost1 = boost1;
                     let effectiveBoost2 = boost2;
-        
-                    if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
-                        if (playerGeneticOrigin.bonusStats.stamina) effectiveBoost1 *= (1 + playerGeneticOrigin.bonusStats.stamina);
-                        if (playerGeneticOrigin.bonusStats.attack) effectiveBoost2 *= (1 + playerGeneticOrigin.bonusStats.attack);
-                    }
         
                     const newSta = currentStats.stamina + effectiveBoost1;
                     const deltaStaClass = effectiveBoost1 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
@@ -1548,61 +1518,88 @@
         }
 
         function createSingleNPC(level = 1) {
-            // --- NEW: Get player base stats for the given level ---
             const baseStats = PLAYER_LEVEL_STATS[level];
             if (!baseStats) {
                 console.error(`Cannot create NPC: No stats found for player level ${level}`);
-                return; // Exit if the level is invalid
+                return; 
             }
-    
-            // --- NEW: Helper function to get the random stat multiplier (-20% to +50%) ---
-            const getRandomStatMultiplier = () => {
-                return (Math.random() * 0.5) + 0.7;
-            };
-    
-            // --- NEW: Calculate final stats using the base stats and a random multiplier ---
-            const finalHp = Math.round(baseStats.maxHp * getRandomStatMultiplier());
-            const finalAttack = Math.round(baseStats.attack * getRandomStatMultiplier());
-            const finalDefense = Math.round(baseStats.defense * getRandomStatMultiplier());
-            const finalStamina = Math.round(baseStats.stamina * getRandomStatMultiplier());
-            const finalStealth = Math.round(baseStats.stealth * getRandomStatMultiplier());
-            const finalSpeed = Math.round(baseStats.speed * getRandomStatMultiplier());
-    
-            // --- EXISTING: All of your spawning logic is preserved below ---
+        
+            let finalName, finalEmoji, geneticOrigin = null, finalRotation; // CHANGED: Added finalRotation
+            let npcAbilities = {};
+        
+            const getRandomStatMultiplier = () => (Math.random() * 0.5) + 0.7;
+            let finalHp = Math.round(baseStats.maxHp * getRandomStatMultiplier());
+            let finalAttack = Math.round(baseStats.attack * getRandomStatMultiplier());
+            let finalDefense = Math.round(baseStats.defense * getRandomStatMultiplier());
+            let finalStamina = Math.round(baseStats.stamina * getRandomStatMultiplier());
+            let finalStealth = Math.round(baseStats.stealth * getRandomStatMultiplier());
+            let finalSpeed = Math.round(baseStats.speed * getRandomStatMultiplier());
+        
+            if (Math.random() < 0.25) {
+                geneticOrigin = geneticOrigins[Math.floor(Math.random() * geneticOrigins.length)];
+        
+                const levelDescriptor = LEVEL_DESCRIPTIONS[level - 1] || 'Unknown';
+                finalName = `${geneticOrigin.name} ${levelDescriptor}`;
+                finalEmoji = geneticOrigin.emoji;
+                finalRotation = -Math.PI / 2 + geneticOrigin.rotation; // Calculate the final, absolute rotation for elites
+        
+                if (geneticOrigin.startingAbilityKey) {
+                    npcAbilities[geneticOrigin.startingAbilityKey] = 1;
+                }
+        
+                if (geneticOrigin.bonusStats) {
+                    if (geneticOrigin.bonusStats.maxHp) finalHp = Math.round(finalHp * (1 + geneticOrigin.bonusStats.maxHp));
+                    if (geneticOrigin.bonusStats.attack) finalAttack = Math.round(finalAttack * (1 + geneticOrigin.bonusStats.attack));
+                    if (geneticOrigin.bonusStats.defense) finalDefense = Math.round(finalDefense * (1 + geneticOrigin.bonusStats.defense));
+                    if (geneticOrigin.bonusStats.stamina) finalStamina = Math.round(finalStamina * (1 + geneticOrigin.bonusStats.stamina));
+                    if (geneticOrigin.bonusStats.stealth) finalStealth = Math.round(finalStealth * (1 + geneticOrigin.bonusStats.stealth));
+                    if (geneticOrigin.bonusStats.speed) finalSpeed = Math.round(finalSpeed * (1 + geneticOrigin.bonusStats.speed));
+                }
+        
+                console.log(`An elite ${finalName} has spawned!`);
+        
+            } else {
+                finalEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
+                const speciesInfo = npcEmojiNames[finalEmoji] || { name: 'Creature', rotation: Math.PI / 2 }; // CHANGED: Get the whole info object
+                const levelDescriptor = LEVEL_DESCRIPTIONS[level - 1] || 'Unknown';
+                finalName = `${speciesInfo.name} ${levelDescriptor}`;
+                finalRotation = speciesInfo.rotation; // CHANGED: Assign rotation for standard NPCs
+            }
+        
             const minNpcNpcDistance = 300;
             let newNpcX, newNpcY;
             let validSpawn = false;
             let attempts = 0;
             const maxAttempts = 100;
-    
+        
             const screenBuffer = 100;
             const playerViewWorldX_min = cameraX - screenBuffer;
             const playerViewWorldX_max = cameraX + (canvas.width / zoomScale) + screenBuffer;
             const playerViewWorldY_min = cameraY - screenBuffer;
             const playerViewWorldY_max = cameraY + (canvas.height / zoomScale) + screenBuffer;
-    
+        
             while (!validSpawn && attempts < maxAttempts) {
                 newNpcX = Math.random() * worldWidth;
                 newNpcY = Math.random() * worldHeight;
-    
+        
                 const distToPlayer = Math.sqrt(Math.pow(newNpcX - playerX, 2) + Math.pow(newNpcY - playerY, 2));
                 if (distToPlayer < 700) {
                     attempts++;
                     continue;
                 }
-    
+        
                 const isInsidePlayerView = (
                     newNpcX + npcSize / 2 > playerViewWorldX_min &&
                     newNpcX - npcSize / 2 < playerViewWorldX_max &&
                     newNpcY + npcSize / 2 > playerViewWorldY_min &&
                     newNpcY + npcSize / 2 < playerViewWorldY_max
                 );
-    
+        
                 if (isInsidePlayerView) {
                     attempts++;
                     continue;
                 }
-    
+        
                 let tooCloseToOtherNpc = false;
                 for (const existingNpc of npcs) {
                     const distFromOtherNpc = Math.sqrt(Math.pow(newNpcX - existingNpc.x, 2) + Math.pow(newNpcY - existingNpc.y, 2));
@@ -1611,28 +1608,27 @@
                         break;
                     }
                 }
-    
+        
                 if (!tooCloseToOtherNpc) {
                     validSpawn = true;
                 }
                 attempts++;
             }
-    
+        
             if (!validSpawn) {
                 console.warn("Could not find a valid spawn location for NPC after multiple attempts. Spawning randomly within world.");
                 newNpcX = Math.random() * worldWidth;
                 newNpcY = Math.random() * worldHeight;
             }
-    
+        
             newNpcX = Math.max(npcSize / 2, Math.min(newNpcX, worldWidth - npcSize / 2));
             newNpcY = Math.max(npcSize / 2, Math.min(newNpcY, worldHeight - npcSize / 2));
-    
+        
             const pathingTypes = ['line', 'circle', 'polygon'];
             const pathingType = pathingTypes[Math.floor(Math.random() * pathingTypes.length)];
             const patrolRadius = 75 + Math.random() * 50;
             let patrolWaypoints = [];
-    
-            // Pathing types
+        
             if (pathingType === 'line') {
                 patrolWaypoints = generateLinePath(newNpcX, newNpcY, patrolRadius);
             } else if (pathingType === 'circle') {
@@ -1640,27 +1636,24 @@
             } else if (pathingType === 'polygon') {
                 patrolWaypoints = generatePolygonPath(newNpcX, newNpcY, patrolRadius, 3, 6);
             }
-            
-            // --- Clamp all generated waypoints to be within the world bounds ---
+        
             patrolWaypoints.forEach(waypoint => {
                 waypoint.x = Math.max(npcSize / 2, Math.min(waypoint.x, worldWidth - npcSize / 2));
                 waypoint.y = Math.max(npcSize / 2, Math.min(waypoint.y, worldHeight - npcSize / 2));
             });
-    
-            const chosenEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
-            const speciesName = npcEmojiNames[chosenEmoji] || 'Creature';
-            const levelDescriptor = LEVEL_DESCRIPTIONS[level - 1] || 'Unknown';
-            const chosenName = `${speciesName} ${levelDescriptor}`;
-    
+        
             return {
                 level: level,
                 id: npcs.length + 1,
-                name: chosenName,
+                name: finalName,
                 x: newNpcX,
                 y: newNpcY,
                 size: npcSize,
                 radius: npcRadius,
-                emoji: chosenEmoji,
+                emoji: finalEmoji,
+                rotation: finalRotation, // CHANGED: Add the final rotation to the object
+                geneticOrigin: geneticOrigin,
+                abilities: npcAbilities,
                 currentHp: finalHp,
                 maxHp: finalHp,
                 attack: finalAttack,
@@ -1672,8 +1665,8 @@
                 pathingType: pathingType,
                 currentPatrolPointIndex: 0,
                 patrolDirection: 1,
-                patrolTargetX: patrolWaypoints[0].x,
-                patrolTargetY: patrolWaypoints[0].y,
+                patrolTargetX: patrolWaypoints.length > 0 ? patrolWaypoints[0].x : newNpcX,
+                patrolTargetY: patrolWaypoints.length > 0 ? patrolWaypoints[0].y : newNpcY,
                 inCombat: false,
                 directionAngle: 0,
                 totalDamageDealtToPlayer: 0,
@@ -1685,7 +1678,6 @@
                 attackAnimStartTime: 0
             };
         }
-            
         function generateNPCs() {
             npcs = [];
             const numNPCsToGenerate = 3;
@@ -2741,7 +2733,13 @@
                 borderColor = '#FFD700'; // Gold border for swap mode/messages
             } else if (targetedNpc) {
                 messageToDisplay = targetedNpc.name;
-                borderColor = '#FF8C00'; // Orange border for NPC target
+            
+                // Check if the targeted NPC is an elite with a genetic origin
+                if (targetedNpc.geneticOrigin) {
+                    borderColor = '#FF0000'; // Use vibrant red for elite targets
+                } else {
+                    borderColor = '#FF8C00'; // Use standard orange for normal targets
+                }
             }
 
             if (!messageToDisplay || gameState !== 'inGame') return; // Only draw if message exists and game is active
@@ -2904,7 +2902,7 @@
                     }
 
                     ctx.translate(npcDrawX, npcDrawY);
-                    ctx.rotate(npc.directionAngle + Math.PI / 2);
+                    ctx.rotate(npc.directionAngle + npc.rotation);
 
                     const npcEmojiFontSize = npc.size * 1.5;
                     ctx.font = `${npcEmojiFontSize}px serif`;
@@ -3196,18 +3194,36 @@
             // If for some reason we don't have stats for this level, do nothing.
             if (!baseStats) return;
         
-            // Calculate the difference in max HP to heal the player on level up
+            // This is the NEW, CORRECTED code
             const oldMaxHp = playerStats.maxHp;
-            const newMaxHp = baseStats.maxHp + playerStatBonuses.maxHp;
-            const hpGained = newMaxHp - oldMaxHp;
-        
-            // Update all stats by adding the base for the level and any collected bonuses
-            playerStats.maxHp = newMaxHp;
-            playerStats.attack = baseStats.attack + playerStatBonuses.attack;
-            playerStats.defense = baseStats.defense + playerStatBonuses.defense;
-            playerStats.stamina = baseStats.stamina + playerStatBonuses.stamina;
-            playerStats.stealth = baseStats.stealth + playerStatBonuses.stealth;
-            playerStats.speed = baseStats.speed + playerStatBonuses.speed;
+            
+            // Calculate the combined base + bonus stats first
+            let combinedMaxHp = baseStats.maxHp + playerStatBonuses.maxHp;
+            let combinedAttack = baseStats.attack + playerStatBonuses.attack;
+            let combinedDefense = baseStats.defense + playerStatBonuses.defense;
+            let combinedStamina = baseStats.stamina + playerStatBonuses.stamina;
+            let combinedStealth = baseStats.stealth + playerStatBonuses.stealth;
+            let combinedSpeed = baseStats.speed + playerStatBonuses.speed;
+            
+            // Now, apply the genetic origin bonus if it exists
+            if (playerGeneticOrigin && playerGeneticOrigin.bonusStats) {
+                if (playerGeneticOrigin.bonusStats.maxHp) combinedMaxHp *= (1 + playerGeneticOrigin.bonusStats.maxHp);
+                if (playerGeneticOrigin.bonusStats.attack) combinedAttack *= (1 + playerGeneticOrigin.bonusStats.attack);
+                if (playerGeneticOrigin.bonusStats.defense) combinedDefense *= (1 + playerGeneticOrigin.bonusStats.defense);
+                if (playerGeneticOrigin.bonusStats.stamina) combinedStamina *= (1 + playerGeneticOrigin.bonusStats.stamina);
+                if (playerGeneticOrigin.bonusStats.stealth) combinedStealth *= (1 + playerGeneticOrigin.bonusStats.stealth);
+                if (playerGeneticOrigin.bonusStats.speed) combinedSpeed *= (1 + playerGeneticOrigin.bonusStats.speed);
+            }
+            
+            const hpGained = combinedMaxHp - oldMaxHp;
+            
+            // Update playerStats with the final calculated values
+            playerStats.maxHp = combinedMaxHp;
+            playerStats.attack = combinedAttack;
+            playerStats.defense = combinedDefense;
+            playerStats.stamina = combinedStamina;
+            playerStats.stealth = combinedStealth;
+            playerStats.speed = combinedSpeed;
         
             // When max HP increases, heal the player by the amount gained
             if (hpGained > 0) {
