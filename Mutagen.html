@@ -1651,7 +1651,8 @@
                 size: npcSize,
                 radius: npcRadius,
                 emoji: finalEmoji,
-                rotation: finalRotation, // CHANGED: Add the final rotation to the object
+                rotation: finalRotation,
+                combatTarget: null,
                 geneticOrigin: geneticOrigin,
                 abilities: npcAbilities,
                 currentHp: finalHp,
@@ -1662,7 +1663,7 @@
                 stealth: finalStealth,
                 speed: finalSpeed,
                 patrolWaypoints: patrolWaypoints,
-                pathingType: pathingType,
+                pathingType: geneticOrigin ? 'roam' : pathingType,
                 currentPatrolPointIndex: 0,
                 patrolDirection: 1,
                 patrolTargetX: patrolWaypoints.length > 0 ? patrolWaypoints[0].x : newNpcX,
@@ -2117,39 +2118,62 @@
 
                 npcs.forEach(npc => {
                     if (!npc.inCombat) { // NPC patrols if not in combat
-                        const currentWaypoint = npc.patrolWaypoints[npc.currentPatrolPointIndex];
-                        const dx = currentWaypoint.x - npc.x;
-                        const dy = currentWaypoint.y - npc.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-
                         const currentCalculatedNpcSpeed = Math.max(0.1, baseNpcSpeed * (1 + npc.speed / 100));
-
-                        if (distance > currentCalculatedNpcSpeed) {
-                            npc.directionAngle = Math.atan2(dy, dx);
-                        }
-
-                        if (distance < currentCalculatedNpcSpeed) {
-                            // Reached current waypoint, move to next
-                            if (npc.pathingType === 'line') {
-                                // For line pathing, reverse direction when reaching an endpoint
-                                if (npc.currentPatrolPointIndex === npc.patrolWaypoints.length - 1) {
-                                    npc.patrolDirection = -1; // Move backward
-                                } else if (npc.currentPatrolPointIndex === 0) {
-                                    npc.patrolDirection = 1; // Move forward
-                                }
-                                npc.currentPatrolPointIndex += npc.patrolDirection;
-
-                            } else { // 'circle' or 'polygon'
-                                npc.currentPatrolPointIndex = (npc.currentPatrolPointIndex + 1) % npc.patrolWaypoints.length;
-                            }
-                            npc.patrolTargetX = npc.patrolWaypoints[npc.currentPatrolPointIndex].x;
-                            npc.patrolTargetY = npc.patrolWaypoints[npc.currentPatrolPointIndex].y;
+                    
+                        // This logic can fail if an NPC has no waypoints, so we'll add a check.
+                        if (!npc.patrolTargetX || !npc.patrolTargetY) {
+                            // If an NPC has no target (e.g. a roam NPC on its first frame), it does nothing this frame.
+                            // It will generate a target on the next frame.
                         } else {
-                            const ratio = currentCalculatedNpcSpeed / distance;
-                            npc.x += dx * ratio;
-                            npc.y += dy * ratio;
+                            const dx = npc.patrolTargetX - npc.x;
+                            const dy = npc.patrolTargetY - npc.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                            // Point the NPC toward its target if it's not already there
+                            if (distance > currentCalculatedNpcSpeed) {
+                                npc.directionAngle = Math.atan2(dy, dx);
+                            }
+                    
+                            // --- Handle Pathing ---
+                            if (distance < currentCalculatedNpcSpeed) { // If the NPC has reached its target...
+                                if (npc.pathingType === 'roam') {
+                                    // --- Roaming Logic for Elite NPCs ---
+                                    const roamAngle = Math.random() * Math.PI * 2;
+                                    const roamDistance = Math.random() * 1000; // Max distance of 1000
+                    
+                                    let newX = npc.x + Math.cos(roamAngle) * roamDistance;
+                                    let newY = npc.y + Math.sin(roamAngle) * roamDistance;
+                    
+                                    newX = Math.max(npc.size / 2, Math.min(newX, worldWidth - npc.size / 2));
+                                    newY = Math.max(npc.size / 2, Math.min(newY, worldHeight - npc.size / 2));
+                    
+                                    npc.patrolTargetX = newX;
+                                    npc.patrolTargetY = newY;
+                    
+                                } else {
+                                    // --- Standard Pathing Logic (Line, Circle, Polygon) ---
+                                    if (npc.pathingType === 'line') {
+                                        if (npc.currentPatrolPointIndex === npc.patrolWaypoints.length - 1) {
+                                            npc.patrolDirection = -1;
+                                        } else if (npc.currentPatrolPointIndex === 0) {
+                                            npc.patrolDirection = 1;
+                                        }
+                                        npc.currentPatrolPointIndex += npc.patrolDirection;
+                                    } else { // 'circle' or 'polygon'
+                                        npc.currentPatrolPointIndex = (npc.currentPatrolPointIndex + 1) % npc.patrolWaypoints.length;
+                                    }
+                                    npc.patrolTargetX = npc.patrolWaypoints[npc.currentPatrolPointIndex].x;
+                                    npc.patrolTargetY = npc.patrolWaypoints[npc.currentPatrolPointIndex].y;
+                                }
+                            } else {
+                                // Move towards the current target
+                                const ratio = currentCalculatedNpcSpeed / distance;
+                                npc.x += dx * ratio;
+                                npc.y += dy * ratio;
+                            }
                         }
-
+                    
+                        // Clamp NPC position to world bounds every frame for safety
                         npc.x = Math.max(npc.size / 2, Math.min(npc.x, worldWidth - npc.size / 2));
                         npc.y = Math.max(npc.size / 2, Math.min(npc.y, worldHeight - npc.size / 2));
                     }
@@ -3821,26 +3845,26 @@
                 return;
             }
 
-            if (event.key.toLowerCase() === 'm' && (gameState === 'inGame' || gameState === 'pausedMap')) {
-                // If game is paused by admin/origin panel, prevent map toggle
+            if (event.key.toLowerCase() === 'm' && gameState === 'inGame') {
+                // If an overlay panel is open, prevent map toggle
                 if (adminPanel.style.display === 'flex' || originSelectionPopup.style.display === 'flex') {
                     console.log("Cannot toggle map while Admin/Origin panel is open.");
                     return;
                 }
-                if (gameState === 'inGame') {
-                    gameState = 'pausedMap';
-                    isMapModeActive = true;
-                    isMoving = false; // Stop player movement when pausing
-                    showTargetIndicator = false; // Hide target indicator
-                    canvas.style.cursor = 'default'; // Change cursor to default for map
-                } else if (gameState === 'pausedMap') {
-                    gameState = 'inGame';
-                    isMapModeActive = false;
-                    canvas.style.cursor = 'crosshair'; // Restore cursor for game
+            
+                // Toggle map mode ON/OFF without pausing the game state
+                isMapModeActive = !isMapModeActive;
+            
+                // Update the cursor to match the current mode
+                canvas.style.cursor = isMapModeActive ? 'default' : 'crosshair';
+            
+                // Stop player movement when opening the map for better user experience
+                if (isMapModeActive) {
+                    isMoving = false;
+                    showTargetIndicator = false;
                 }
                 return; // Consume the 'm' key press
             }
-
             if (event.key.toLowerCase() === 'o') { // Toggle hitbox visibility
                 showHitCircles = !showHitCircles;
                 console.log(`Hitcircles visibility: ${showHitCircles ? 'ON' : 'OFF'}`);
