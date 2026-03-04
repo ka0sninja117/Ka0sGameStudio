@@ -1592,7 +1592,7 @@
                     newNpcX + npcSize / 2 > playerViewWorldX_min &&
                     newNpcX - npcSize / 2 < playerViewWorldX_max &&
                     newNpcY + npcSize / 2 > playerViewWorldY_min &&
-                    newNpcY + npcSize / 2 < playerViewWorldY_max
+                    newNpcY - npcSize / 2 < playerViewWorldY_max
                 );
         
                 if (isInsidePlayerView) {
@@ -1982,6 +1982,7 @@
                                         maxHp: npc.maxHp,
                                         id: npc.id,
                                         name: npc.name,
+                                        emoji: npc.emoji,
                                         totalDamageDealtByPlayer: npc.totalDamageReceivedFromPlayer,
                                         totalDamageReceivedByPlayer: npc.totalDamageDealtToPlayer
                                     });
@@ -2209,9 +2210,7 @@
                         showTargetIndicator = false;
                         // targetedNpc is *not* cleared here, as player might still want to target the NPC without being in combat
                         console.log("Combat ended: distance or ability used.");
-                        return; // Stop processing combat for this frame if it ended
-                    }
-
+                    } else {
 
                     // Player attack logic: Only if targetedNpc is set AND it's the current combatTarget
                     if (targetedNpc && targetedNpc === combatTarget) {
@@ -2259,6 +2258,7 @@
                             maxHp: combatTarget.maxHp,
                             id: combatTarget.id,
                             name: combatTarget.name,
+                            emoji: combatTarget.emoji,
                             totalDamageDealtByPlayer: combatTarget.totalDamageReceivedFromPlayer,
                             totalDamageReceivedByPlayer: combatTarget.totalDamageDealtToPlayer
                         });
@@ -2280,6 +2280,7 @@
                             npcs.push(createSingleNPC(levelOfNpcToSpawn));
                         }
                     }
+                    } // end else (combatShouldContinue)
                 }
             }
 
@@ -3810,7 +3811,7 @@
                     const rect = input.getBoundingClientRect();
                     // Check for input fields specifically
                     if (globalMouseX >= rect.left && globalMouseX <= rect.right &&
-                        globalMouseY >= rect.top && globalMouseY >= rect.bottom) {
+                        globalMouseY >= rect.top && globalMouseY <= rect.bottom) {
                         isHoveringButton = true;
                     }
                 });
