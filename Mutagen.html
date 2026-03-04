@@ -1025,6 +1025,10 @@
         // --- NPC ID Counter (monotonically increasing to prevent ID reuse) ---
         let npcIdCounter = 0;
 
+        // --- Pre-ability target: saved when any movement ability fires so targeting
+        //     can be restored once the ability completes. ---
+        let preAbilityTarget = null;
+
         // Attack animation variables
         const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation
         const ATTACK_LURCH_DISTANCE = 8; // pixels for the lurch distance
@@ -1753,7 +1757,7 @@
                 textY = defender.y + Math.sin(anglePlayerToNpc + Math.PI) * offsetDistance;
         
                 floatingDamageTexts.push({
-                    value: effectiveDamage.toFixed(1),
+                    value: actualHpReduction.toFixed(1),
                     x: textX, y: textY, color: 'yellow',
                     timestamp: performance.now(), duration: duration, floatDuration: duration
                 });
@@ -1768,7 +1772,7 @@
                 textY = playerY + Math.sin(angleNpcToPlayer + Math.PI) * offsetDistance;
         
                 floatingDamageTexts.push({
-                    value: effectiveDamage.toFixed(1),
+                    value: actualHpReduction.toFixed(1),
                     x: textX, y: textY, color: 'red',
                     timestamp: currentTime, duration: duration, floatDuration: duration
                 });
@@ -1830,8 +1834,16 @@
                     determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
                 }
             } else {
-                targetedNpc = null; // Clear target if no NPC is found
+                // Restore pre-ability target if one was saved and is still alive
+                const resumeTarget = targetedNpc || preAbilityTarget;
+                if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                    targetedNpc = resumeTarget;
+                    isMoving = true;
+                } else {
+                    targetedNpc = null;
+                }
             }
+            preAbilityTarget = null;
 
             // Update player direction based on mouse when unburrowing (ending burrow)
             const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
@@ -1850,6 +1862,14 @@
             npcs.forEach(npc => npc.dashedThrough = false); // Reset dash-through status
             startCooldown('dash'); // Apply cooldown for early termination
             lastActivatedAbilityRef = null;
+
+            // Resume targeting if a target was active before the dash
+            const resumeTarget = targetedNpc || preAbilityTarget;
+            if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                targetedNpc = resumeTarget;
+                isMoving = true;
+            }
+            preAbilityTarget = null;
         }
 
 
@@ -2035,13 +2055,29 @@
                                     determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
                                 }
                             } else {
-                                targetedNpc = null; // Clear target if no NPC is found
+                                // Pounce missed — restore pre-ability target if still alive
+                                const resumeTarget = preAbilityTarget;
+                                if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                                    targetedNpc = resumeTarget;
+                                    isMoving = true;
+                                } else {
+                                    targetedNpc = null;
+                                }
                             }
 
                         } else if (lastActivatedAbilityRef === 'dash') {
                             postMovementImmobilityDuration = 0;
                             npcs.forEach(npc => npc.dashedThrough = false);
+
+                            // Resume targeting if a target was active before the dash
+                            const resumeTarget = targetedNpc || preAbilityTarget;
+                            if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                                targetedNpc = resumeTarget;
+                                isMoving = true;
+                            }
                         }
+
+                        preAbilityTarget = null;
 
                         if (postMovementImmobilityDuration > 0) {
                             setTimeout(() => {
@@ -3206,6 +3242,7 @@
             canMoveFreeLy = true;
             playerVisualScale = 1;
             lastActivatedAbilityRef = null;
+            preAbilityTarget = null;
 
             generateForestElements();
             generateNPCs(); // Re-generate NPCs
@@ -3942,6 +3979,7 @@
             }
 
             if (abilityKey === 'burrow') {
+                preAbilityTarget = targetedNpc; // Save target so it can be restored after burrow
                 isBurrowing = true;
                 burrowStartTime = performance.now();
                 canMoveFreeLy = true;
@@ -3952,6 +3990,7 @@
                     return;
                 }
 
+                preAbilityTarget = targetedNpc; // Save target so it can be restored after ability
                 startCooldown(abilityKey);
                 lastActivatedAbilityRef = abilityKey;
 
@@ -3976,6 +4015,7 @@
                     actualTravelDistance = DASH_BASE_DISTANCE;
                     dx = Math.cos(playerDirectionAngle);
                     dy = Math.sin(playerDirectionAngle);
+                    npcs.forEach(npc => npc.dashedThrough = false); // Ensure clean state at dash start
                 }
 
                 movementAbilityStartX = playerX;
