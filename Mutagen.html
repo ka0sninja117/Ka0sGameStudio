@@ -1385,22 +1385,44 @@
                 }
             }
         ];
-        // XP thresholds at which each higher NPC tier becomes available.
-        // Index 0 = unlock level 2, index 1 = unlock level 3, index 2 = unlock level 4.
-        const NPC_LEVEL_UNLOCK_XP = [5, 50, 500];
+        // Controls how steeply spawn probability falls off with level distance from the player.
+        // 0.1 = each level away is 10× less likely. Lower = sharper drop-off, higher = flatter spread.
+        const NPC_SPAWN_DECAY = 0.1;
 
-        // Returns the level to use when spawning a replacement NPC.
-        // Once a tier unlocks, spawns are an equal 50/50 mix of that tier and the one below.
+        // Returns the NPC level to use when spawning a replacement.
+        // The "center" of the distribution is the player's level plus fractional progress toward
+        // the next level (up to +0.7), so the mix shifts gradually rather than snapping at thresholds.
+        // Any NPC level can technically spawn; probability just decays exponentially with distance.
         function getSpawnableNpcLevel() {
-            const xp = playerStats.currentXp;
-            let maxLevel = 1;
-            for (let i = 0; i < NPC_LEVEL_UNLOCK_XP.length; i++) {
-                if (xp >= NPC_LEVEL_UNLOCK_XP[i]) maxLevel = i + 2;
-                else break;
+            const level = playerStats.playerLevel;
+            const xp    = playerStats.currentXp;
+
+            // Linear progress within the current level (0–1)
+            const startXp = XP_THRESHOLDS[level - 1] || 0;
+            const endXp   = XP_THRESHOLDS[level];
+            const progress = Number.isFinite(endXp)
+                ? Math.min(1, (xp - startXp) / (endXp - startXp))
+                : 0;
+
+            // Spawn center shifts up to 0.7 levels ahead of the player as they near the threshold
+            const center = level + progress * 0.7;
+
+            // Build a weight for each NPC level: 10× drop per full level of distance
+            const weights = [];
+            for (let n = 1; n <= MAX_PLAYER_LEVEL; n++) {
+                weights.push(Math.pow(NPC_SPAWN_DECAY, Math.abs(n - center)));
             }
-            if (maxLevel === 1) return 1;
-            return Math.random() < 0.5 ? maxLevel : maxLevel - 1;
+
+            // Weighted random pick
+            const total = weights.reduce((sum, w) => sum + w, 0);
+            let rand = Math.random() * total;
+            for (let n = 1; n <= MAX_PLAYER_LEVEL; n++) {
+                rand -= weights[n - 1];
+                if (rand <= 0) return n;
+            }
+            return MAX_PLAYER_LEVEL;
         }
+
         const npcPreferredAbilityMap = {
             '🐞': 'Tough Skin',
             '🕷️': 'Instinct',
