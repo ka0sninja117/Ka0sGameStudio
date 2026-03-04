@@ -1021,6 +1021,7 @@
         // --- Session Stats (for game over screen) ---
         let npcKillCount = 0;
         let gameStartTime = 0;
+        let survivedTimeMs = 0; // Frozen at moment of death
 
         // --- NPC ID Counter (monotonically increasing to prevent ID reuse) ---
         let npcIdCounter = 0;
@@ -1917,6 +1918,7 @@
             const shouldRunGameLogic = gameState === 'inGame' && adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex';
 
             if (playerStats.currentHp <= 0 && gameState !== 'gameOver') {
+                survivedTimeMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
                 gameOver = true;
                 gameState = 'gameOver'; // Set game state to game over
                 cancelAnimationFrame(animationFrameId); // Stop the animation loop
@@ -1943,6 +1945,7 @@
                         });
                         // Check for game over after hunger damage
                         if (playerStats.currentHp <= 0) {
+                            survivedTimeMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
                             gameOver = true;
                             gameState = 'gameOver';
                             cancelAnimationFrame(animationFrameId);
@@ -3084,9 +3087,8 @@
                     ctx.font = `bold 48px "Inter", sans-serif`;
                     ctx.fillText("GAME OVER", cx, cy - 90);
 
-                    // Stats
-                    const survivedMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
-                    const survivedSec = Math.floor(survivedMs / 1000);
+                    // Stats (survivedTimeMs is frozen at moment of death)
+                    const survivedSec = Math.floor(survivedTimeMs / 1000);
                     const minutes = Math.floor(survivedSec / 60);
                     const seconds = survivedSec % 60;
                     const timeStr = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
@@ -3252,6 +3254,7 @@
             playerGeneticOrigin = null;
             npcKillCount = 0;
             gameStartTime = 0;
+            survivedTimeMs = 0;
             npcIdCounter = 0;
 
             // Reset game state to start screen
