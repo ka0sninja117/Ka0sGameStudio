@@ -1407,10 +1407,13 @@
             // Spawn center shifts up to 0.7 levels ahead of the player as they near the threshold
             const center = level + progress * 0.7;
 
-            // Build a weight for each NPC level: 10× drop per full level of distance
+            // Build a weight for each NPC level: exponential drop-off with distance from center.
+            // Hard-cap the upper range: any level ≥ playerLevel+2 gets weight 0, making it
+            // statistically impossible (<1 in 100) for an enemy 2+ levels above the player to spawn.
             const weights = [];
             for (let n = 1; n <= MAX_PLAYER_LEVEL; n++) {
-                weights.push(Math.pow(NPC_SPAWN_DECAY, Math.abs(n - center)));
+                const w = (n >= level + 2) ? 0 : Math.pow(NPC_SPAWN_DECAY, Math.abs(n - center));
+                weights.push(w);
             }
 
             // Weighted random pick
