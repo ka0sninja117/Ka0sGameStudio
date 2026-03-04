@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ka0s Game Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            min-height: 100vh;
+            background-color: #111;
+            background-image:
+                radial-gradient(ellipse at 20% 50%, rgba(80, 0, 120, 0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(0, 80, 160, 0.15) 0%, transparent 60%);
+            font-family: 'Inter', sans-serif;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 20px 80px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        header h1 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: clamp(1.2rem, 4vw, 2rem);
+            color: #fff;
+            text-shadow: 0 0 20px rgba(160, 80, 255, 0.6), 0 0 40px rgba(160, 80, 255, 0.3);
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+
+        header p {
+            color: #888;
+            font-size: 0.95rem;
+            letter-spacing: 1px;
+        }
+
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            width: 100%;
+            max-width: 960px;
+        }
+
+        .game-card {
+            background: #1c1c1c;
+            border: 1px solid #2e2e2e;
+            border-radius: 16px;
+            padding: 32px 28px;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .game-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            border-radius: inherit;
+        }
+
+        .game-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+        }
+
+        .game-card:hover::before { opacity: 1; }
+
+        /* Per-card accent colors */
+        .card-mutagen { border-top: 3px solid #a855f7; }
+        .card-mutagen:hover { border-color: #a855f7; box-shadow: 0 12px 40px rgba(168, 85, 247, 0.25); }
+        .card-mutagen .game-icon { color: #a855f7; }
+
+        .card-gtg { border-top: 3px solid #22c55e; }
+        .card-gtg:hover { border-color: #22c55e; box-shadow: 0 12px 40px rgba(34, 197, 94, 0.25); }
+        .card-gtg .game-icon { color: #22c55e; }
+
+        .card-sub { border-top: 3px solid #3b82f6; }
+        .card-sub:hover { border-color: #3b82f6; box-shadow: 0 12px 40px rgba(59, 130, 246, 0.25); }
+        .card-sub .game-icon { color: #3b82f6; }
+
+        .game-icon {
+            font-size: 2rem;
+            line-height: 1;
+        }
+
+        .game-title {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: #fff;
+        }
+
+        .game-desc {
+            font-size: 0.875rem;
+            color: #999;
+            line-height: 1.6;
+            flex-grow: 1;
+        }
+
+        .play-btn {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #ccc;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s ease;
+        }
+
+        .game-card:hover .play-btn { color: #fff; }
+
+        .play-btn::after {
+            content: '→';
+            transition: transform 0.2s ease;
+        }
+
+        .game-card:hover .play-btn::after { transform: translateX(4px); }
+
+        footer {
+            margin-top: 80px;
+            color: #444;
+            font-size: 0.75rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Ka0s Game Studio</h1>
+        <p>Pick a game and play</p>
+    </header>
+
+    <div class="games-grid">
+        <a class="game-card card-mutagen" href="Mutagen.html">
+            <div class="game-icon">🧬</div>
+            <div class="game-title">Mutagen</div>
+            <div class="game-desc">A dark, fast-paced game of mutations and survival. How long can you hold out?</div>
+            <div class="play-btn">Play now</div>
+        </a>
+
+        <a class="game-card card-gtg" href="Game the Game.html">
+            <div class="game-icon">🎮</div>
+            <div class="game-title">Game the Game</div>
+            <div class="game-desc">A colorful retro adventure. Earn points, beat the odds, and game the system.</div>
+            <div class="play-btn">Play now</div>
+        </a>
+
+        <a class="game-card card-sub" href="Submarine current.html">
+            <div class="game-icon">🚢</div>
+            <div class="game-title">Submarine Bridge</div>
+            <div class="game-desc">Take command of a submarine bridge simulator. Navigate the deep with precision.</div>
+            <div class="play-btn">Play now</div>
+        </a>
+    </div>
+
+    <footer>Ka0s Game Studio &mdash; All games made with HTML &amp; JavaScript</footer>
+</body>
+</html>
