@@ -2464,11 +2464,12 @@
                     }
                 });
 
-                // NPC automatic combat initiation if player is in range and not already in combat with that NPC
+                // NPC automatic combat initiation if player is in range and not already in combat with that NPC.
+                // Note: targetedNpc is intentionally NOT set here — the player must choose to counter-attack.
+                // This allows the player to run away freely when an NPC initiates contact.
                 if (!inCombat && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce')) { // Updated from jump
                     for (const npc of npcs) {
                         if (checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
-                            // NPCs should initiate combat automatically when in range, regardless of player's `targetedNpc` state.
                             inCombat = true;
                             combatTarget = npc;
                             combatTarget.inCombat = true;
@@ -2480,7 +2481,6 @@
                                     : 1000 + Math.random() * 2000;
                             }
                             combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration;
-                            targetedNpc = npc; // Auto-target so player can counter-attack
                             // Pass player's details with isPlayer:true for correct first attacker logic
                             determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
                             break; // Only one combat at a time
