@@ -506,6 +506,27 @@
         .flipped-dna {
             transform: translate(-50%, -50%) scaleY(-1);
         }
+        .ability-option-already-selected {
+            opacity: 0.45;
+            cursor: not-allowed !important;
+            pointer-events: none;
+            position: relative;
+        }
+        .ability-option-already-selected::after {
+            content: '(Already Selected)';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #ccc;
+            background: rgba(0, 0, 0, 0.45);
+            border-radius: inherit;
+            letter-spacing: 0.5px;
+            pointer-events: none;
+        }
 
 
         @keyframes popupAppear {
@@ -3464,6 +3485,8 @@
             const currentOwned = playerAbilities[passiveRewardAbility.key] || 0;
             const abilityLevel = (currentOwned >= 1 && playerStats.playerLevel >= 2) ? 2 : 1;
             const isUpgrade = abilityLevel === 2;
+            // Grey out if already at max level, or already has lv1 but can't upgrade yet
+            const isAlreadySelected = currentOwned >= 2 || (currentOwned >= 1 && !isUpgrade);
 
             const abilityNameHtml = isUpgrade
                 ? `<span style='color:${colorOrange};'>${passiveRewardAbility.name}</span> <span style='color:#00CED1; font-size:0.85em;'>⬆ Lv. 2</span>`
@@ -3476,13 +3499,17 @@
             optionFElement.querySelector('.stat-details').innerHTML = `
                 <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>F</span></p>
             `;
-            optionFElement.onclick = () => {
-                if (activeChoiceMade) return;
-                updateHotbarSlot(0, passiveRewardAbility, abilityLevel); // Assign to F slot (index 0)
-                activeChoiceMade = true;
-                disableButtonRow(activeRow, optionFElement.id);
-                checkAndClosePopup();
-            };
+            if (isAlreadySelected) {
+                optionFElement.classList.add('ability-option-already-selected');
+            } else {
+                optionFElement.onclick = () => {
+                    if (activeChoiceMade) return;
+                    updateHotbarSlot(0, passiveRewardAbility, abilityLevel); // Assign to F slot (index 0)
+                    activeChoiceMade = true;
+                    disableButtonRow(activeRow, optionFElement.id);
+                    checkAndClosePopup();
+                };
+            }
             activeRow.appendChild(optionFElement);
 
             // Always append the decline button in the middle
@@ -3503,13 +3530,17 @@
             optionRElement.querySelector('.stat-details').innerHTML = `
                 <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>R</span></p>
             `;
-            optionRElement.onclick = () => {
-                if (activeChoiceMade) return;
-                updateHotbarSlot(1, passiveRewardAbility, abilityLevel); // Assign to R slot (index 1)
-                activeChoiceMade = true;
-                disableButtonRow(activeRow, optionRElement.id);
-                checkAndClosePopup();
-            };
+            if (isAlreadySelected) {
+                optionRElement.classList.add('ability-option-already-selected');
+            } else {
+                optionRElement.onclick = () => {
+                    if (activeChoiceMade) return;
+                    updateHotbarSlot(1, passiveRewardAbility, abilityLevel); // Assign to R slot (index 1)
+                    activeChoiceMade = true;
+                    disableButtonRow(activeRow, optionRElement.id);
+                    checkAndClosePopup();
+                };
+            }
             activeRow.appendChild(optionRElement);
         }
 
