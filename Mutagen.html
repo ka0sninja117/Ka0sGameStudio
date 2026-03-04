@@ -1385,7 +1385,47 @@
                 }
             }
         ];
-        // Map NPC emoji to their preferred passive ability name
+        // Controls how steeply spawn probability falls off with level distance from the player.
+        // 0.1 = each level away is 10× less likely. Lower = sharper drop-off, higher = flatter spread.
+        const NPC_SPAWN_DECAY = 0.44; // ~5% chance of L1 NPC at max level. Lower = tighter cluster, higher = more variety.
+
+        // Returns the NPC level to use when spawning a replacement.
+        // The "center" of the distribution is the player's level plus fractional progress toward
+        // the next level (up to +0.7), so the mix shifts gradually rather than snapping at thresholds.
+        // Any NPC level can technically spawn; probability just decays exponentially with distance.
+        function getSpawnableNpcLevel() {
+            const level = playerStats.playerLevel;
+            const xp    = playerStats.currentXp;
+
+            // Linear progress within the current level (0–1)
+            const startXp = XP_THRESHOLDS[level - 1] || 0;
+            const endXp   = XP_THRESHOLDS[level];
+            const progress = Number.isFinite(endXp)
+                ? Math.min(1, (xp - startXp) / (endXp - startXp))
+                : 0;
+
+            // Spawn center shifts up to 0.7 levels ahead of the player as they near the threshold
+            const center = level + progress * 0.7;
+
+            // Build a weight for each NPC level: exponential drop-off with distance from center.
+            // Hard-cap the upper range: any level ≥ playerLevel+2 gets weight 0, making it
+            // statistically impossible (<1 in 100) for an enemy 2+ levels above the player to spawn.
+            const weights = [];
+            for (let n = 1; n <= MAX_PLAYER_LEVEL; n++) {
+                const w = (n >= level + 2) ? 0 : Math.pow(NPC_SPAWN_DECAY, Math.abs(n - center));
+                weights.push(w);
+            }
+
+            // Weighted random pick
+            const total = weights.reduce((sum, w) => sum + w, 0);
+            let rand = Math.random() * total;
+            for (let n = 1; n <= MAX_PLAYER_LEVEL; n++) {
+                rand -= weights[n - 1];
+                if (rand <= 0) return n;
+            }
+            return MAX_PLAYER_LEVEL;
+        }
+
         const npcPreferredAbilityMap = {
             '🐞': 'Tough Skin',
             '🕷️': 'Instinct',
@@ -2125,13 +2165,8 @@
                                     }
                                 // Ensure new NPCs are spawned when one dies
                                     while (npcs.length < MAX_ENEMIES) {
-                                // Determine what level of NPC to spawn
-                                let levelOfNpcToSpawn = playerStats.playerLevel;
-                                if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
-                                    levelOfNpcToSpawn = playerStats.playerLevel + 1;
-                                }
-                                npcs.push(createSingleNPC(levelOfNpcToSpawn));
-                            }
+                                        npcs.push(createSingleNPC(getSpawnableNpcLevel()));
+                                    }
                                 }
                             }
                         });
@@ -2411,7 +2446,7 @@
                                     npcs = npcs.filter(n => n !== target);
                                     returnToPatrol(npc);
                                     while (npcs.length < MAX_ENEMIES) {
-                                        npcs.push(createSingleNPC(Math.max(1, target.level)));
+                                        npcs.push(createSingleNPC(getSpawnableNpcLevel()));
                                     }
                                 }
                             }
@@ -2536,12 +2571,7 @@
                         targetedNpc = null; // Clear target on death
 
                         while (npcs.length < MAX_ENEMIES) {
-                            // Determine what level of NPC to spawn
-                            let levelOfNpcToSpawn = playerStats.playerLevel;
-                            if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
-                                levelOfNpcToSpawn = playerStats.playerLevel + 1;
-                            }
-                            npcs.push(createSingleNPC(levelOfNpcToSpawn));
+                            npcs.push(createSingleNPC(getSpawnableNpcLevel()));
                         }
                     }
                     } // end else (combatShouldContinue)
