@@ -1723,7 +1723,7 @@
                 aggroTarget: null,        // null | 'player' | <npc reference>
                 loseInterestDuration: 0,  // ms; randomised when chase begins
                 loseInterestAt: 0,        // timestamp when NPC gives up chase
-                detectionRadius: level >= 2 ? 250 : 0,
+                detectionRadius: level >= 2 ? 400 : 0,
                 directionAngle: 0,
                 totalDamageDealtToPlayer: 0,
                 totalDamageReceivedFromPlayer: 0,
@@ -2322,27 +2322,27 @@
                         // Clamp NPC position to world bounds every frame for safety
                         npc.x = Math.max(npc.size / 2, Math.min(npc.x, worldWidth - npc.size / 2));
                         npc.y = Math.max(npc.size / 2, Math.min(npc.y, worldHeight - npc.size / 2));
+                    }
+                });
 
-                        // --- Level 2 detection scan ---
-                        if (npc.level >= 2) {
-                            // Detect player (burrowed players are invisible to detection)
-                            if (!isBurrowing) {
-                                const pdx = playerX - npc.x, pdy = playerY - npc.y;
-                                if (Math.sqrt(pdx * pdx + pdy * pdy) <= npc.detectionRadius) {
-                                    enterChase(npc, 'player');
-                                }
-                            }
-                            // Detect equal/lower-level NPCs (skip the player's current combatTarget)
-                            if (npc.state === 'patrol') {
-                                for (const other of npcs) {
-                                    if (other !== npc && other !== combatTarget && other.level <= npc.level) {
-                                        const odx = other.x - npc.x, ody = other.y - npc.y;
-                                        if (Math.sqrt(odx * odx + ody * ody) <= npc.detectionRadius) {
-                                            enterChase(npc, other);
-                                            break;
-                                        }
-                                    }
-                                }
+                // --- Level 2 detection scan (runs every frame, independent of movement) ---
+                npcs.forEach(npc => {
+                    if (npc.level < 2 || npc.state !== 'patrol') return;
+                    // Detect player (burrowed players are undetectable)
+                    if (!isBurrowing) {
+                        const pdx = playerX - npc.x, pdy = playerY - npc.y;
+                        if (Math.sqrt(pdx * pdx + pdy * pdy) <= npc.detectionRadius) {
+                            enterChase(npc, 'player');
+                            return;
+                        }
+                    }
+                    // Detect equal/lower-level NPCs (skip the player's current combatTarget)
+                    for (const other of npcs) {
+                        if (other !== npc && other !== combatTarget && other.level <= npc.level) {
+                            const odx = other.x - npc.x, ody = other.y - npc.y;
+                            if (Math.sqrt(odx * odx + ody * ody) <= npc.detectionRadius) {
+                                enterChase(npc, other);
+                                return;
                             }
                         }
                     }
