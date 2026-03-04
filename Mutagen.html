@@ -1021,6 +1021,7 @@
         // --- Session Stats (for game over screen) ---
         let npcKillCount = 0;
         let gameStartTime = 0;
+        let survivedTimeMs = 0; // Frozen at moment of death
 
         // --- NPC ID Counter (monotonically increasing to prevent ID reuse) ---
         let npcIdCounter = 0;
@@ -1087,6 +1088,24 @@
         const POUNCE_BASE_DISTANCE = 100; // Base distance for Pounce (renamed from JUMP_BASE_DISTANCE)
         const POUNCE_FIXED_DURATION = 350; // milliseconds (e.g., 350ms for a quick hop) (renamed from JUMP_FIXED_DURATION)
         const DASH_BASE_DISTANCE = 150 * 1.5; // Base distance for Dash (100 * 1.5) increased by 50%
+
+        // --- Level 2 Ability Stats ---
+        const POUNCE_LV2_DISTANCE = 140;
+        const POUNCE_LV2_DURATION = 260;       // ms — snappier flight
+        const POUNCE_LV2_POST_LAND_LOCK = 100; // ms recovery (down from 250)
+        const POUNCE_LV2_LAND_DAMAGE_MULT = 1.25; // impact strike on landing
+        const POUNCE_LV2_COOLDOWN = 3500;
+
+        const DASH_LV2_DISTANCE = 325;
+        const DASH_LV2_SPEED_FACTOR = 2.75;    // faster dash, shorter window
+        const DASH_LV2_DAMAGE_MULT = 1.5;      // per enemy passed through
+        const DASH_LV2_COOLDOWN = 3500;
+
+        const BURROW_LV2_MAX_DURATION = 7500;
+        const BURROW_LV2_SPEED_MULT = 0.7;     // more mobile underground (up from 0.5)
+        const BURROW_LV2_ALPHA = 0.2;          // more hidden visually (down from 0.4)
+        const BURROW_LV2_EMERGE_RADIUS = 60;   // px — burst damage on unburrow
+        const BURROW_LV2_COOLDOWN = 3500;
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
         let movementAbilityStartX = 0;
@@ -1099,7 +1118,7 @@
 
         // New Burrow specific variables
         let isBurrowing = false;
-        const burrowMaxDuration = 5000; // 5 seconds
+        let burrowMaxDuration = 5000; // 5 seconds (updated to 7500 at Lv2)
         let burrowStartTime = 0;
 
         // New visual effect variables
@@ -1813,6 +1832,17 @@
                 }, postMovementImmobilityDuration);
             }, 100);
 
+            // Lv2: burst damage to all NPCs within emerge radius on unburrow
+            if (playerAbilities.burrow >= 2) {
+                const emergeTime = performance.now();
+                npcs.forEach(npc => {
+                    const dist = Math.sqrt(Math.pow(npc.x - playerX, 2) + Math.pow(npc.y - playerY, 2));
+                    if (dist <= BURROW_LV2_EMERGE_RADIUS + npc.radius) {
+                        dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc, emergeTime);
+                    }
+                });
+            }
+
             // Check for collision with NPCs on unburrow
             let foundNpcToTarget = null;
             for (const npc of npcs) {
@@ -1917,6 +1947,7 @@
             const shouldRunGameLogic = gameState === 'inGame' && adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex';
 
             if (playerStats.currentHp <= 0 && gameState !== 'gameOver') {
+                survivedTimeMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
                 gameOver = true;
                 gameState = 'gameOver'; // Set game state to game over
                 cancelAnimationFrame(animationFrameId); // Stop the animation loop
@@ -1943,6 +1974,7 @@
                         });
                         // Check for game over after hunger damage
                         if (playerStats.currentHp <= 0) {
+                            survivedTimeMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
                             gameOver = true;
                             gameState = 'gameOver';
                             cancelAnimationFrame(animationFrameId);
@@ -1982,7 +2014,8 @@
                         playerVisualScale = 1;
                         npcs.forEach(npc => {
                             if (!npc.dashedThrough && checkCircleCollision(playerX, playerY, playerRadius, npc.x, npc.y, npc.radius)) {
-                                dealDamage({ attack: playerStats.attack, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc, currentTime); // Pass currentTime
+                                const dashDmgMult = playerAbilities.dash >= 2 ? DASH_LV2_DAMAGE_MULT : 1;
+                                dealDamage({ attack: playerStats.attack * dashDmgMult, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, npc, currentTime); // Pass currentTime
                                 npc.dashedThrough = true;
                                 if (npc.currentHp <= 0) {
                                     const xpGained = NPC_XP_REWARDS[npc.level] || 0;
@@ -2033,7 +2066,7 @@
                         showTargetIndicator = false; // Clear target indicator after ability completion
 
                         if (lastActivatedAbilityRef === 'pounce') { // Updated from jump
-                            postMovementImmobilityDuration = 250;
+                            postMovementImmobilityDuration = playerAbilities.pounce >= 2 ? POUNCE_LV2_POST_LAND_LOCK : 250;
 
                             // NEW: Check for collision with NPCs on pounce landing
                             let foundNpcToTarget = null;
@@ -2045,6 +2078,10 @@
                             }
 
                             if (foundNpcToTarget) {
+                                // Lv2: deal impact damage on landing before combat starts
+                                if (playerAbilities.pounce >= 2) {
+                                    dealDamage({ attack: playerStats.attack * POUNCE_LV2_LAND_DAMAGE_MULT, isPlayer: true, x: playerX, y: playerY, radius: playerRadius }, foundNpcToTarget, currentTime);
+                                }
                                 targetedNpc = foundNpcToTarget;
                                 isMoving = true; // Player will attempt to engage this target
                                 // showTargetIndicator handled above
@@ -2101,7 +2138,7 @@
 
                     let currentCalculatedPlayerSpeed = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
                     if (isBurrowing) {
-                        currentCalculatedPlayerSpeed *= 0.5;
+                        currentCalculatedPlayerSpeed *= playerAbilities.burrow >= 2 ? BURROW_LV2_SPEED_MULT : 0.5;
                     }
 
                     if (targetedNpc) {
@@ -2498,13 +2535,11 @@
                     ctx.textBaseline = 'bottom';
                     ctx.fillText(slot.abilityName, slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize - 5);
 
-                    if (abilityLevel > 1) {
-                        ctx.fillStyle = '#00CED1';
-                        ctx.font = `bold ${currentHotbarSlotSize * 0.2}px "Inter", sans-serif`;
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'top';
-                        ctx.fillText(`Lv.${abilityLevel}`, slotX + 3, slotY + 3);
-                    }
+                    ctx.fillStyle = abilityLevel >= 2 ? '#00CED1' : '#888888';
+                    ctx.font = `bold ${currentHotbarSlotSize * 0.2}px "Inter", sans-serif`;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(`Lv.${abilityLevel}`, slotX + 3, slotY + 3);
 
                     const cooldownRemaining = getCooldownRemaining(slot.abilityRef);
                     if (cooldownRemaining > 0) {
@@ -2904,7 +2939,7 @@
 
                 ctx.translate(playerDrawX, playerDrawY);
                 ctx.scale(playerVisualScale, playerVisualScale);
-                ctx.globalAlpha = isBurrowing ? 0.4 : 1;
+                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : 1;
                 ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
 
                 const emojiFontSize = playerSize * 1.5;
@@ -2934,7 +2969,7 @@
                     ctx.save();
                     ctx.translate(playerDrawX, playerDrawY); // Use playerDrawX/Y for consistency
                     ctx.scale(playerVisualScale, playerVisualScale);
-                    ctx.globalAlpha = isBurrowing ? 0.4 : 1;
+                    ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : 1;
                     ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
                 }
                 ctx.restore();
@@ -3084,9 +3119,8 @@
                     ctx.font = `bold 48px "Inter", sans-serif`;
                     ctx.fillText("GAME OVER", cx, cy - 90);
 
-                    // Stats
-                    const survivedMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
-                    const survivedSec = Math.floor(survivedMs / 1000);
+                    // Stats (survivedTimeMs is frozen at moment of death)
+                    const survivedSec = Math.floor(survivedTimeMs / 1000);
                     const minutes = Math.floor(survivedSec / 60);
                     const seconds = survivedSec % 60;
                     const timeStr = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
@@ -3252,6 +3286,7 @@
             playerGeneticOrigin = null;
             npcKillCount = 0;
             gameStartTime = 0;
+            survivedTimeMs = 0;
             npcIdCounter = 0;
 
             // Reset game state to start screen
@@ -3348,7 +3383,7 @@
         }
 
         // Updated updateHotbarSlot function
-        function updateHotbarSlot(newSlotIndex, newAbility) {
+        function updateHotbarSlot(newSlotIndex, newAbility, level = 1) {
             const newAbilityKey = newAbility.key;
 
             // Find the current hotbar slot where newAbility is ALREADY assigned (if any).
@@ -3371,11 +3406,7 @@
                 hotbarSlots[oldSlotIndex].abilityName = nameInNewSlot || 'Empty';
                 hotbarSlots[oldSlotIndex].icon = iconInNewSlot || '';
 
-                // If the old slot had a real ability (not empty), ensure its playerAbilities level is 1.
-                // If it was empty ('Empty'), its playerAbilities level for that key remains 0 (or undefined).
-                if (hotbarSlots[oldSlotIndex].abilityRef) {
-                    playerAbilities[hotbarSlots[oldSlotIndex].abilityRef] = 1;
-                }
+                // Displaced ability retains its current level — do not reset it.
             } else {
                 // If the new ability was NOT found in an existing slot,
                 // or it was already in the newSlotIndex (meaning no move/swap needed for it),
@@ -3387,11 +3418,23 @@
                 }
             }
 
-            // Finally, assign the new ability to the newSlotIndex, always at level 1
+            // Assign the new ability to the newSlotIndex at the given level
             hotbarSlots[newSlotIndex].abilityRef = newAbilityKey;
             hotbarSlots[newSlotIndex].abilityName = newAbility.name;
             hotbarSlots[newSlotIndex].icon = newAbility.hotbarIcon;
-            playerAbilities[newAbilityKey] = 1; // Always set to level 1 from these rewards
+            playerAbilities[newAbilityKey] = level;
+
+            // Sync cooldown duration and burrow max duration for Lv2
+            if (cooldowns[newAbilityKey]) {
+                cooldowns[newAbilityKey].duration = level >= 2
+                    ? (newAbilityKey === 'pounce' ? POUNCE_LV2_COOLDOWN
+                     : newAbilityKey === 'dash'   ? DASH_LV2_COOLDOWN
+                     : BURROW_LV2_COOLDOWN)
+                    : 5000;
+            }
+            if (newAbilityKey === 'burrow') {
+                burrowMaxDuration = level >= 2 ? BURROW_LV2_MAX_DURATION : 5000;
+            }
         }
 
 
@@ -3417,22 +3460,25 @@
                 return;
             }
 
-            // The level will always be 1 for now, as per new rules.
-            const abilityLevel = 1;
+            // Offer Lv2 upgrade if player already owns Lv1 and is at least player level 2
+            const currentOwned = playerAbilities[passiveRewardAbility.key] || 0;
+            const abilityLevel = (currentOwned >= 1 && playerStats.playerLevel >= 2) ? 2 : 1;
+            const isUpgrade = abilityLevel === 2;
+
+            const abilityNameHtml = isUpgrade
+                ? `<span style='color:${colorOrange};'>${passiveRewardAbility.name}</span> <span style='color:#00CED1; font-size:0.85em;'>⬆ Lv. 2</span>`
+                : `<span style='color:${colorOrange};'>${passiveRewardAbility.name} (Lv. 1)</span>`;
 
             // Create the left button (Assign to F)
             const optionFElement = createAbilityOptionElement(templateAbilityOption);
             optionFElement.id = `activeAbilityOption-F`;
-            // Updated text for ability name and level, now neon orange
-            optionFElement.querySelector('.ability-name').innerHTML = `<span style='color:${colorOrange};'>${passiveRewardAbility.name} (Lv. ${abilityLevel})</span>`;
-            // Clear passive-description-text as it's not applicable here (element already removed from template)
-            // Updated text for "Assign to:" and the key, with key larger and neon orange
+            optionFElement.querySelector('.ability-name').innerHTML = abilityNameHtml;
             optionFElement.querySelector('.stat-details').innerHTML = `
                 <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>F</span></p>
             `;
             optionFElement.onclick = () => {
                 if (activeChoiceMade) return;
-                updateHotbarSlot(0, passiveRewardAbility); // Assign to F slot (index 0)
+                updateHotbarSlot(0, passiveRewardAbility, abilityLevel); // Assign to F slot (index 0)
                 activeChoiceMade = true;
                 disableButtonRow(activeRow, optionFElement.id);
                 checkAndClosePopup();
@@ -3453,16 +3499,13 @@
             // Create the right button (Assign to R)
             const optionRElement = createAbilityOptionElement(templateAbilityOption);
             optionRElement.id = `activeAbilityOption-R`;
-            // Updated text for ability name and level, now neon orange
-            optionRElement.querySelector('.ability-name').innerHTML = `<span style='color:${colorOrange};'>${passiveRewardAbility.name} (Lv. ${abilityLevel})</span>`;
-            // Clear passive-description-text as it's not applicable here (element already removed from template)
-            // Updated text for "Assign to:" and the key, with key larger and neon orange
+            optionRElement.querySelector('.ability-name').innerHTML = abilityNameHtml;
             optionRElement.querySelector('.stat-details').innerHTML = `
                 <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>R</span></p>
             `;
             optionRElement.onclick = () => {
                 if (activeChoiceMade) return;
-                updateHotbarSlot(1, passiveRewardAbility); // Assign to R slot (index 1)
+                updateHotbarSlot(1, passiveRewardAbility, abilityLevel); // Assign to R slot (index 1)
                 activeChoiceMade = true;
                 disableButtonRow(activeRow, optionRElement.id);
                 checkAndClosePopup();
@@ -4007,12 +4050,13 @@
                         return;
                     }
                     playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX); // Update direction on Pounce
-                    actualTravelDistance = Math.min(POUNCE_BASE_DISTANCE, distanceToMouse);
+                    const pounceDist = playerAbilities.pounce >= 2 ? POUNCE_LV2_DISTANCE : POUNCE_BASE_DISTANCE;
+                    actualTravelDistance = Math.min(pounceDist, distanceToMouse);
                     dx = (currentMouseWorldX - playerX) / distanceToMouse;
                     dy = (currentMouseWorldY - playerY) / distanceToMouse;
                 } else if (abilityKey === 'dash') {
                     // Dash moves in player's current facing direction
-                    actualTravelDistance = DASH_BASE_DISTANCE;
+                    actualTravelDistance = playerAbilities.dash >= 2 ? DASH_LV2_DISTANCE : DASH_BASE_DISTANCE;
                     dx = Math.cos(playerDirectionAngle);
                     dy = Math.sin(playerDirectionAngle);
                     npcs.forEach(npc => npc.dashedThrough = false); // Ensure clean state at dash start
@@ -4034,9 +4078,9 @@
                 const playerActualSpeedPerFrame = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
 
                 if (abilityKey === 'pounce') {
-                    currentMovementAbilityDuration = POUNCE_FIXED_DURATION;
+                    currentMovementAbilityDuration = playerAbilities.pounce >= 2 ? POUNCE_LV2_DURATION : POUNCE_FIXED_DURATION;
                 } else if (abilityKey === 'dash') {
-                    const dashSpeedFactor = 2;
+                    const dashSpeedFactor = playerAbilities.dash >= 2 ? DASH_LV2_SPEED_FACTOR : 2;
                     const effectiveSpeed = playerActualSpeedPerFrame * dashSpeedFactor;
                     // Distance for duration calculation should be the actual distance traveled by dash
                     const distanceTravelledByDash = Math.sqrt(Math.pow(movementAbilityEndX - movementAbilityStartX, 2) + Math.pow(movementAbilityEndY - movementAbilityStartY, 2));
