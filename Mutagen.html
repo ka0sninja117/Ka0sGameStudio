@@ -1296,7 +1296,7 @@
         
                     const newStl = currentStats.stealth + effectiveBoost2;
                     const deltaStlClass = effectiveBoost2 >= 0 ? 'stat-change-positive' : 'stat-change-negative';
-                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${currentStats.stealth.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}</span>`);
+                    previewLines.push(`<span class="stat-name-bold-orange">Stealth</span>: ${currentStats.stealth.toFixed(1)}% ➡ <span class="${deltaStlClass}">${newStl.toFixed(1)}%</span>`);
         
                     return previewLines;
                 }
@@ -1930,6 +1930,7 @@
                             gameOver = true;
                             gameState = 'gameOver';
                             cancelAnimationFrame(animationFrameId);
+                            return;
                         }
                     } else {
                         playerStats.currentHunger++;
@@ -2188,6 +2189,7 @@
                             inCombat = true;
                             combatTarget = npc;
                             combatTarget.inCombat = true;
+                            targetedNpc = npc; // Auto-target so player can counter-attack
                             // Pass player's details with isPlayer:true for correct first attacker logic
                             determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
                             console.log(`Combat initiated by NPC ${npc.name}.`);
@@ -2374,6 +2376,18 @@
             let displayCurrent = currentValue.toFixed(0);
             let displayMax = maxValue.toFixed(0);
             if (type === 'xp') {
+                if (playerStats.playerLevel >= MAX_PLAYER_LEVEL) {
+                    ctx.fillText(`${labelText}: MAX`, x, y - 2);
+                    ctx.fillStyle = 'rgba(50, 50, 50, 0.8)';
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, width, height, cornerRadius);
+                    ctx.fill();
+                    ctx.fillStyle = '#4A90E2';
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, width, height, cornerRadius);
+                    ctx.fill();
+                    return;
+                }
                 displayMax = playerStats.xpToNextLevel.toFixed(0); // For XP, max is xpToNextLevel
             }
             ctx.fillText(`${labelText}: ${displayCurrent} / ${displayMax}`, x, y - 2); // Position 2px above the bar
