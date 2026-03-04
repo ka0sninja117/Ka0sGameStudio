@@ -1385,7 +1385,22 @@
                 }
             }
         ];
-        // Map NPC emoji to their preferred passive ability name
+        // XP thresholds at which each higher NPC tier becomes available.
+        // Index 0 = unlock level 2, index 1 = unlock level 3, index 2 = unlock level 4.
+        const NPC_LEVEL_UNLOCK_XP = [5, 50, 500];
+
+        // Returns the level to use when spawning a replacement NPC.
+        // Once a tier unlocks, spawns are an equal 50/50 mix of that tier and the one below.
+        function getSpawnableNpcLevel() {
+            const xp = playerStats.currentXp;
+            let maxLevel = 1;
+            for (let i = 0; i < NPC_LEVEL_UNLOCK_XP.length; i++) {
+                if (xp >= NPC_LEVEL_UNLOCK_XP[i]) maxLevel = i + 2;
+                else break;
+            }
+            if (maxLevel === 1) return 1;
+            return Math.random() < 0.5 ? maxLevel : maxLevel - 1;
+        }
         const npcPreferredAbilityMap = {
             '🐞': 'Tough Skin',
             '🕷️': 'Instinct',
@@ -2125,13 +2140,8 @@
                                     }
                                 // Ensure new NPCs are spawned when one dies
                                     while (npcs.length < MAX_ENEMIES) {
-                                // Determine what level of NPC to spawn
-                                let levelOfNpcToSpawn = playerStats.playerLevel;
-                                if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
-                                    levelOfNpcToSpawn = playerStats.playerLevel + 1;
-                                }
-                                npcs.push(createSingleNPC(levelOfNpcToSpawn));
-                            }
+                                        npcs.push(createSingleNPC(getSpawnableNpcLevel()));
+                                    }
                                 }
                             }
                         });
@@ -2411,7 +2421,7 @@
                                     npcs = npcs.filter(n => n !== target);
                                     returnToPatrol(npc);
                                     while (npcs.length < MAX_ENEMIES) {
-                                        npcs.push(createSingleNPC(Math.max(1, target.level)));
+                                        npcs.push(createSingleNPC(getSpawnableNpcLevel()));
                                     }
                                 }
                             }
@@ -2536,12 +2546,7 @@
                         targetedNpc = null; // Clear target on death
 
                         while (npcs.length < MAX_ENEMIES) {
-                            // Determine what level of NPC to spawn
-                            let levelOfNpcToSpawn = playerStats.playerLevel;
-                            if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
-                                levelOfNpcToSpawn = playerStats.playerLevel + 1;
-                            }
-                            npcs.push(createSingleNPC(levelOfNpcToSpawn));
+                            npcs.push(createSingleNPC(getSpawnableNpcLevel()));
                         }
                     }
                     } // end else (combatShouldContinue)
