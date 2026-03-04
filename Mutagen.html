@@ -3652,12 +3652,7 @@
                 const index = deadNpcs.indexOf(clickedDeadNpc);
                 if (index > -1) { deadNpcs.splice(index, 1); }
 
-                if (playerStats.playerLevel >= 2) {
-                    presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
-                } else {
-                    activeChoiceMade = true; // No active ability choice offered at this level
-                    checkAndClosePopup();
-                }
+                presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
                 disableButtonRow(passiveRow, passiveLeftOption.id); // Disable other options in this row after selection
             };
             passiveRow.appendChild(passiveLeftOption);
@@ -3707,12 +3702,7 @@
                 const index = deadNpcs.indexOf(clickedDeadNpc);
                 if (index > -1) { deadNpcs.splice(index, 1); }
 
-                if (playerStats.playerLevel >= 2) {
-                    presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
-                } else {
-                    activeChoiceMade = true; // No active ability choice offered at this level
-                    checkAndClosePopup();
-                }
+                presentActiveAbilityChoice(passiveAbilityChoiceData.ability.activeAbilityReward);
                 disableButtonRow(passiveRow, passiveRightOption.id); // Disable other options in this row after selection
             };
             passiveRow.appendChild(passiveRightOption);
