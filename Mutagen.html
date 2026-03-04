@@ -4041,6 +4041,18 @@
                     };
                     inputRow.appendChild(incrementButton);
 
+                    // Lock Tremor Sense controls until player is level 2+
+                    if (key === 'tremorSense' && playerStats.playerLevel < 2) {
+                        input.disabled = true;
+                        decrementButton.disabled = true;
+                        incrementButton.disabled = true;
+                        inputRow.title = 'Requires player level 2';
+                        const lockNote = document.createElement('span');
+                        lockNote.textContent = ' (Lv.2+)';
+                        lockNote.style.cssText = 'color:#888; font-size:0.8em; margin-left:4px;';
+                        inputRow.appendChild(lockNote);
+                    }
+
                     div.appendChild(inputRow); // Then add the input row
                 }
 
@@ -4078,8 +4090,10 @@
                         const abilityDetails = abilityDetailsMap[key];
                         if (abilityDetails) {
                             let assigned = false;
-                            // Try to assign to the first empty slot
-                            for (let i = 0; i < hotbarSlots.length; i++) {
+                            // Tremor Sense prefers E (2) then Q (3); others use first empty slot
+                            const slotPreference = (key === 'tremorSense') ? [2, 3, 0, 1, 4, 5, 6] : null;
+                            const slotOrder = slotPreference || hotbarSlots.map((_, i) => i);
+                            for (const i of slotOrder) {
                                 if (hotbarSlots[i].abilityRef === null) {
                                     hotbarSlots[i].abilityRef = key;
                                     hotbarSlots[i].abilityName = abilityDetails.name;
