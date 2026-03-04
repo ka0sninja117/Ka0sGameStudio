@@ -1018,6 +1018,17 @@
         const combatDelay = 500; // milliseconds (0.5 seconds) - base cooldown for continuous attacks
         let gameOver = false;
 
+        // --- Session Stats (for game over screen) ---
+        let npcKillCount = 0;
+        let gameStartTime = 0;
+
+        // --- NPC ID Counter (monotonically increasing to prevent ID reuse) ---
+        let npcIdCounter = 0;
+
+        // --- Pre-ability target: saved when any movement ability fires so targeting
+        //     can be restored once the ability completes. ---
+        let preAbilityTarget = null;
+
         // Attack animation variables
         const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation
         const ATTACK_LURCH_DISTANCE = 8; // pixels for the lurch distance
@@ -1556,7 +1567,6 @@
                     if (geneticOrigin.bonusStats.speed) finalSpeed = Math.round(finalSpeed * (1 + geneticOrigin.bonusStats.speed));
                 }
         
-                console.log(`An elite ${finalName} has spawned!`);
         
             } else {
                 finalEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
@@ -1644,7 +1654,7 @@
         
             return {
                 level: level,
-                id: npcs.length + 1,
+                id: ++npcIdCounter,
                 name: finalName,
                 x: newNpcX,
                 y: newNpcY,
@@ -1709,24 +1719,18 @@
         }
 
         function dealDamage(attacker, defender, currentTime) {
-            // 1. Calculate raw damage with flat defense.
-            // Calculate damage and ensure it is always at least 1.0
-            let effectiveDamage = Math.max(1.0, attacker.attack - defender.defense);
-        
-            // 2. Ensure that if any damage is done, it's at least 0.1.
+            // 1. Calculate raw damage with flat defense subtraction.
+            let effectiveDamage = attacker.attack - defender.defense;
+
+            // 2. If positive damage, floor it at 0.1; otherwise no damage is dealt.
             if (effectiveDamage > 0) {
                 effectiveDamage = Math.max(0.1, effectiveDamage);
             } else {
-                effectiveDamage = 0; // Otherwise, ensure damage is exactly 0.
+                effectiveDamage = 0;
             }
-        
+
             // 3. Round to one decimal place for clean numbers.
             effectiveDamage = Math.round(effectiveDamage * 10) / 10;
-        
-            // 4. Add the console log for debugging.
-            const attackerName = attacker.isPlayer ? "Player" : attacker.name;
-            const defenderName = defender.isPlayer ? "Player" : defender.name;
-            console.log(`${attackerName} attacks ${defenderName}: ${attacker.attack.toFixed(1)} Attack - ${defender.defense.toFixed(1)} Defense = ${effectiveDamage.toFixed(1)} Damage`);
         
             const actualHpReduction = Math.min(effectiveDamage, defender.currentHp);
         
@@ -1753,7 +1757,7 @@
                 textY = defender.y + Math.sin(anglePlayerToNpc + Math.PI) * offsetDistance;
         
                 floatingDamageTexts.push({
-                    value: effectiveDamage.toFixed(1),
+                    value: actualHpReduction.toFixed(1),
                     x: textX, y: textY, color: 'yellow',
                     timestamp: performance.now(), duration: duration, floatDuration: duration
                 });
@@ -1768,7 +1772,7 @@
                 textY = playerY + Math.sin(angleNpcToPlayer + Math.PI) * offsetDistance;
         
                 floatingDamageTexts.push({
-                    value: effectiveDamage.toFixed(1),
+                    value: actualHpReduction.toFixed(1),
                     x: textX, y: textY, color: 'red',
                     timestamp: currentTime, duration: duration, floatDuration: duration
                 });
@@ -1828,11 +1832,18 @@
                     combatTarget = targetedNpc;
                     combatTarget.inCombat = true;
                     determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
-                    console.log(`Combat initiated by unburrowing with ${combatTarget.name}.`);
                 }
             } else {
-                targetedNpc = null; // Clear target if no NPC is found
+                // Restore pre-ability target if one was saved and is still alive
+                const resumeTarget = targetedNpc || preAbilityTarget;
+                if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                    targetedNpc = resumeTarget;
+                    isMoving = true;
+                } else {
+                    targetedNpc = null;
+                }
             }
+            preAbilityTarget = null;
 
             // Update player direction based on mouse when unburrowing (ending burrow)
             const currentMouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
@@ -1851,7 +1862,14 @@
             npcs.forEach(npc => npc.dashedThrough = false); // Reset dash-through status
             startCooldown('dash'); // Apply cooldown for early termination
             lastActivatedAbilityRef = null;
-            console.log("Dash stopped early.");
+
+            // Resume targeting if a target was active before the dash
+            const resumeTarget = targetedNpc || preAbilityTarget;
+            if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                targetedNpc = resumeTarget;
+                isMoving = true;
+            }
+            preAbilityTarget = null;
         }
 
 
@@ -1884,13 +1902,11 @@
                 playerAttackCooldown = 0; // First attack is immediate
                 npcObj.lastAttackTime = currentTime + FIRST_STRIKE_DELAY;
                 npcObj.attackCooldown = 500; // Will be set to 500 after the first delayed attack
-                console.log("Player has first strike advantage.");
             } else {
                 npcObj.lastAttackTime = currentTime;
                 npcObj.attackCooldown = 0; // First attack is immediate
                 playerLastAttackTime = currentTime + FIRST_STRIKE_DELAY;
                 playerAttackCooldown = 500; // Will be set to 500 after the first delayed attack
-                console.log("NPC has first strike advantage.");
             }
         }
 
@@ -1975,6 +1991,7 @@
                                 
                                     // Hunger is reduced by the amount of XP gained, adjusted per level.
                                     reducePlayerHunger(xpGained);
+                                    npcKillCount++;
 
                                     deadNpcs.push({
                                         level: npc.level,
@@ -2002,7 +2019,6 @@
                                 let levelOfNpcToSpawn = playerStats.playerLevel;
                                 if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
                                     levelOfNpcToSpawn = playerStats.playerLevel + 1;
-                                    console.log(`Player is close to leveling! Spawning a Level ${levelOfNpcToSpawn} NPC.`);
                                 }
                                 npcs.push(createSingleNPC(levelOfNpcToSpawn));
                             }
@@ -2037,16 +2053,31 @@
                                     combatTarget = targetedNpc;
                                     combatTarget.inCombat = true;
                                     determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
-                                    console.log(`Combat initiated by pounce landing with ${combatTarget.name}.`); // Updated from jump
                                 }
                             } else {
-                                targetedNpc = null; // Clear target if no NPC is found
+                                // Pounce missed — restore pre-ability target if still alive
+                                const resumeTarget = preAbilityTarget;
+                                if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                                    targetedNpc = resumeTarget;
+                                    isMoving = true;
+                                } else {
+                                    targetedNpc = null;
+                                }
                             }
 
                         } else if (lastActivatedAbilityRef === 'dash') {
                             postMovementImmobilityDuration = 0;
                             npcs.forEach(npc => npc.dashedThrough = false);
+
+                            // Resume targeting if a target was active before the dash
+                            const resumeTarget = targetedNpc || preAbilityTarget;
+                            if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                                targetedNpc = resumeTarget;
+                                isMoving = true;
+                            }
                         }
+
+                        preAbilityTarget = null;
 
                         if (postMovementImmobilityDuration > 0) {
                             setTimeout(() => {
@@ -2085,7 +2116,6 @@
                                 combatTarget = targetedNpc;
                                 combatTarget.inCombat = true;
                                 determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
-                                console.log(`Combat initiated with ${combatTarget.name}.`);
                             }
                             isMoving = false; // Stop movement when combat starts
                             showTargetIndicator = false;
@@ -2192,7 +2222,6 @@
                             targetedNpc = npc; // Auto-target so player can counter-attack
                             // Pass player's details with isPlayer:true for correct first attacker logic
                             determineFirstAttackerAndSetTimers({ x: playerX, y: playerY, directionAngle: playerDirectionAngle, isPlayer: true }, combatTarget);
-                            console.log(`Combat initiated by NPC ${npc.name}.`);
                             break; // Only one combat at a time
                         }
                     }
@@ -2211,7 +2240,6 @@
                         isMoving = false; // Stop any ongoing player movement if combat ends this way
                         showTargetIndicator = false;
                         // targetedNpc is *not* cleared here, as player might still want to target the NPC without being in combat
-                        console.log("Combat ended: distance or ability used.");
                     } else {
 
                     // Player attack logic: Only if targetedNpc is set AND it's the current combatTarget
@@ -2243,7 +2271,6 @@
 
 
                     if (combatTarget.currentHp <= 0) {
-                        console.log(`NPC ${combatTarget.name} defeated.`);
                     
                         // Look up the XP reward based on the defeated NPC's level
                         const xpGained = NPC_XP_REWARDS[combatTarget.level] || 0;
@@ -2252,6 +2279,7 @@
                     
                         // Hunger is now reduced by the amount of XP gained adjusted per the user's level
                         reducePlayerHunger(xpGained);
+                        npcKillCount++;
 
                         deadNpcs.push({
                             level: combatTarget.level,
@@ -2277,7 +2305,6 @@
                             let levelOfNpcToSpawn = playerStats.playerLevel;
                             if (playerStats.currentXp >= (playerStats.xpToNextLevel * 0.9) && playerStats.playerLevel < MAX_PLAYER_LEVEL) {
                                 levelOfNpcToSpawn = playerStats.playerLevel + 1;
-                                console.log(`Player is close to leveling! Spawning a Level ${levelOfNpcToSpawn} NPC.`);
                             }
                             npcs.push(createSingleNPC(levelOfNpcToSpawn));
                         }
@@ -2415,6 +2442,16 @@
             ctx.beginPath();
             ctx.roundRect(x, y, fillWidth, height, cornerRadius); // Use fillWidth here
             ctx.fill();
+
+            // Flash the hunger bar outline when hunger is full (taking HP damage)
+            if (type === 'hunger' && currentValue >= maxValue) {
+                const flashAlpha = 0.5 + 0.5 * Math.sin(performance.now() / 150);
+                ctx.strokeStyle = `rgba(255, 80, 80, ${flashAlpha})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(x - 1, y - 1, width + 2, height + 2, cornerRadius + 1);
+                ctx.stroke();
+            }
         }
 
         function drawHotbar() {
@@ -2722,14 +2759,12 @@
                     updatePlayerSize();
                     playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
                     playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel];
-                    console.log(`Player leveled up to Lv.${playerStats.playerLevel}! Evolution: ${playerStats.playerEvolutionState}`);
                 }
 
             while (playerStats.playerLevel > 1 && playerStats.currentXp < XP_THRESHOLDS[playerStats.playerLevel - 1]) {
                 playerStats.playerLevel--;
                 playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
                 playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel]; // Update XP to next level for new lower level
-                console.log(`Player leveled down to Lv.${playerStats.playerLevel}! Evolution: ${playerStats.playerEvolutionState}`);
             }
 
             // Ensure xpToNextLevel is updated even if level doesn't change,
@@ -3035,18 +3070,36 @@
                 }
             }
                 if (gameOver) {
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                    ctx.fillStyle = 'white';
-                    ctx.font = `bold 48px "Inter", sans-serif`;
+                    const cx = canvas.width / 2;
+                    const cy = canvas.height / 2;
+
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
+
+                    // Title
+                    ctx.fillStyle = '#FF4444';
+                    ctx.font = `bold 48px "Inter", sans-serif`;
+                    ctx.fillText("GAME OVER", cx, cy - 90);
+
+                    // Stats
+                    const survivedMs = gameStartTime > 0 ? performance.now() - gameStartTime : 0;
+                    const survivedSec = Math.floor(survivedMs / 1000);
+                    const minutes = Math.floor(survivedSec / 60);
+                    const seconds = survivedSec % 60;
+                    const timeStr = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+
+                    ctx.fillStyle = '#cccccc';
+                    ctx.font = `18px "Inter", sans-serif`;
+                    ctx.fillText(`Level Reached: ${playerStats.playerLevel}`, cx, cy - 30);
+                    ctx.fillText(`Kills: ${npcKillCount}`, cx, cy - 5);
+                    ctx.fillText(`Survived: ${timeStr}`, cx, cy + 20);
 
                     const tryAgainButton = {
-                        x: canvas.width / 2 - 75,
-                        y: canvas.height / 2 + 20,
+                        x: cx - 75,
+                        y: cy + 55,
                         width: 150,
                         height: 50,
                         label: "Try Again",
@@ -3189,11 +3242,17 @@
             canMoveFreeLy = true;
             playerVisualScale = 1;
             lastActivatedAbilityRef = null;
+            preAbilityTarget = null;
 
             generateForestElements();
             generateNPCs(); // Re-generate NPCs
 
             gameOver = false;
+            selectedOrigin = null;
+            playerGeneticOrigin = null;
+            npcKillCount = 0;
+            gameStartTime = 0;
+            npcIdCounter = 0;
 
             // Reset game state to start screen
             gameState = 'startScreen';
@@ -3353,7 +3412,6 @@
 
             // Ensure we have a passiveRewardAbility to offer
             if (!passiveRewardAbility) {
-                console.log("No active ability to offer from passive. Auto-declining.");
                 activeChoiceMade = true;
                 checkAndClosePopup();
                 return;
@@ -3374,7 +3432,6 @@
             `;
             optionFElement.onclick = () => {
                 if (activeChoiceMade) return;
-                console.log(`Chose active ability: ${passiveRewardAbility.name} for slot F`);
                 updateHotbarSlot(0, passiveRewardAbility); // Assign to F slot (index 0)
                 activeChoiceMade = true;
                 disableButtonRow(activeRow, optionFElement.id);
@@ -3387,7 +3444,6 @@
             declineActiveButton.id = 'declineActiveButton';
             declineActiveButton.onclick = () => {
                 if (activeChoiceMade) return;
-                console.log("Declined active ability selection.");
                 activeChoiceMade = true;
                 disableButtonRow(activeRow, declineActiveButton.id);
                 checkAndClosePopup();
@@ -3406,7 +3462,6 @@
             `;
             optionRElement.onclick = () => {
                 if (activeChoiceMade) return;
-                console.log(`Chose active ability: ${passiveRewardAbility.name} for slot R`);
                 updateHotbarSlot(1, passiveRewardAbility); // Assign to R slot (index 1)
                 activeChoiceMade = true;
                 disableButtonRow(activeRow, optionRElement.id);
@@ -3537,7 +3592,6 @@
             declinePassiveButton.id = 'declinePassiveButton';
             declinePassiveButton.onclick = () => {
                 if (passiveChoiceMade) return;
-                console.log("Declined passive ability selection. No passive abilities chosen.");
                 passiveChoiceMade = true;
                 passiveAbilityChoiceData = null;
 
@@ -3794,7 +3848,7 @@
             if (gameOver) {
                 const tryAgainButton = {
                     x: canvas.width / 2 - 75,
-                    y: canvas.height / 2 + 20,
+                    y: canvas.height / 2 + 55,
                     width: 150,
                     height: 50,
                     label: "Try Again",
@@ -3849,7 +3903,6 @@
                 swapMessage = null; // Clear current swap message
                 if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
                 targetedNpc = null; // Clear general NPC target
-                console.log("Swap mode cancelled (key pressed).");
                 return; // Consume the key press to prevent it from doing anything else
             }
 
@@ -3863,7 +3916,6 @@
             if (event.key.toLowerCase() === 'm' && gameState === 'inGame') {
                 // If an overlay panel is open, prevent map toggle
                 if (adminPanel.style.display === 'flex' || originSelectionPopup.style.display === 'flex') {
-                    console.log("Cannot toggle map while Admin/Origin panel is open.");
                     return;
                 }
             
@@ -3882,7 +3934,6 @@
             }
             if (event.key.toLowerCase() === 'o') { // Toggle hitbox visibility
                 showHitCircles = !showHitCircles;
-                console.log(`Hitcircles visibility: ${showHitCircles ? 'ON' : 'OFF'}`);
                 return; // Consume the 'o' key press
             }
 
@@ -3899,7 +3950,6 @@
             const activeAbilitySlot = hotbarSlots[slotIndex];
 
             if (!activeAbilitySlot.abilityRef || playerAbilities[activeAbilitySlot.abilityRef] === 0) {
-                console.log(`Slot ${keybind.toUpperCase()} is empty or ability not unlocked.`);
                 return;
             }
 
@@ -3918,20 +3968,18 @@
             }
 
             if (isPerformingMovementAbility) {
-                console.log("Player is currently performing another movement ability.");
                 return;
             }
             if (isBurrowing && (abilityKey === 'pounce' || abilityKey === 'dash')) { // Updated from jump
-                 console.log("Cannot perform Pounce/Dash while burrowed.");
                  return;
             }
 
             if (isAbilityOnCooldown(abilityKey)) {
-                console.log(`${activeAbilitySlot.abilityName} is on cooldown!`);
                 return;
             }
 
             if (abilityKey === 'burrow') {
+                preAbilityTarget = targetedNpc; // Save target so it can be restored after burrow
                 isBurrowing = true;
                 burrowStartTime = performance.now();
                 canMoveFreeLy = true;
@@ -3939,10 +3987,10 @@
                 startCooldown('burrow');
             } else if (abilityKey === 'pounce' || abilityKey === 'dash') { // Updated from jump
                 if (!canMoveFreeLy) {
-                    console.log("Player is immobilized after a previous movement ability.");
                     return;
                 }
 
+                preAbilityTarget = targetedNpc; // Save target so it can be restored after ability
                 startCooldown(abilityKey);
                 lastActivatedAbilityRef = abilityKey;
 
@@ -3956,7 +4004,6 @@
                     const distanceToMouse = Math.sqrt(Math.pow(currentMouseWorldX - playerX, 2) + Math.pow(currentMouseWorldY - playerY, 2));
 
                     if (distanceToMouse === 0) {
-                        console.log("Cannot perform Pounce: mouse is on the player.");
                         return;
                     }
                     playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX); // Update direction on Pounce
@@ -3968,6 +4015,7 @@
                     actualTravelDistance = DASH_BASE_DISTANCE;
                     dx = Math.cos(playerDirectionAngle);
                     dy = Math.sin(playerDirectionAngle);
+                    npcs.forEach(npc => npc.dashedThrough = false); // Ensure clean state at dash start
                 }
 
                 movementAbilityStartX = playerX;
@@ -4024,7 +4072,7 @@
             if (gameOver) {
                 const tryAgainButton = {
                     x: canvas.width / 2 - 75,
-                    y: canvas.height / 2 + 20,
+                    y: canvas.height / 2 + 55,
                     width: 150,
                     height: 50,
                     label: "Try Again",
@@ -4086,7 +4134,6 @@
                                 swapMode = false;
                                 swapSourceSlotIndex = -1;
                                 targetedNpc = null; // Clear general NPC target as well
-                                console.log("Abilities swapped successfully!");
                             } else {
                                 // Clicked same slot, empty slot, or invalid slot: cancel swap mode
                                 swapMode = false;
@@ -4094,7 +4141,6 @@
                                 swapMessage = null; // Clear current swap message
                                 if (swapMessageTimer) clearTimeout(swapMessageTimer);
                                 targetedNpc = null; // Clear general NPC target
-                                console.log("Swap mode cancelled (invalid second click).");
                             }
                             return; // Consume the click
                         }
@@ -4106,7 +4152,6 @@
                     swapMessage = null; // Clear current swap message
                     if (swapMessageTimer) clearTimeout(swapMessageTimer);
                     targetedNpc = null; // Clear general NPC target
-                    console.log("Swap mode cancelled (clicked outside hotbar).");
                     return; // Consume the click
                 }
             }
@@ -4123,9 +4168,7 @@
                             swapSourceSlotIndex = i;
                             swapMessage = SWAP_INIT_TEXT; // Display initial swap message
                             targetedNpc = null; // Ensure no NPC target is displayed during swap
-                            console.log(`Clicked hotkey ${hotbarSlots[i].keybind}. Entering swap mode.`);
                         } else {
-                            console.log("Clicked empty hotbar slot. Not entering swap mode.");
                             // If user clicks empty slot, do nothing or provide feedback
                         }
                         return; // Prevent further click processing after hotbar interaction
@@ -4157,10 +4200,17 @@
                 const distClickToBone = Math.sqrt(Math.pow(clickWorldX - boneWorldX, 2) + Math.pow(clickWorldY - boneWorldY, 2));
 
                 // Only allow interaction if click is within bone's visual area AND player is within interaction range
-                if (distClickToBone < 20 && distPlayerToBone <= (playerRadius + LOOT_INTERACTION_RADIUS)) {
-                    clickedDeadNpc = deadNpc;
-                    showAbilitySelectionPopup(); // This shows the loot menu
-                    clickedOnNpc = true;
+                if (distClickToBone < 20) {
+                    if (distPlayerToBone <= (playerRadius + LOOT_INTERACTION_RADIUS)) {
+                        clickedDeadNpc = deadNpc;
+                        showAbilitySelectionPopup(); // This shows the loot menu
+                        clickedOnNpc = true;
+                    } else {
+                        swapMessage = "Too far to loot!";
+                        if (swapMessageTimer) clearTimeout(swapMessageTimer);
+                        swapMessageTimer = setTimeout(() => { swapMessage = null; }, 1500);
+                        clickedOnNpc = true; // Still consume the click
+                    }
                     break; // Exit loop after finding a dead NPC
                 }
             }
@@ -4208,7 +4258,6 @@
                 swapMessage = null; // Clear current swap message
                 if (swapMessageTimer) clearTimeout(swapMessageTimer); // Clear any pending timer
                 targetedNpc = null; // Clear general NPC target
-                console.log("Swap mode cancelled (right-click).");
                 return; // Consume the right-click
             }
 
@@ -4360,6 +4409,8 @@
             // Fully heal the player at the start of the game
             playerStats.currentHp = playerStats.maxHp;
             lastHungerIncreaseTime = performance.now(); // Initialize hunger timer
+            gameStartTime = performance.now(); // Track session start for game over stats
+            npcKillCount = 0;
 
 
             playerAbilities = {
@@ -4374,7 +4425,6 @@
                 if (initialAbility) {
                     playerAbilities[initialAbility.key] = 1; // Set level to 1
                     updateHotbarSlot(0, initialAbility); // Assign to first hotbar slot (F)
-                    console.log(`Assigned initial ability: ${initialAbility.name} to hotbar F.`);
                 }
             }
 
