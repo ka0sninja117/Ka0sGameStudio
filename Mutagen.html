@@ -99,6 +99,19 @@
             margin-bottom: 30px; /* Space between subtitle and button */
         }
 
+        .game-version {
+            font-size: 0.8em;
+            color: #8a7baa;
+            margin-top: 4px;
+        }
+
+        .admin-version {
+            display: block;
+            text-align: center;
+            margin-top: -6px;
+            margin-bottom: 8px;
+        }
+
         .game-subtitle span {
             font-weight: bold; /* Make all words bold */
             margin: 0 5px; /* Small space between words */
@@ -845,6 +858,7 @@
                     <span class="consume">Consume.</span>
                 </h2>
                 <button id="startGameButton" class="action-button">Start Game</button>
+                <span id="startScreenVersion" class="game-version"></span>
             </div>
         </div>
 
@@ -880,6 +894,7 @@
         <!-- Admin Panel Popup -->
         <div id="adminPanel" class="admin-panel" style="display: none;">
             <h2 class="admin-panel-title">Admin Panel</h2>
+            <span id="adminPanelVersion" class="game-version admin-version"></span>
             <div class="admin-section">
                 <h3>Player Stats & Abilities</h3>
                 <div id="adminStatsContainer" class="admin-grid">
@@ -903,6 +918,10 @@
     </div>
 
     <script>
+        const GAME_VERSION = 'v1.15';
+        document.getElementById('startScreenVersion').textContent = GAME_VERSION;
+        document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
+
         // Get the canvas element and its 2D rendering context
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -1629,18 +1648,19 @@
             let finalStealth = Math.round(baseStats.stealth * getRandomStatMultiplier());
             let finalSpeed = Math.round(baseStats.speed * getRandomStatMultiplier());
         
-            if (Math.random() < 0.25) {
+            if (level >= 2) {
+                // Level 2+ NPCs are genetic mutants — same icons the player can select
                 geneticOrigin = geneticOrigins[Math.floor(Math.random() * geneticOrigins.length)];
-        
+
                 const levelDescriptor = LEVEL_DESCRIPTIONS[level - 1] || 'Unknown';
                 finalName = `${geneticOrigin.name} ${levelDescriptor}`;
                 finalEmoji = geneticOrigin.emoji;
-                finalRotation = -Math.PI / 2 + geneticOrigin.rotation; // Calculate the final, absolute rotation for elites
-        
+                finalRotation = -Math.PI / 2 + geneticOrigin.rotation;
+
                 if (geneticOrigin.startingAbilityKey) {
                     npcAbilities[geneticOrigin.startingAbilityKey] = 1;
                 }
-        
+
                 if (geneticOrigin.bonusStats) {
                     if (geneticOrigin.bonusStats.maxHp) finalHp = Math.round(finalHp * (1 + geneticOrigin.bonusStats.maxHp));
                     if (geneticOrigin.bonusStats.attack) finalAttack = Math.round(finalAttack * (1 + geneticOrigin.bonusStats.attack));
@@ -1649,14 +1669,14 @@
                     if (geneticOrigin.bonusStats.stealth) finalStealth = Math.round(finalStealth * (1 + geneticOrigin.bonusStats.stealth));
                     if (geneticOrigin.bonusStats.speed) finalSpeed = Math.round(finalSpeed * (1 + geneticOrigin.bonusStats.speed));
                 }
-        
-        
+
             } else {
+                // Level 1 NPCs are common creatures (bugs, spiders, butterflies)
                 finalEmoji = npcEmojis[Math.floor(Math.random() * npcEmojis.length)];
-                const speciesInfo = npcEmojiNames[finalEmoji] || { name: 'Creature', rotation: Math.PI / 2 }; // CHANGED: Get the whole info object
+                const speciesInfo = npcEmojiNames[finalEmoji] || { name: 'Creature', rotation: Math.PI / 2 };
                 const levelDescriptor = LEVEL_DESCRIPTIONS[level - 1] || 'Unknown';
                 finalName = `${speciesInfo.name} ${levelDescriptor}`;
-                finalRotation = speciesInfo.rotation; // CHANGED: Assign rotation for standard NPCs
+                finalRotation = speciesInfo.rotation;
             }
         
             const minNpcNpcDistance = 300;
