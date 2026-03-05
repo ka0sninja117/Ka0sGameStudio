@@ -1020,13 +1020,15 @@
             pounce: 0, // Renamed from jump
             dash: 0,
             burrow: 0,
+            tremorSense: 0,
         };
 
         // Map for quick lookup of ability details for hotbar assignment
         const abilityDetailsMap = {
             'pounce': { name: 'Pounce', key: 'pounce', hotbarIcon: '🏃' }, // Renamed from jump
             'dash': { name: 'Dash', key: 'dash', hotbarIcon: '💨' },
-            'burrow': { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' }
+            'burrow': { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' },
+            'tremorSense': { name: 'Tremor Sense', key: 'tremorSense', hotbarIcon: '〰️' }
         };
         const allActiveAbilities = Object.values(abilityDetailsMap); // Array of all active ability objects
 
@@ -1139,6 +1141,7 @@
 
         // New Burrow specific variables
         let isBurrowing = false;
+        let isTremorSenseActive = false; // True while Tremor Sense key is held down
         let burrowMaxDuration = 5000; // 5 seconds (updated to 7500 at Lv2)
         let burrowStartTime = 0;
 
@@ -2251,6 +2254,9 @@
                     let currentCalculatedPlayerSpeed = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
                     if (isBurrowing) {
                         currentCalculatedPlayerSpeed *= playerAbilities.burrow >= 2 ? BURROW_LV2_SPEED_MULT : 0.5;
+                    }
+                    if (isTremorSenseActive) {
+                        currentCalculatedPlayerSpeed *= 0.5;
                     }
 
                     if (targetedNpc) {
@@ -3667,6 +3673,19 @@
 
 
         function presentActiveAbilityChoice(passiveRewardAbility) {
+            // Tremor Sense: 70% chance to replace Burrow when loot is from a level 2+ NPC
+            if (passiveRewardAbility && passiveRewardAbility.key === 'burrow' &&
+                clickedDeadNpc && clickedDeadNpc.level >= 2 && Math.random() < 0.70) {
+                passiveRewardAbility = abilityDetailsMap['tremorSense'];
+            }
+
+            // Tremor Sense slots into E (index 2) and Q (index 3); others use F (0) and R (1)
+            const isTremorSenseOffer = passiveRewardAbility && passiveRewardAbility.key === 'tremorSense';
+            const slotLeftIndex  = isTremorSenseOffer ? 2 : 0;
+            const slotRightIndex = isTremorSenseOffer ? 3 : 1;
+            const slotLeftKey    = hotbarSlots[slotLeftIndex].keybind;
+            const slotRightKey   = hotbarSlots[slotRightIndex].keybind;
+
             const activeChoiceSection = document.createElement('div');
             activeChoiceSection.id = 'activeChoiceSection';
             activeChoiceSection.className = 'active-ability-section';
@@ -3699,19 +3718,19 @@
                 ? `<span style='color:${colorOrange};'>${passiveRewardAbility.name}</span> <span style='color:#00CED1; font-size:0.85em;'>⬆ Lv. 2</span>`
                 : `<span style='color:${colorOrange};'>${passiveRewardAbility.name} (Lv. 1)</span>`;
 
-            // Create the left button (Assign to F)
+            // Create the left button (Assign to slotLeftKey: F or E)
             const optionFElement = createAbilityOptionElement(templateAbilityOption);
-            optionFElement.id = `activeAbilityOption-F`;
+            optionFElement.id = `activeAbilityOption-${slotLeftKey}`;
             optionFElement.querySelector('.ability-name').innerHTML = abilityNameHtml;
             optionFElement.querySelector('.stat-details').innerHTML = `
-                <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>F</span></p>
+                <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>${slotLeftKey}</span></p>
             `;
             if (isAlreadySelected) {
                 optionFElement.classList.add('ability-option-already-selected');
             } else {
                 optionFElement.onclick = () => {
                     if (activeChoiceMade) return;
-                    updateHotbarSlot(0, passiveRewardAbility, abilityLevel); // Assign to F slot (index 0)
+                    updateHotbarSlot(slotLeftIndex, passiveRewardAbility, abilityLevel);
                     activeChoiceMade = true;
                     disableButtonRow(activeRow, optionFElement.id);
                     checkAndClosePopup();
@@ -3730,19 +3749,19 @@
             };
             activeRow.appendChild(declineActiveButton);
 
-            // Create the right button (Assign to R)
+            // Create the right button (Assign to slotRightKey: R or Q)
             const optionRElement = createAbilityOptionElement(templateAbilityOption);
-            optionRElement.id = `activeAbilityOption-R`;
+            optionRElement.id = `activeAbilityOption-${slotRightKey}`;
             optionRElement.querySelector('.ability-name').innerHTML = abilityNameHtml;
             optionRElement.querySelector('.stat-details').innerHTML = `
-                <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>R</span></p>
+                <p class="stat-line" style='color:white;'>Assign to: <span style='color:${colorOrange}; font-size:1.2em; font-weight:bold;'>${slotRightKey}</span></p>
             `;
             if (isAlreadySelected) {
                 optionRElement.classList.add('ability-option-already-selected');
             } else {
                 optionRElement.onclick = () => {
                     if (activeChoiceMade) return;
-                    updateHotbarSlot(1, passiveRewardAbility, abilityLevel); // Assign to R slot (index 1)
+                    updateHotbarSlot(slotRightIndex, passiveRewardAbility, abilityLevel);
                     activeChoiceMade = true;
                     disableButtonRow(activeRow, optionRElement.id);
                     checkAndClosePopup();
@@ -4022,6 +4041,18 @@
                     };
                     inputRow.appendChild(incrementButton);
 
+                    // Lock Tremor Sense controls until player is level 2+
+                    if (key === 'tremorSense' && playerStats.playerLevel < 2) {
+                        input.disabled = true;
+                        decrementButton.disabled = true;
+                        incrementButton.disabled = true;
+                        inputRow.title = 'Requires player level 2';
+                        const lockNote = document.createElement('span');
+                        lockNote.textContent = ' (Lv.2+)';
+                        lockNote.style.cssText = 'color:#888; font-size:0.8em; margin-left:4px;';
+                        inputRow.appendChild(lockNote);
+                    }
+
                     div.appendChild(inputRow); // Then add the input row
                 }
 
@@ -4059,8 +4090,10 @@
                         const abilityDetails = abilityDetailsMap[key];
                         if (abilityDetails) {
                             let assigned = false;
-                            // Try to assign to the first empty slot
-                            for (let i = 0; i < hotbarSlots.length; i++) {
+                            // Tremor Sense prefers E (2) then Q (3); others use first empty slot
+                            const slotPreference = (key === 'tremorSense') ? [2, 3, 0, 1, 4, 5, 6] : null;
+                            const slotOrder = slotPreference || hotbarSlots.map((_, i) => i);
+                            for (const i of slotOrder) {
                                 if (hotbarSlots[i].abilityRef === null) {
                                     hotbarSlots[i].abilityRef = key;
                                     hotbarSlots[i].abilityName = abilityDetails.name;
@@ -4226,6 +4259,12 @@
 
             const abilityKey = activeAbilitySlot.abilityRef;
 
+            // Tremor Sense: hold-to-activate — starts on keydown, ends on keyup
+            if (abilityKey === 'tremorSense') {
+                isTremorSenseActive = true;
+                return;
+            }
+
             if (abilityKey === 'burrow' && isBurrowing) {
                 endBurrow();
                 startCooldown('burrow');
@@ -4326,6 +4365,11 @@
 
         window.addEventListener('keyup', (event) => {
             keysPressed[event.key.toLowerCase()] = false;
+            // Deactivate Tremor Sense when its key is released
+            const releasedSlot = hotbarSlots.find(slot => slot.keybind.toLowerCase() === event.key.toLowerCase());
+            if (releasedSlot && releasedSlot.abilityRef === 'tremorSense') {
+                isTremorSenseActive = false;
+            }
         });
 
         closeAdminPanelBtn.addEventListener('click', hideAllPanels);
