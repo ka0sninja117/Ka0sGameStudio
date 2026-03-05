@@ -1104,6 +1104,7 @@
         const MAX_ENEMIES = 5; // Maximum number of enemies allowed on the map
         let closestNpcAngle = 0; // Angle to the closest NPC for the radial indicator
         let closestNpcDistance = Infinity; // Distance to the closest NPC for dynamic indicator
+        let tremorSenseNpcData = []; // Array of {angle, distance} for all NPCs within Tremor Sense range
         // deadNpcs will store { x, y, maxHp, name, totalDamageDealtByPlayer, totalDamageReceivedByPlayer }
         let deadNpcs = [];
         const LOOT_INTERACTION_RADIUS = 30; // Radius for player to interact with loot bones
@@ -2637,6 +2638,7 @@
                 let tempClosestNpcAngle = 0;
                 let tempClosestNpcDistance = Infinity;
                 let foundClosest = false;
+                tremorSenseNpcData = [];
 
                 npcs.forEach(npc => {
                     const dx = npc.x - playerX;
@@ -2649,6 +2651,10 @@
                         tempClosestNpcDistance = distance;
                         foundClosest = true;
                     }
+
+                    if (isTremorSenseActive && distance <= 500) {
+                        tremorSenseNpcData.push({ angle: Math.atan2(dy, dx), distance });
+                    }
                 });
 
                 if (foundClosest) {
@@ -2659,6 +2665,7 @@
                 }
             } else {
                 closestNpcDistance = Infinity; // Hide indicator if not inGame or in map mode
+                tremorSenseNpcData = [];
             }
         }
 
@@ -3315,8 +3322,7 @@
                 }
 
             // Radial indicator only in normal play, not map mode and not game over
-            if (!isMapModeActive && closestNpcDistance !== Infinity && !gameOver) {
-                // Calculate the player's current position on the canvas.
+            if (!isMapModeActive && !gameOver) {
                 const playerCanvasX = (playerX - cameraX) * zoomScale;
                 const playerCanvasY = (playerY - cameraY) * zoomScale;
 
@@ -3324,17 +3330,18 @@
                 const maxIndicatorDistance = 2 * canvas.width;
                 const effectiveMinIndicatorDistance = ringRadius + 50;
 
-                if (closestNpcDistance > ringRadius) {
+                // arcScale: 1.0 = normal blur, 0.5 = Tremor Sense (half arc = more precise)
+                const drawNpcIndicatorArc = (npcAngle, npcDistance, arcScale) => {
+                    if (npcDistance <= ringRadius) return;
+
                     const minLineThickness = 1.5;
                     const maxLineThickness = 6;
                     const minArcDegrees = 15;
                     const maxArcDegrees = 45;
 
-                    const t = lerp(0, 1, (closestNpcDistance - effectiveMinIndicatorDistance) / (maxIndicatorDistance - effectiveMinIndicatorDistance));
-
+                    const t = lerp(0, 1, (npcDistance - effectiveMinIndicatorDistance) / (maxIndicatorDistance - effectiveMinIndicatorDistance));
                     const indicatorLineWidth = lerp(maxLineThickness, minLineThickness, t);
-
-                    const currentArcDegrees = lerp(minArcDegrees, maxArcDegrees, t);
+                    const currentArcDegrees = lerp(minArcDegrees, maxArcDegrees, t) * arcScale;
                     const currentArcRadians = currentArcDegrees * Math.PI / 180;
                     const halfArcRadians = currentArcRadians / 2;
 
@@ -3342,20 +3349,29 @@
                     const segmentArcLength = currentArcRadians / numSegments;
 
                     for (let i = 0; i < numSegments; i++) {
-                        const segStartAngle = closestNpcAngle - halfArcRadians + i * segmentArcLength;
+                        const segStartAngle = npcAngle - halfArcRadians + i * segmentArcLength;
                         const segEndAngle = segStartAngle + segmentArcLength;
                         const midSegmentAngle = (segStartAngle + segEndAngle) / 2;
 
-                        const normalizedPosition = Math.abs(midSegmentAngle - closestNpcAngle) / halfArcRadians;
+                        const normalizedPosition = Math.abs(midSegmentAngle - npcAngle) / halfArcRadians;
                         const alpha = Math.max(0, Math.cos(normalizedPosition * Math.PI / 2));
 
                         ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
                         ctx.lineWidth = indicatorLineWidth;
                         ctx.beginPath();
-                        // Use the player's calculated canvas position as the center of the ring.
                         ctx.arc(playerCanvasX, playerCanvasY, ringRadius, segStartAngle, segEndAngle);
                         ctx.stroke();
                     }
+                };
+
+                if (isTremorSenseActive && tremorSenseNpcData.length > 0) {
+                    // Tremor Sense: one precise indicator per NPC within 500px
+                    tremorSenseNpcData.forEach(({ angle, distance }) => {
+                        drawNpcIndicatorArc(angle, distance, 0.5);
+                    });
+                } else if (closestNpcDistance !== Infinity) {
+                    // Normal: single indicator for the closest NPC at full blur
+                    drawNpcIndicatorArc(closestNpcAngle, closestNpcDistance, 1.0);
                 }
             }
                 if (gameOver) {
