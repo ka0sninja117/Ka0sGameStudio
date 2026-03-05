@@ -1149,6 +1149,12 @@
         const BURROW_LV2_ALPHA = 0.2;          // more hidden visually (down from 0.4)
         const BURROW_LV2_EMERGE_RADIUS = 60;   // px — burst damage on unburrow
         const BURROW_LV2_COOLDOWN = 3500;
+
+        const TREMOR_SENSE_MAX_DURATION = 5000; // active for up to 5 seconds
+        const TREMOR_SENSE_LV1_COOLDOWN = 5000; // 5s cooldown at level 1
+        const TREMOR_SENSE_LV2_COOLDOWN = 1250; // 75% reduction at level 2
+        const TREMOR_SENSE_LV1_RANGE = 600;     // detection radius in px at level 1
+        const TREMOR_SENSE_LV2_RANGE = 700;     // detection radius in px at level 2
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
         let movementAbilityStartX = 0;
@@ -1164,6 +1170,7 @@
         let isTremorSenseActive = false; // True while Tremor Sense key is held down
         let burrowMaxDuration = 5000; // 5 seconds (updated to 7500 at Lv2)
         let burrowStartTime = 0;
+        let tremorSenseStartTime = 0;
 
         // New visual effect variables
         let playerVisualScale = 1; // Current scale factor for the player icon
@@ -1177,7 +1184,8 @@
         let cooldowns = {
             pounce: { lastUsed: 0, duration: 5000 }, // 5 seconds (renamed from jump)
             dash: { lastUsed: 0, duration: 5000 } ,
-            burrow: { lastUsed: 0, duration: 5000 }
+            burrow: { lastUsed: 0, duration: 5000 },
+            tremorSense: { lastUsed: 0, duration: TREMOR_SENSE_LV1_COOLDOWN }
         };
 
         function isAbilityOnCooldown(abilityKey) {
@@ -2022,6 +2030,12 @@
             playerDirectionAngle = Math.atan2(currentMouseWorldY - playerY, currentMouseWorldX - playerX);
         }
 
+        function endTremorSense() {
+            if (!isTremorSenseActive) return;
+            isTremorSenseActive = false;
+            startCooldown('tremorSense');
+        }
+
         // New function to stop Dash early
         function endDash() {
             if (!isPerformingMovementAbility || lastActivatedAbilityRef !== 'dash') return;
@@ -2266,6 +2280,10 @@
                     if (currentTime - burrowStartTime >= burrowMaxDuration) {
                         endBurrow();
                     }
+                }
+
+                if (isTremorSenseActive && currentTime - tremorSenseStartTime >= TREMOR_SENSE_MAX_DURATION) {
+                    endTremorSense();
                 }
 
                 if (isMoving && canMoveFreeLy) { // Regular movement
@@ -2652,7 +2670,8 @@
                         foundClosest = true;
                     }
 
-                    if (isTremorSenseActive && distance <= 500) {
+                    const tremorRange = playerAbilities.tremorSense >= 2 ? TREMOR_SENSE_LV2_RANGE : TREMOR_SENSE_LV1_RANGE;
+                    if (isTremorSenseActive && distance <= tremorRange) {
                         tremorSenseNpcData.push({ angle: Math.atan2(dy, dx), distance });
                     }
                 });
@@ -2802,27 +2821,48 @@
                     ctx.textBaseline = 'top';
                     ctx.fillText(`Lv.${abilityLevel}`, slotX + 3, slotY + 3);
 
-                    const cooldownRemaining = getCooldownRemaining(slot.abilityRef);
-                    if (cooldownRemaining > 0) {
-                        const cooldownFraction = cooldownRemaining / cooldowns[slot.abilityRef].duration;
-                        const arcAngle = Math.PI * 2 * cooldownFraction;
+                    const cx = slotX + currentHotbarSlotSize / 2;
+                    const cy = slotY + currentHotbarSlotSize / 2;
+                    const r  = currentHotbarSlotSize / 2;
 
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    if (slot.abilityRef === 'tremorSense' && isTremorSenseActive) {
+                        // Active-duration arc: teal pie counting down the 5s window
+                        const elapsed = performance.now() - tremorSenseStartTime;
+                        const remaining = Math.max(0, TREMOR_SENSE_MAX_DURATION - elapsed);
+                        const activeFraction = remaining / TREMOR_SENSE_MAX_DURATION;
+                        const arcAngle = Math.PI * 2 * activeFraction;
+
+                        ctx.fillStyle = 'rgba(0, 200, 200, 0.45)';
                         ctx.beginPath();
-                        ctx.moveTo(slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2);
-                        ctx.arc(slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2,
-                                currentHotbarSlotSize / 2,
-                                -Math.PI / 2,
-                                -Math.PI / 2 + arcAngle,
-                                false);
-                        ctx.lineTo(slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2);
+                        ctx.moveTo(cx, cy);
+                        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + arcAngle, false);
+                        ctx.lineTo(cx, cy);
                         ctx.fill();
 
                         ctx.fillStyle = 'white';
                         ctx.font = `bold ${currentHotbarSlotSize * 0.35}px Arial`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        ctx.fillText(Math.ceil(cooldownRemaining / 1000), slotX + currentHotbarSlotSize / 2, slotY + currentHotbarSlotSize / 2);
+                        ctx.fillText(Math.ceil(remaining / 1000), cx, cy);
+                    } else {
+                        const cooldownRemaining = getCooldownRemaining(slot.abilityRef);
+                        if (cooldownRemaining > 0) {
+                            const cooldownFraction = cooldownRemaining / cooldowns[slot.abilityRef].duration;
+                            const arcAngle = Math.PI * 2 * cooldownFraction;
+
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                            ctx.beginPath();
+                            ctx.moveTo(cx, cy);
+                            ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + arcAngle, false);
+                            ctx.lineTo(cx, cy);
+                            ctx.fill();
+
+                            ctx.fillStyle = 'white';
+                            ctx.font = `bold ${currentHotbarSlotSize * 0.35}px Arial`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(Math.ceil(cooldownRemaining / 1000), cx, cy);
+                        }
                     }
                 }
             });
@@ -3544,6 +3584,8 @@
 
             isPerformingMovementAbility = false;
             isBurrowing = false;
+            isTremorSenseActive = false;
+            tremorSenseStartTime = 0;
             canMoveFreeLy = true;
             playerVisualScale = 1;
             lastActivatedAbilityRef = null;
@@ -3695,13 +3737,14 @@
             hotbarSlots[newSlotIndex].icon = newAbility.hotbarIcon;
             playerAbilities[newAbilityKey] = level;
 
-            // Sync cooldown duration and burrow max duration for Lv2
+            // Sync cooldown duration and ability-specific max durations for Lv2
             if (cooldowns[newAbilityKey]) {
                 cooldowns[newAbilityKey].duration = level >= 2
-                    ? (newAbilityKey === 'pounce' ? POUNCE_LV2_COOLDOWN
-                     : newAbilityKey === 'dash'   ? DASH_LV2_COOLDOWN
+                    ? (newAbilityKey === 'pounce'      ? POUNCE_LV2_COOLDOWN
+                     : newAbilityKey === 'dash'        ? DASH_LV2_COOLDOWN
+                     : newAbilityKey === 'tremorSense' ? TREMOR_SENSE_LV2_COOLDOWN
                      : BURROW_LV2_COOLDOWN)
-                    : 5000;
+                    : (newAbilityKey === 'tremorSense' ? TREMOR_SENSE_LV1_COOLDOWN : 5000);
             }
             if (newAbilityKey === 'burrow') {
                 burrowMaxDuration = level >= 2 ? BURROW_LV2_MAX_DURATION : 5000;
@@ -4296,9 +4339,12 @@
 
             const abilityKey = activeAbilitySlot.abilityRef;
 
-            // Tremor Sense: hold-to-activate — starts on keydown, ends on keyup
+            // Tremor Sense: hold-to-activate — starts on keydown, ends on keyup or max duration
             if (abilityKey === 'tremorSense') {
-                isTremorSenseActive = true;
+                if (!isTremorSenseActive && !isAbilityOnCooldown('tremorSense')) {
+                    isTremorSenseActive = true;
+                    tremorSenseStartTime = performance.now();
+                }
                 return;
             }
 
@@ -4405,7 +4451,7 @@
             // Deactivate Tremor Sense when its key is released
             const releasedSlot = hotbarSlots.find(slot => slot.keybind.toLowerCase() === event.key.toLowerCase());
             if (releasedSlot && releasedSlot.abilityRef === 'tremorSense') {
-                isTremorSenseActive = false;
+                endTremorSense();
             }
         });
 
