@@ -1040,6 +1040,7 @@
             dash: 0,
             burrow: 0,
             tremorSense: 0,
+            spikeLaunch: 0,
         };
 
         // Map for quick lookup of ability details for hotbar assignment
@@ -1047,7 +1048,8 @@
             'pounce': { name: 'Pounce', key: 'pounce', hotbarIcon: '🏃' }, // Renamed from jump
             'dash': { name: 'Dash', key: 'dash', hotbarIcon: '💨' },
             'burrow': { name: 'Burrow', key: 'burrow', hotbarIcon: '🕳️' },
-            'tremorSense': { name: 'Tremor Sense', key: 'tremorSense', hotbarIcon: '〰️' }
+            'tremorSense': { name: 'Tremor Sense', key: 'tremorSense', hotbarIcon: '〰️' },
+            'spikeLaunch': { name: 'Spike Launch', key: 'spikeLaunch', hotbarIcon: '▲' }
         };
         const allActiveAbilities = Object.values(abilityDetailsMap); // Array of all active ability objects
 
@@ -1155,6 +1157,11 @@
         const TREMOR_SENSE_LV2_COOLDOWN = 1250; // 75% reduction at level 2
         const TREMOR_SENSE_LV1_RANGE = 600;     // detection radius in px at level 1
         const TREMOR_SENSE_LV2_RANGE = 700;     // detection radius in px at level 2
+
+        const SPIKE_LAUNCH_RANGE = 250;         // max travel distance in px
+        const SPIKE_LAUNCH_COOLDOWN = 2000;     // 2 second cooldown
+        const SPIKE_LAUNCH_DAMAGE_MULT = 0.8;   // 80% of player melee attack
+        const SPIKE_LAUNCH_SPEED = 10;          // px per frame (fast projectile)
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
         let movementAbilityStartX = 0;
@@ -1171,6 +1178,7 @@
         let burrowMaxDuration = 5000; // 5 seconds (updated to 7500 at Lv2)
         let burrowStartTime = 0;
         let tremorSenseStartTime = 0;
+        let spikeLaunchProjectiles = []; // Array of active Spike Launch projectiles
 
         // New visual effect variables
         let playerVisualScale = 1; // Current scale factor for the player icon
@@ -1185,7 +1193,8 @@
             pounce: { lastUsed: 0, duration: 5000 }, // 5 seconds (renamed from jump)
             dash: { lastUsed: 0, duration: 5000 } ,
             burrow: { lastUsed: 0, duration: 5000 },
-            tremorSense: { lastUsed: 0, duration: TREMOR_SENSE_LV1_COOLDOWN }
+            tremorSense: { lastUsed: 0, duration: TREMOR_SENSE_LV1_COOLDOWN },
+            spikeLaunch: { lastUsed: 0, duration: SPIKE_LAUNCH_COOLDOWN }
         };
 
         function isAbilityOnCooldown(abilityKey) {
@@ -2286,6 +2295,54 @@
                     endTremorSense();
                 }
 
+                // Update Spike Launch projectiles
+                for (let i = spikeLaunchProjectiles.length - 1; i >= 0; i--) {
+                    const spike = spikeLaunchProjectiles[i];
+                    spike.x += Math.cos(spike.angle) * SPIKE_LAUNCH_SPEED;
+                    spike.y += Math.sin(spike.angle) * SPIKE_LAUNCH_SPEED;
+                    spike.distanceTravelled += SPIKE_LAUNCH_SPEED;
+
+                    if (spike.distanceTravelled >= SPIKE_LAUNCH_RANGE) {
+                        spikeLaunchProjectiles.splice(i, 1);
+                        continue;
+                    }
+
+                    let spikeHit = false;
+                    for (const npc of npcs) {
+                        if (checkCircleCollision(spike.x, spike.y, 4, npc.x, npc.y, npc.radius)) {
+                            dealDamage({ attack: playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT, isPlayer: true, x: spike.x, y: spike.y, radius: 4 }, npc, currentTime);
+                            spikeLaunchProjectiles.splice(i, 1);
+                            if (npc.currentHp <= 0) {
+                                const xpGained = NPC_XP_REWARDS[npc.level] || 0;
+                                playerStats.currentXp += xpGained;
+                                updatePlayerLevel();
+                                reducePlayerHunger(xpGained);
+                                npcKillCount++;
+                                deadNpcs.push({
+                                    level: npc.level, x: npc.x, y: npc.y,
+                                    maxHp: npc.maxHp, id: npc.id, name: npc.name, emoji: npc.emoji,
+                                    totalDamageDealtByPlayer: npc.totalDamageReceivedFromPlayer,
+                                    totalDamageReceivedByPlayer: npc.totalDamageDealtToPlayer
+                                });
+                                npcs = npcs.filter(n => n !== npc);
+                                if (combatTarget === npc) {
+                                    inCombat = false;
+                                    combatTarget.inCombat = false;
+                                    combatTarget = null;
+                                    isMoving = false;
+                                    showTargetIndicator = false;
+                                    targetedNpc = null;
+                                }
+                                while (npcs.length < MAX_ENEMIES) {
+                                    npcs.push(createSingleNPC(getSpawnableNpcLevel()));
+                                }
+                            }
+                            spikeHit = true;
+                            break;
+                        }
+                    }
+                }
+
                 if (isMoving && canMoveFreeLy) { // Regular movement
                     let destinationX, destinationY;
                     let stopMovingCondition = false;
@@ -3334,6 +3391,28 @@
                     ctx.restore();
                 });
 
+                // Draw Spike Launch projectiles
+                spikeLaunchProjectiles.forEach(spike => {
+                    const sx = (spike.x - cameraX) * zoomScale;
+                    const sy = (spike.y - cameraY) * zoomScale;
+                    ctx.save();
+                    ctx.translate(sx, sy);
+                    ctx.rotate(spike.angle);
+                    ctx.fillStyle = '#FF6600';
+                    ctx.strokeStyle = '#FFCC00';
+                    ctx.lineWidth = 1;
+                    // Spiky triangle pointing in travel direction, with rear notch
+                    ctx.beginPath();
+                    ctx.moveTo(9, 0);    // forward tip
+                    ctx.lineTo(-5, -4);  // rear-left
+                    ctx.lineTo(-2, 0);   // rear notch
+                    ctx.lineTo(-5, 4);   // rear-right
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                });
+
                 deadNpcs.forEach(deadNpc => {
                     ctx.font = '24px serif';
                     ctx.textAlign = 'center';
@@ -3538,6 +3617,7 @@
                 dash: 0,
                 burrow: 0,
                 tremorSense: 0,
+                spikeLaunch: 0,
             };
 
             hotbarSlots.forEach(slot => {
@@ -3555,6 +3635,7 @@
             cooldowns.pounce.lastUsed = 0; // Updated from jump
             cooldowns.dash.lastUsed = 0;
             cooldowns.burrow.lastUsed = 0;
+            cooldowns.spikeLaunch.lastUsed = 0;
 
             inCombat = false;
             combatTarget = null;
@@ -3586,6 +3667,7 @@
             isBurrowing = false;
             isTremorSenseActive = false;
             tremorSenseStartTime = 0;
+            spikeLaunchProjectiles = [];
             canMoveFreeLy = true;
             playerVisualScale = 1;
             lastActivatedAbilityRef = null;
@@ -3740,11 +3822,14 @@
             // Sync cooldown duration and ability-specific max durations for Lv2
             if (cooldowns[newAbilityKey]) {
                 cooldowns[newAbilityKey].duration = level >= 2
-                    ? (newAbilityKey === 'pounce'      ? POUNCE_LV2_COOLDOWN
-                     : newAbilityKey === 'dash'        ? DASH_LV2_COOLDOWN
-                     : newAbilityKey === 'tremorSense' ? TREMOR_SENSE_LV2_COOLDOWN
+                    ? (newAbilityKey === 'pounce'       ? POUNCE_LV2_COOLDOWN
+                     : newAbilityKey === 'dash'         ? DASH_LV2_COOLDOWN
+                     : newAbilityKey === 'tremorSense'  ? TREMOR_SENSE_LV2_COOLDOWN
+                     : newAbilityKey === 'spikeLaunch'  ? SPIKE_LAUNCH_COOLDOWN
                      : BURROW_LV2_COOLDOWN)
-                    : (newAbilityKey === 'tremorSense' ? TREMOR_SENSE_LV1_COOLDOWN : 5000);
+                    : (newAbilityKey === 'tremorSense'  ? TREMOR_SENSE_LV1_COOLDOWN
+                     : newAbilityKey === 'spikeLaunch'  ? SPIKE_LAUNCH_COOLDOWN
+                     : 5000);
             }
             if (newAbilityKey === 'burrow') {
                 burrowMaxDuration = level >= 2 ? BURROW_LV2_MAX_DURATION : 5000;
@@ -3759,10 +3844,17 @@
                 passiveRewardAbility = abilityDetailsMap['tremorSense'];
             }
 
-            // Tremor Sense slots into E (index 2) and Q (index 3); others use F (0) and R (1)
-            const isTremorSenseOffer = passiveRewardAbility && passiveRewardAbility.key === 'tremorSense';
-            const slotLeftIndex  = isTremorSenseOffer ? 2 : 0;
-            const slotRightIndex = isTremorSenseOffer ? 3 : 1;
+            // Spike Launch: 70% chance to replace Dash when loot is from a level 2+ NPC
+            if (passiveRewardAbility && passiveRewardAbility.key === 'dash' &&
+                clickedDeadNpc && clickedDeadNpc.level >= 2 && Math.random() < 0.70) {
+                passiveRewardAbility = abilityDetailsMap['spikeLaunch'];
+            }
+
+            // Secondary abilities (Tremor Sense / Spike Launch) slot into E (2) and Q (3); primaries use F (0) and R (1)
+            const isSecondaryOffer = passiveRewardAbility &&
+                (passiveRewardAbility.key === 'tremorSense' || passiveRewardAbility.key === 'spikeLaunch');
+            const slotLeftIndex  = isSecondaryOffer ? 2 : 0;
+            const slotRightIndex = isSecondaryOffer ? 3 : 1;
             const slotLeftKey    = hotbarSlots[slotLeftIndex].keybind;
             const slotRightKey   = hotbarSlots[slotRightIndex].keybind;
 
@@ -4121,8 +4213,8 @@
                     };
                     inputRow.appendChild(incrementButton);
 
-                    // Lock Tremor Sense controls until player is level 2+
-                    if (key === 'tremorSense' && playerStats.playerLevel < 2) {
+                    // Lock Tremor Sense and Spike Launch controls until player is level 2+
+                    if ((key === 'tremorSense' || key === 'spikeLaunch') && playerStats.playerLevel < 2) {
                         input.disabled = true;
                         decrementButton.disabled = true;
                         incrementButton.disabled = true;
@@ -4170,8 +4262,8 @@
                         const abilityDetails = abilityDetailsMap[key];
                         if (abilityDetails) {
                             let assigned = false;
-                            // Tremor Sense prefers E (2) then Q (3); others use first empty slot
-                            const slotPreference = (key === 'tremorSense') ? [2, 3, 0, 1, 4, 5, 6] : null;
+                            // Secondary abilities prefer E (2) then Q (3); others use first empty slot
+                            const slotPreference = (key === 'tremorSense' || key === 'spikeLaunch') ? [2, 3, 0, 1, 4, 5, 6] : null;
                             const slotOrder = slotPreference || hotbarSlots.map((_, i) => i);
                             for (const i of slotOrder) {
                                 if (hotbarSlots[i].abilityRef === null) {
@@ -4344,6 +4436,27 @@
                 if (!isTremorSenseActive && !isAbilityOnCooldown('tremorSense')) {
                     isTremorSenseActive = true;
                     tremorSenseStartTime = performance.now();
+                }
+                return;
+            }
+
+            // Spike Launch: fire a projectile toward the current mouse position
+            if (abilityKey === 'spikeLaunch') {
+                if (!isAbilityOnCooldown('spikeLaunch')) {
+                    const mouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+                    const mouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+                    const dx = mouseWorldX - playerX;
+                    const dy = mouseWorldY - playerY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        spikeLaunchProjectiles.push({
+                            x: playerX,
+                            y: playerY,
+                            angle: Math.atan2(dy, dx),
+                            distanceTravelled: 0
+                        });
+                        startCooldown('spikeLaunch');
+                    }
                 }
                 return;
             }
@@ -4817,6 +4930,7 @@
                 dash: 0,
                 burrow: 0,
                 tremorSense: 0,
+                spikeLaunch: 0,
             };
 
             // Assign initial ability based on chosen origin
