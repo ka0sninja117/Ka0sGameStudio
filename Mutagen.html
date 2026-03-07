@@ -2310,7 +2310,9 @@
                     let spikeHit = false;
                     for (const npc of npcs) {
                         if (checkCircleCollision(spike.x, spike.y, 4, npc.x, npc.y, npc.radius)) {
-                            dealDamage({ attack: playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT, isPlayer: true, x: spike.x, y: spike.y, radius: 4 }, npc, currentTime);
+                            // 80% of post-defense melee damage: pass an attack value that produces (playerStats.attack - npc.defense) * 0.8 after dealDamage subtracts defense
+                            const spikeAttack = playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT + npc.defense * (1 - SPIKE_LAUNCH_DAMAGE_MULT);
+                            dealDamage({ attack: spikeAttack, isPlayer: true, x: spike.x, y: spike.y, radius: 4 }, npc, currentTime);
                             spikeLaunchProjectiles.splice(i, 1);
                             if (npc.currentHp <= 0) {
                                 const xpGained = NPC_XP_REWARDS[npc.level] || 0;
@@ -3486,8 +3488,9 @@
 
                 if (isTremorSenseActive) {
                     // Draw the full indicator ring in yellowish-grey while Tremor Sense is active
-                    ctx.strokeStyle = 'rgba(200, 190, 120, 1)';
-                    ctx.lineWidth = 1;
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = 'rgba(210, 195, 110, 1)';
+                    ctx.lineWidth = 2;
                     ctx.beginPath();
                     ctx.arc(playerCanvasX, playerCanvasY, ringRadius, 0, Math.PI * 2);
                     ctx.stroke();
