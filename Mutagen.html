@@ -3489,7 +3489,7 @@
                 if (isTremorSenseActive) {
                     // Draw the full indicator ring in yellowish-grey while Tremor Sense is active
                     ctx.globalAlpha = 1;
-                    ctx.strokeStyle = 'rgba(210, 195, 110, 1)';
+                    ctx.strokeStyle = 'rgba(210, 195, 110, 0.5)';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
                     ctx.arc(playerCanvasX, playerCanvasY, ringRadius, 0, Math.PI * 2);
@@ -4444,9 +4444,11 @@
 
             const abilityKey = activeAbilitySlot.abilityRef;
 
-            // Tremor Sense: hold-to-activate — starts on keydown, ends on keyup or max duration
+            // Tremor Sense: toggle on/off; cooldown starts on deactivation
             if (abilityKey === 'tremorSense') {
-                if (!isTremorSenseActive && !isAbilityOnCooldown('tremorSense')) {
+                if (isTremorSenseActive) {
+                    endTremorSense(); // manual early deactivation
+                } else if (!isAbilityOnCooldown('tremorSense')) {
                     isTremorSenseActive = true;
                     tremorSenseStartTime = performance.now();
                 }
@@ -4574,11 +4576,6 @@
 
         window.addEventListener('keyup', (event) => {
             keysPressed[event.key.toLowerCase()] = false;
-            // Deactivate Tremor Sense when its key is released
-            const releasedSlot = hotbarSlots.find(slot => slot.keybind.toLowerCase() === event.key.toLowerCase());
-            if (releasedSlot && releasedSlot.abilityRef === 'tremorSense') {
-                endTremorSense();
-            }
         });
 
         closeAdminPanelBtn.addEventListener('click', hideAllPanels);
