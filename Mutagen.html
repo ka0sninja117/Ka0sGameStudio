@@ -1161,7 +1161,7 @@
         const SPIKE_LAUNCH_RANGE = 250;         // max travel distance in px
         const SPIKE_LAUNCH_COOLDOWN = 2000;     // 2 second cooldown
         const SPIKE_LAUNCH_DAMAGE_MULT = 0.8;   // 80% of player melee attack
-        const SPIKE_LAUNCH_SPEED = 10;          // px per frame (fast projectile)
+        const SPIKE_LAUNCH_SPEED = 4;           // px per frame (~2x player base speed, clearly visible)
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
         let movementAbilityStartX = 0;
@@ -3392,21 +3392,22 @@
                 });
 
                 // Draw Spike Launch projectiles
+                // sz = playerSize / 4 = 4 world units (static, ~1/4 of player character)
+                const sz = playerSize / 4;
                 spikeLaunchProjectiles.forEach(spike => {
-                    const sx = (spike.x - cameraX) * zoomScale;
-                    const sy = (spike.y - cameraY) * zoomScale;
                     ctx.save();
-                    ctx.translate(sx, sy);
+                    ctx.globalAlpha = 1;
+                    ctx.translate(spike.x, spike.y); // world coords — existing transform handles camera/zoom
                     ctx.rotate(spike.angle);
                     ctx.fillStyle = '#FF6600';
                     ctx.strokeStyle = '#FFCC00';
-                    ctx.lineWidth = 1;
+                    ctx.lineWidth = 0.5;
                     // Spiky triangle pointing in travel direction, with rear notch
                     ctx.beginPath();
-                    ctx.moveTo(9, 0);    // forward tip
-                    ctx.lineTo(-5, -4);  // rear-left
-                    ctx.lineTo(-2, 0);   // rear notch
-                    ctx.lineTo(-5, 4);   // rear-right
+                    ctx.moveTo(sz * 3, 0);       // forward tip
+                    ctx.lineTo(-sz * 1.5, -sz);  // rear-left
+                    ctx.lineTo(-sz * 0.5, 0);    // rear notch
+                    ctx.lineTo(-sz * 1.5, sz);   // rear-right
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
