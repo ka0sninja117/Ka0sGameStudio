@@ -1110,6 +1110,13 @@
                         return;
                     }
                 }
+                for (const enemySub of enemySubmarines) {
+                    const distSq = (submarine.worldX - enemySub.worldX)**2 + (submarine.worldY - enemySub.worldY)**2;
+                    if (distSq < enemyFreeRadius**2) {
+                        if (wasPreviouslyAvailable) updateUI();
+                        return;
+                    }
+                }
                 for (const island of islands) {
                     if (island.hasHeadquarters && island.hqHealth > 0) {
                         const hqCentroid = getPolygonCentroid(island.points);
@@ -2393,7 +2400,7 @@
                 }
             
                 // --- State Transition & AI Logic ---
-                const canSeePlayer = (submarine.depth <= 0 && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
+                const canSeePlayer = (submarine.depth <= FADE_START_DEPTH && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
                 let playerTorpedoIsTracking = torpedoes.some(t => t.type === 'enemy-torpedo' && t.targetSubmarine && t.masterIdToTrack === enemySub.assignedMasterId);
             
                 // High-priority transitions
@@ -2509,7 +2516,7 @@
                         } else {
                             // Original flee logic
                             if (enemySub.fleeingFromThreat && enemySub.decoysRemaining > 0) {
-                                decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: 0, launchTime: currentTime });
+                                decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: DECOY_LAUNCH_SPEED * 0.5, launchTime: currentTime });
                                 enemySub.decoysRemaining--;
                                 enemySub.fleeingFromThreat = false;
                             }
@@ -3615,11 +3622,23 @@
                         homingTurnRate = REGULAR_TURN_RATE_MAGNITUDE * ENEMY_TORPEDO_TURN_RATE_MULTIPLIER;
                         baseSpeed = ENEMY_TORPEDO_INITIAL_SPEED_BONUS;
                         if (!torpedo.isHomingOnDecoy) {
+                            if (!torpedo.decoyRollResults) torpedo.decoyRollResults = {};
                             for (const decoy of decoys) {
+                                if (torpedo.decoyRollResults[decoy.id] !== undefined) {
+                                    // Already rolled for this decoy — use cached result
+                                    if (torpedo.decoyRollResults[decoy.id]) {
+                                        torpedo.isHomingOnDecoy = true;
+                                        torpedo.decoyTargetId = decoy.id;
+                                        break;
+                                    }
+                                    continue;
+                                }
                                 const distToDecoySq = (torpedo.worldX - decoy.worldX)**2 + (torpedo.worldY - decoy.worldY)**2;
                                 const decoyRange = ENEMY_TORPEDO_PROXIMITY_ACCEL_DISTANCE * DECOY_EFFECTIVENESS_RANGE_MULT;
                                 if (distToDecoySq < decoyRange**2) {
-                                    if (Math.random() < DECOY_TARGET_CHANCE) {
+                                    const acquired = Math.random() < DECOY_TARGET_CHANCE;
+                                    torpedo.decoyRollResults[decoy.id] = acquired;
+                                    if (acquired) {
                                         torpedo.isHomingOnDecoy = true;
                                         torpedo.decoyTargetId = decoy.id;
                                         break;
