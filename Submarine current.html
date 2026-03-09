@@ -1523,7 +1523,7 @@
                 submarine.isMapModeActive = false; // Exit map mode on game over
                 submarine.isBrakingWithX = false; // Reset braking flag
                 submarine.worldMouseX = 0; // Reset mouse X position
-                submarine.worldY = 0; // Reset mouse Y position (for periscope)
+                submarine.worldMouseY = 0; // Reset mouse Y position (for periscope)
                 submarine.targetedMasterId = null; // Reset targeted ship
                 submarine.propellerRotationAngle = 0; // Reset propeller rotation angle
                 submarine.currentHealth = submarine.maxHealth; // Reset player health
@@ -2748,11 +2748,98 @@
                         gameOver("You crashed into the island at full speed!");
                         return; // Stop update loop
                     } else {
-                        // Low-speed collision (scrape along / halt)
-                        // This now stops the sub whether moving forward or backward.
-                        submarine.speed = 0; 
-                        submarine.acceleration = 0;
-                        submarine.targetAcceleration = 0;
+                        // Low-speed collision: attempt to slide along the island edge
+                        const moveVecX = nextWorldX - submarine.worldX;
+                        const moveVecY = nextWorldY - submarine.worldY;
+
+                        // Find the nearest colliding edge across all islands
+                        let bestEdgeNormalX = 0, bestEdgeNormalY = 0;
+                        let minPenetration = Infinity;
+                        for (const island of islands) {
+                            for (let i = 0; i < island.points.length; i++) {
+                                const p1 = island.points[i];
+                                const p2 = island.points[(i + 1) % island.points.length];
+                                const edgeDx = p2.x - p1.x;
+                                const edgeDy = p2.y - p1.y;
+                                const edgeLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+                                if (edgeLen === 0) continue;
+                                // Outward normal (assumes clockwise winding)
+                                const nx = edgeDy / edgeLen;
+                                const ny = -edgeDx / edgeLen;
+                                // Check penetration of center circle against this edge
+                                const toSubX = nextWorldX - p1.x;
+                                const toSubY = nextWorldY - p1.y;
+                                const dist = toSubX * nx + toSubY * ny;
+                                if (dist < SUBMARINE_HITBOX_CIRCLE_RADIUS && dist < minPenetration) {
+                                    // Verify the sub center projects onto this edge segment
+                                    const along = (toSubX * edgeDx + toSubY * edgeDy) / edgeLen;
+                                    if (along >= -SUBMARINE_HITBOX_CIRCLE_RADIUS && along <= edgeLen + SUBMARINE_HITBOX_CIRCLE_RADIUS) {
+                                        minPenetration = dist;
+                                        bestEdgeNormalX = nx;
+                                        bestEdgeNormalY = ny;
+                                    }
+                                }
+                            }
+                        }
+
+                        let slid = false;
+                        if (minPenetration < Infinity) {
+                            // Project movement onto the edge tangent (perpendicular to normal)
+                            const tangentX = -bestEdgeNormalY;
+                            const tangentY = bestEdgeNormalX;
+                            const slideAmount = moveVecX * tangentX + moveVecY * tangentY;
+
+                            // Check angle between slide direction and sub heading
+                            // If the slide would be perpendicular or greater (dot <= 0), stop
+                            const headingVecX = Math.cos(radians_for_movement);
+                            const headingVecY = Math.sin(radians_for_movement);
+                            const slideDirX = slideAmount >= 0 ? tangentX : -tangentX;
+                            const slideDirY = slideAmount >= 0 ? tangentY : -tangentY;
+                            const alignDot = headingVecX * slideDirX + headingVecY * slideDirY;
+
+                            if (alignDot > 0 && Math.abs(slideAmount) > 0.01) {
+                                // Try the slid position
+                                const slideX = submarine.worldX + slideAmount * tangentX;
+                                const slideY = submarine.worldY + slideAmount * tangentY;
+
+                                // Re-check collision at slid position
+                                const slideCircles = [];
+                                for (const offset_y of localOffsetsY) {
+                                    const rotated_x = (offset_y * Math.sin(radians_for_hitbox));
+                                    const rotated_y = -(offset_y * Math.cos(radians_for_hitbox));
+                                    slideCircles.push({
+                                        x: slideX + rotated_x,
+                                        y: slideY + rotated_y,
+                                        radius: SUBMARINE_HITBOX_CIRCLE_RADIUS
+                                    });
+                                }
+                                let slideCollides = false;
+                                for (const island of islands) {
+                                    for (const circle of slideCircles) {
+                                        if (circlePolygonCollision(circle, island.points)) {
+                                            slideCollides = true;
+                                            break;
+                                        }
+                                    }
+                                    if (slideCollides) break;
+                                }
+
+                                if (!slideCollides) {
+                                    nextWorldX = slideX;
+                                    nextWorldY = slideY;
+                                    slid = true;
+                                }
+                            }
+                        }
+
+                        if (!slid) {
+                            // Could not slide — revert to old position and stop
+                            nextWorldX = submarine.worldX;
+                            nextWorldY = submarine.worldY;
+                            submarine.speed = 0;
+                            submarine.acceleration = 0;
+                            submarine.targetAcceleration = 0;
+                        }
                     }
                 }
                 // Apply position update after collision handling
@@ -5940,25 +6027,6 @@
                     }
                 });
 
-            // Add event listener to the "Try Again" button to attempt audio context start
-            document.getElementById('tryAgainButton').addEventListener('click', async () => {
-                if (!hasAudioContextStarted) {
-                    try {
-                        await Tone.start();
-                        console.log("Audio context successfully started/resumed via Try Again button.");
-                        initializeAudioSynths();
-                        hasAudioContextStarted = true;
-                    }
-                    catch (e) {
-                        console.error("Failed to start audio context via Try Again button:", e);
-                    }
-                }
-                resetGame(); // This single function handles all the necessary state resetting.
-            
-                // Then, restart the game loop
-                lastTimestamp = performance.now();
-                animationFrameId = requestAnimationFrame(gameLoop);
-            });
 
 
             // --- Canvas Resizing ---
@@ -6149,17 +6217,8 @@
                             catch (e) {
                                 console.error("Failed to start audio context via Try Again button:", e);
                             }
-                                lastTimestamp = performance.now();
-                                animationFrameId = requestAnimationFrame(gameLoop);
                         }
-                        // Modify resetGame to not auto-start the loop
-                        gameOverScreen.classList.remove('show');
-                        isGameOver = false;
-                        currentLevel = 1;
-                        submarine.worldX = WORLD_WIDTH / 2;
-                        submarine.worldY = WORLD_HEIGHT - 200;
-                        setupNewLevel(); 
-                        // Start the game loop again after trying again
+                        resetGame();
                         lastTimestamp = performance.now();
                         animationFrameId = requestAnimationFrame(gameLoop);
                     });
