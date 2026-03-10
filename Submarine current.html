@@ -2605,11 +2605,14 @@
             
                 // --- State Transition & AI Logic ---
                 const canSeePlayer = (submarine.depth <= FADE_START_DEPTH && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
-                let playerTorpedoIsTracking = torpedoes.some(t => t.type === 'enemy-torpedo' && t.targetSubmarine && t.masterIdToTrack === enemySub.assignedMasterId);
+                let playerTorpedoIsTracking = torpedoes.some(t => t.type === 'player-torpedo' && t.masterIdToTrack === enemySub.assignedMasterId);
             
                 // High-priority transitions
                 if (canSeePlayer && enemySub.aiState !== 'FLEEING') {
-                    if (enemySub.aiState !== 'COMBAT') { enemySub.torpedoesFiredInVolley = 0; }
+                    if (enemySub.aiState !== 'COMBAT') {
+                        enemySub.torpedoesFiredInVolley = 0;
+                        enemySub.strafeDirection = (Math.random() < 0.5) ? 1 : -1;
+                    }
                     enemySub.aiState = 'COMBAT';
                     enemySub.lastCombatTriggerTime = currentTime;
                     enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
@@ -2651,16 +2654,25 @@
                 switch (enemySub.aiState) {
                     case 'COMBAT':
                         const distToPlayer = Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2);
-                        const targetBearingCombat = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 90);
-                        enemySub.heading = turnTowards(enemySub.heading, targetBearingCombat, ENEMY_SUB_TURN_RATE * 1.5, deltaTimeInSeconds);
-            
-                        if (distToPlayer > 500) { enemySub.speed = ENEMY_SUB_MAX_SPEED; } 
-                        else if (distToPlayer < 400) { enemySub.speed = -ENEMY_SUB_MAX_SPEED * 0.5; } 
-                        else { enemySub.speed = ENEMY_SUB_MAX_SPEED * 0.1; }
+                        const directBearing = normalizeDegreeAngle(radiansToDegrees(Math.atan2(submarine.worldY - enemySub.worldY, submarine.worldX - enemySub.worldX)) + 90);
+
+                        // Strafing run: approach on an offset bearing, then loop back
+                        if (distToPlayer > 400) {
+                            // Closing in: aim slightly offset (30 degrees) for a strafing pass
+                            if (!enemySub.strafeDirection) enemySub.strafeDirection = (Math.random() < 0.5) ? 1 : -1;
+                            const strafeBearing = normalizeDegreeAngle(directBearing + (30 * enemySub.strafeDirection));
+                            enemySub.heading = turnTowards(enemySub.heading, strafeBearing, ENEMY_SUB_TURN_RATE * 1.5, deltaTimeInSeconds);
+                        } else {
+                            // Close pass: maintain heading through the run, don't try to turn back
+                            // Just keep going — the sub will naturally loop around after passing
+                        }
+
+                        // Always full speed during combat — never stop
+                        enemySub.speed = ENEMY_SUB_MAX_SPEED;
             
                         if (currentTime - enemySub.lastFireTime > ENEMY_SUB_FIRE_COOLDOWN_MS && enemySub.torpedoesFiredInVolley < 4) {
-                            const angleDiff = Math.abs(normalizeDegreeAngle(enemySub.heading - targetBearingCombat));
-                            if (angleDiff < 15 || angleDiff > 345) { fireEnemySubTorpedo(enemySub, currentTime); }
+                            const angleDiff = Math.abs(normalizeDegreeAngle(enemySub.heading - directBearing));
+                            if (angleDiff < 30 || angleDiff > 330) { fireEnemySubTorpedo(enemySub, currentTime); }
                         } else if (enemySub.torpedoesFiredInVolley >= 4) {
                             // --- NEW: Decide which type of flee to perform ---
                             const aliveHqs = islands.filter(i => i.hasHeadquarters && i.hqHealth > 0);
