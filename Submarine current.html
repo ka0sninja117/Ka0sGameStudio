@@ -869,6 +869,10 @@
             let isSatelliteScanActive = false;
             let mapTransform = { scale: 1, translateX: 0, translateY: 0 };
 
+            // Canvas logical dimensions (CSS pixels, updated on resize)
+            let canvasLogicalWidth = 0;
+            let canvasLogicalHeight = 0;
+
             // Game loop variables
             let lastTimestamp = 0;
             let animationFrameId = null;
@@ -941,7 +945,6 @@
              */
             // --- NEW: Resupply Logic ---
             function createTender(spawnX, spawnY, targetX, targetY) {
-                console.log(`Spawning tender at (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)}) heading to (${targetX.toFixed(0)}, ${targetY.toFixed(0)})`);
                 const dx = targetX - spawnX;
                 const dy = targetY - spawnY;
                 const heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dy, dx)) + 90);
@@ -967,9 +970,6 @@
                 decoysBtn.disabled = !resupplyState.decoys.inProgress && decoysNeeded === 0;
             
                 const mk48Needed = submarine.maxAmmoMk48 - submarine.ammoMk48;
-                console.log(`--- Updating Resupply Menu ---`);
-                console.log(`Decoys Needed: ${decoysNeeded}, In Progress: ${resupplyState.decoys.inProgress}`);
-                console.log(`Mk 48 Needed: ${mk48Needed}, In Progress: ${resupplyState.mk48.inProgress}`);
                 document.getElementById('mk48-label').textContent = `Mk 48: ${submarine.ammoMk48}/${submarine.maxAmmoMk48}`;
                 const mk48Btn = document.getElementById('restock-mk48-btn');
                 mk48Btn.textContent = resupplyState.mk48.inProgress ? "Cancel" : "Re-stock";
@@ -1043,7 +1043,6 @@
                     selectedIntelOption = 'aerial-patrol';
                     updateIntelUI();
                 });
-                console.log("Intelligence UI initialized.");
             }
 
             function drawTender(tender, zoomFactor) {
@@ -1105,6 +1104,13 @@
                 const enemyFreeRadius = 1500;
                 for (const ship of patrolShips) {
                     const distSq = (submarine.worldX - ship.worldX)**2 + (submarine.worldY - ship.worldY)**2;
+                    if (distSq < enemyFreeRadius**2) {
+                        if (wasPreviouslyAvailable) updateUI();
+                        return;
+                    }
+                }
+                for (const enemySub of enemySubmarines) {
+                    const distSq = (submarine.worldX - enemySub.worldX)**2 + (submarine.worldY - enemySub.worldY)**2;
                     if (distSq < enemyFreeRadius**2) {
                         if (wasPreviouslyAvailable) updateUI();
                         return;
@@ -1255,7 +1261,6 @@
                         release: 0.5
                     }
                 }).toDestination();
-                console.log("Detection synth initialized.");
 
                 // Initialize explosion synth (NoiseSynth for a quick, percussive blast)
                 explosionSynth = new Tone.NoiseSynth({
@@ -1269,7 +1274,6 @@
                         release: 0.5
                     }
                 }).chain(new Tone.Filter(1000, "lowpass").toDestination()); // Add a lowpass filter for boominess
-                console.log("Explosion synth initialized.");
                 // Initialize HQ Alarm synth (a pulsing, urgent sound)
                 hqAlarmSynth = new Tone.PulseOscillator("E5", 0.4).toDestination();
                 hqAlarmSynth.volume.value = -10; // Lower the volume so it's not too piercing
@@ -1298,7 +1302,6 @@
             function playExplosionSound() {
                 if (explosionSynth) {
                     explosionSynth.triggerAttackRelease("16n");
-                    console.log("Playing explosion sound!");
                 }
             }
             /**
@@ -1661,7 +1664,6 @@
                     }
                 }
 
-                console.log(`Spawned a total of ${patrolShips.length} patrol ships.`);
             }
             function spawnEnemySubmarines() {
                 enemySubmarines = []; // Clear out subs from the previous level
@@ -1676,11 +1678,9 @@
                 }
                 if (numToSpawn === 0) return;
             
-                console.log(`Spawning ${numToSpawn} enemy submarine(s) for Level ${currentLevel}...`);
             
                 const hqIslands = islands.filter(island => island.hasHeadquarters && island.hqHealth > 0);
                 if (hqIslands.length < 1) {
-                    console.log("No HQs available to spawn enemy submarines near.");
                     return;
                 }
             
@@ -1817,7 +1817,6 @@
              * Advances the player to the next level.
              */
             function advanceToNextLevel() {
-                console.log(`Advancing from Level ${currentLevel} to Level ${currentLevel + 1}`);
                 currentLevel++;
                 setupNewLevel(); // This already handles healing, reloading, and new map generation.
             }
@@ -2089,8 +2088,8 @@
                 // If map mode is active, this function is for normal view, so it should return false.
                 if (submarine.isMapModeActive) return false;
 
-                const viewHalfWidth = (canvas.width / 2) / submarine.currentViewZoomFactor;
-                const viewHalfHeight = (canvas.height / 2) / submarine.currentViewZoomFactor;
+                const viewHalfWidth = (canvasLogicalWidth / 2) / submarine.currentViewZoomFactor;
+                const viewHalfHeight = (canvasLogicalHeight / 2) / submarine.currentViewZoomFactor;
 
                 const viewWorldLeft = submarine.worldX - viewHalfWidth;
                 const viewWorldRight = submarine.worldX + viewHalfWidth;
@@ -2246,7 +2245,6 @@
                 let torpedoSpeedBoost = ENEMY_TORPEDO_MAX_ACCELERATION_BONUS;
                 if (patrolShip.island.hasHeadquarters && distToHQIsland <= HQ_BOOST_RANGE) {
                     torpedoSpeedBoost *= 2; // Double the boost if near HQ
-                    console.log(`HQ boost applied to torpedo from Master #${patrolShip.assignedMasterId}!`);
                 }
 
                 const torpedoLaunchOffsetFromCenter = patrolShip.radius + 5; // A small offset from the ship's front
@@ -2275,13 +2273,11 @@
             }
             function fireEnemySubTorpedo(enemySub, currentTime) {
                 if (enemySub.ammoMk48 <= 0) {
-                    console.log(`Enemy Sub (Master #${enemySub.assignedMasterId}) is out of torpedoes!`);
                     return;
                 }
                 enemySub.ammoMk48--;
                 enemySub.torpedoesFiredInVolley++;
             
-                console.log(`Enemy Sub (Master #${enemySub.assignedMasterId}) is firing torpedo #${enemySub.torpedoesFiredInVolley} of its volley!`);
             
                 const launchRadians = degreesToRadians(enemySub.heading - 90);
                 const torpedoSpawnX = enemySub.worldX + (ENEMY_SUB_WIDTH / 2) * Math.cos(launchRadians);
@@ -2393,7 +2389,7 @@
                 }
             
                 // --- State Transition & AI Logic ---
-                const canSeePlayer = (submarine.depth <= 0 && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
+                const canSeePlayer = (submarine.depth <= FADE_START_DEPTH && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
                 let playerTorpedoIsTracking = torpedoes.some(t => t.type === 'enemy-torpedo' && t.targetSubmarine && t.masterIdToTrack === enemySub.assignedMasterId);
             
                 // High-priority transitions
@@ -2415,7 +2411,6 @@
                     if (!huntTriggered && enemySub.patrolTargetIsland && enemySub.patrolTargetIsland.isBoosting) { huntTriggered = true; disturbanceLocation = getPolygonCentroid(enemySub.patrolTargetIsland.points); }
                     if (!huntTriggered) { for (const ship of patrolShips) { if (ship.isDetectingPlayer && Math.sqrt((enemySub.worldX - ship.worldX)**2 + (enemySub.worldY - ship.worldY)**2) < 800) { huntTriggered = true; disturbanceLocation = { x: ship.lockedOnTargetX, y: ship.lockedOnTargetY }; break; } } }
                     if (huntTriggered) {
-                        if (enemySub.aiState !== 'HUNTING') console.log(`Enemy Sub #${enemySub.assignedMasterId} entering HUNT state.`);
                         enemySub.aiState = 'HUNTING';
                         enemySub.lastHuntTriggerTime = currentTime;
                         enemySub.huntLocation = disturbanceLocation;
@@ -2468,7 +2463,6 @@
                                     }
                                 });
                                 enemySub.fleeTargetHq = closestHq;
-                                console.log(`Sub #${enemySub.assignedMasterId} is low on ammo and fleeing to HQ for resupply.`);
                             } else {
                                 // Standard flee
                                 enemySub.aiState = 'FLEEING';
@@ -2495,7 +2489,6 @@
                             if (distToHq < 300) {
                                 // Arrived at HQ, replenish ammo
                                 enemySub.ammoMk48 = ENEMY_SUB_AMMO_MK48;
-                                console.log(`Sub #${enemySub.assignedMasterId} has been resupplied at HQ.`);
                                 enemySub.isFleeingToResupply = false;
                                 enemySub.aiState = 'HUNTING'; // End flee and go back to hunting
                                 enemySub.lastHuntTriggerTime = currentTime;
@@ -2509,7 +2502,7 @@
                         } else {
                             // Original flee logic
                             if (enemySub.fleeingFromThreat && enemySub.decoysRemaining > 0) {
-                                decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: 0, launchTime: currentTime });
+                                decoys.push({ id: `decoy-${currentTime}`, worldX: enemySub.worldX, worldY: enemySub.worldY, heading: Math.random() * 360, speed: DECOY_LAUNCH_SPEED * 0.5, launchTime: currentTime });
                                 enemySub.decoysRemaining--;
                                 enemySub.fleeingFromThreat = false;
                             }
@@ -2939,7 +2932,6 @@
                         submarine.periscopeAnimationStartTime = currentTime;
                         submarine.targetPeriscopeState = false; // Force retraction
                         submarine.lastPeriscopeActionTime = currentTime; // Start cooldown for auto-retract
-                        console.log("Periscope automatically retracting due to changed conditions.");
                     }
                 }
 
@@ -2992,7 +2984,6 @@
                                             type: 'periscope',
                                             isPersistent: true // Periscope reveal for islands is persistent
                                         });
-                                        console.log("Island revealed by periscope!");
                                     }
                                 }
                             }
@@ -3171,7 +3162,6 @@
                                                     torpedoThatPinged.masterIdToTrack = pShip.assignedMasterId;
                                                     torpedoThatPinged.lastKnownTargetWorldX = pShip.worldX;
                                                     torpedoThatPinged.lastKnownTargetWorldY = pShip.worldY;
-                                                    console.log(`Untargeted Torpedo (ID: ${torpedoThatPinged.id}) acquired target Master #${pShip.assignedMasterId}!`);
                                                 }
                                             }
                                         } else if (ping.type === 'ping') {
@@ -3190,7 +3180,6 @@
                                                 pShip.isMasterIdAssigned = true;
                                             }
                                             pShip.isDetected = true; // Mark as detected upon sonar reveal
-                                            console.log(`Master #${pShip.assignedMasterId || 'N/A'} revealed by sonar.`);
 
                                             const newEchoPing = {
                                                 x: pShip.worldX, // Echo originates from ship's center for simplicity
@@ -3236,7 +3225,6 @@
                                                                 enemySub.isMasterIdAssigned = true;
                                                             }
                                                             enemySub.isDetected = true;
-                                                            console.log(`Enemy Submarine (Master #${enemySub.assignedMasterId}) revealed by sonar.`);
                                             
                                                             // Create an echo for the enemy sub
                                                             const newEchoPing = {
@@ -3279,7 +3267,6 @@
                                                     closestHqIsland.isBoosting = true;
                                                     closestHqIsland.boostEndTime = currentTime + 10000;
                                                     
-                                                    console.log(`HQ is boosting Master #${pShip.assignedMasterId}`);
                                                 }
                                             }
                                                         }
@@ -3318,13 +3305,11 @@
                                                                 enemySub.isMasterIdAssigned = true;
                                                             }
                                                             enemySub.isDetected = true;
-                                                            console.log(`Enemy Submarine (Master #${enemySub.assignedMasterId}) revealed by sonar.`);
                                                                 // If the ping came from a searching torpedo, assign the target
                                                                 if (ping.type === 'torpedo-ping') {
                                                                     const torpedoThatPinged = torpedoes.find(t => t.id === ping.originatorTorpedoId);
                                                                     if (torpedoThatPinged && torpedoThatPinged.masterIdToTrack === null) {
                                                                         torpedoThatPinged.masterIdToTrack = enemySub.assignedMasterId;
-                                                                        console.log(`Torpedo (ID: ${torpedoThatPinged.id}) acquired new target: Enemy Sub (Master #${enemySub.assignedMasterId})!`);
                                                                     }
                                                                 }
                                         
@@ -3368,7 +3353,6 @@
                     // Check if post-fire patrol duration is over. If so, reset fire-related flags.
                     if (ship.hasFiredTorpedoThisDetection && currentTime >= ship.postFirePatrolEndTime) {
                         ship.hasFiredTorpedoThisDetection = false;
-                        // console.log(`Master #${ship.assignedMasterId} finished post-fire patrol at ${currentTime.toFixed(0)}ms.`);
                     }
 
                     // Determine if the ship should enter or remain in the 'detecting' state
@@ -3379,7 +3363,6 @@
                         if (!ship.isDetectingPlayer) { // Transition from not detecting to detecting
                             ship.isDetectingPlayer = true;
                             ship.detectionStartTime = currentTime; // Start new lock-on timer
-                            console.log(`Master #${ship.assignedMasterId} started new detection cycle at ${currentTime.toFixed(0)}ms.`);
 
                             // Calculate target bearing ONLY at the moment of initial detection
                             const dx = submarine.worldX - ship.worldX;
@@ -3389,7 +3372,6 @@
                             ship.heading = targetBearingDeg; // SNAP the ship's visual heading immediately to this angle
                             ship.lockedOnTargetX = submarine.worldX; // Store player's position at detection
                             ship.lockedOnTargetY = submarine.worldY;
-                            console.log(`Master #${ship.assignedMasterId} locked heading to ${targetBearingDeg.toFixed(1)}° at detection. Target Pos: (${ship.lockedOnTargetX.toFixed(0)}, ${ship.lockedOnTargetY.toFixed(0)})`);
                         }
 
                         // During the detection/lock-on phase, the ship maintains its fixed 'fireBearing' as its heading.
@@ -3409,11 +3391,9 @@
                             ship.postFirePatrolEndTime = currentTime + PATROL_SHIP_POST_FIRE_PATROL_DURATION_MS; // Start post-fire patrol
                             ship.isDetectingPlayer = false; // Exit detection state immediately after firing
                             ship.lockOnProgress = 0; // Reset progress
-                            console.log(`Master #${ship.assignedMasterId} fired. Entering post-fire patrol until ${ship.postFirePatrolEndTime.toFixed(0)}ms.`);
                         }
                     } else { // Not detecting player OR in post-fire patrol cooldown
                         if (ship.isDetectingPlayer) { // If it *was* detecting but now isn't (lost visibility, or just fired)
-                            console.log(`Master #${ship.assignedMasterId} stopped detecting player (lost LoS or just fired).`);
                             ship.isDetectingPlayer = false; // Stop detection
                             ship.detectionStartTime = 0; // Reset timer
                             ship.lockOnProgress = 0; // Reset progress
@@ -3615,11 +3595,23 @@
                         homingTurnRate = REGULAR_TURN_RATE_MAGNITUDE * ENEMY_TORPEDO_TURN_RATE_MULTIPLIER;
                         baseSpeed = ENEMY_TORPEDO_INITIAL_SPEED_BONUS;
                         if (!torpedo.isHomingOnDecoy) {
+                            if (!torpedo.decoyRollResults) torpedo.decoyRollResults = {};
                             for (const decoy of decoys) {
+                                if (torpedo.decoyRollResults[decoy.id] !== undefined) {
+                                    // Already rolled for this decoy — use cached result
+                                    if (torpedo.decoyRollResults[decoy.id]) {
+                                        torpedo.isHomingOnDecoy = true;
+                                        torpedo.decoyTargetId = decoy.id;
+                                        break;
+                                    }
+                                    continue;
+                                }
                                 const distToDecoySq = (torpedo.worldX - decoy.worldX)**2 + (torpedo.worldY - decoy.worldY)**2;
                                 const decoyRange = ENEMY_TORPEDO_PROXIMITY_ACCEL_DISTANCE * DECOY_EFFECTIVENESS_RANGE_MULT;
                                 if (distToDecoySq < decoyRange**2) {
-                                    if (Math.random() < DECOY_TARGET_CHANCE) {
+                                    const acquired = Math.random() < DECOY_TARGET_CHANCE;
+                                    torpedo.decoyRollResults[decoy.id] = acquired;
+                                    if (acquired) {
                                         torpedo.isHomingOnDecoy = true;
                                         torpedo.decoyTargetId = decoy.id;
                                         break;
@@ -3721,14 +3713,12 @@
                             const distSq = (torpedo.worldX - pShip.worldX)**2 + (torpedo.worldY - pShip.worldY)**2;
                             const combinedRadiusSq = (pShip.radius + TORPEDO_HIT_RADIUS)**2;
                             if (distSq < combinedRadiusSq) {
-                                console.log(`Torpedo (ID: ${torpedo.id}) hit Master #${pShip.assignedMasterId}!`);
                                 torpedoesToRemove.push(i); // Mark torpedo for removal
 
                                 pShip.currentHealth -= TORPEDO_DAMAGE; // Apply damage
 
                                 if (pShip.currentHealth <= 0) {
                                     // Ship is defeated
-                                    console.log(`Master #${pShip.assignedMasterId} defeated!`);
 
                                     // Trigger explosion effect
                                     explosions.push({
@@ -3780,7 +3770,6 @@
                             }
                         
                             if (hitDetected) {
-                                console.log(`Torpedo (ID: ${torpedo.id}) hit Enemy Sub (Master #${enemySub.assignedMasterId})!`);
                                 torpedoesToRemove.push(i);
                         
                                 enemySub.currentHealth -= TORPEDO_DAMAGE;
@@ -3788,7 +3777,6 @@
                                 playExplosionSound();
                         
                                 if (enemySub.currentHealth <= 0) {
-                                    console.log(`Enemy Sub (Master #${enemySub.assignedMasterId}) defeated!`);
                                     enemySubmarines.splice(k, 1);
                                     k--; // Adjust index after removal
                                     updateLevelProgress();
@@ -3807,7 +3795,6 @@
                              const distSq = (torpedo.worldX - targetDecoy.worldX)**2 + (torpedo.worldY - targetDecoy.worldY)**2;
                              const combinedRadiusSq = (DECOY_VISUAL_RADIUS + TORPEDO_HIT_RADIUS)**2;
                              if (distSq < combinedRadiusSq) {
-                                 console.log(`Torpedo (ID: ${torpedo.id}) hit decoy (ID: ${targetDecoy.id})!`);
                                  torpedoesToRemove.push(i);
                                  if (!decoysToRemove.includes(decoyIndex)) {
                                      decoysToRemove.push(decoyIndex);
@@ -3827,7 +3814,6 @@
                         for (const island of islands) {
                             const torpedoCircle = { x: torpedo.worldX, y: torpedo.worldY, radius: TORPEDO_HIT_RADIUS };
                             if (circlePolygonCollision(torpedoCircle, island.points)) {
-                                console.log(`Torpedo (ID: ${torpedo.id}) hit an island!`);
                                 torpedoesToRemove.push(i);
     
                                 explosions.push({
@@ -3868,7 +3854,6 @@
                         }
 
                         if (hitSub) {
-                            console.log(`Enemy torpedo (ID: ${torpedo.id}) hit the submarine!`);
                             torpedoesToRemove.push(i);
 
                             submarine.currentHealth -= ENEMY_TORPEDO_DAMAGE;
@@ -3937,7 +3922,6 @@
                         // Check if tail should extend (speed above threshold)
                         if (missile.speed > MISSILE_ACCEL_START_SPEED_THRESHOLD && !missile.hasExtendedTail) {
                             missile.hasExtendedTail = true;
-                            console.log(`Missile (ID: ${missile.id}) extended tail and started rapid acceleration!`);
                         }
 
                         // Rapidly accelerate towards max speed
@@ -3958,12 +3942,10 @@
 
                         if (distToTargetSq < thresholdSq) {
                             missilesToRemove.push(i);
-                            console.log(`Missile (ID: ${missile.id}) reached target.`);
                             // Remove the corresponding target box from the array based on its unique ID
                             const targetIndex = submarine.missileTargets.findIndex(target => target.id === missile.assignedTargetId);
                             if (targetIndex !== -1) {
                                 submarine.missileTargets.splice(targetIndex, 1);
-                                console.log(`Missile target (ID: ${missile.assignedTargetId}) removed as missile impacted.`);
                             }
                             
                             // NEW: Missile detonation logic
@@ -3977,13 +3959,11 @@
                                 const combinedRadiusSq = (pShip.radius + MISSILE_HIT_RADIUS)**2;
 
                                 if (distToShipSq < combinedRadiusSq) {
-                                    console.log(`Missile (ID: ${missile.id}) hit Master #${pShip.assignedMasterId}!`);
                                     pShip.currentHealth -= MISSILE_DAMAGE; // Apply damage
                                     damageApplied = true;
                                     hitSomething = true;
 
                                     if (pShip.currentHealth <= 0) {
-                                        console.log(`Master #${pShip.assignedMasterId} defeated by missile!`);
                                         // Trigger explosion effect (already handled below if damageApplied or hitSomething)
                                         // Remove the hit ship
                                         patrolShips.splice(j, 1);
@@ -4017,7 +3997,6 @@
                                 const distSq = (missile.worldX - subCircle.x)**2 + (missile.worldY - subCircle.y)**2;
                                 const combinedRadiusSq = (subCircle.radius + MISSILE_HIT_RADIUS)**2;
                                 if (distSq < combinedRadiusSq) {
-                                    console.log(`Missile (ID: ${missile.id}) hit the submarine!`);
                                     submarine.currentHealth -= MISSILE_DAMAGE; // Apply damage to submarine
                                     damageApplied = true;
                                     hitSomething = true;
@@ -4040,13 +4019,11 @@
                                     const combinedHQRdadiusSq = (Math.max(HQ_WIDTH, HQ_HEIGHT) / 2 + MISSILE_HIT_RADIUS)**2; // Approximation for HQ hitbox
 
                                     if (distToHQSq < combinedHQRdadiusSq) {
-                                        console.log(`Missile (ID: ${missile.id}) hit an HQ!`);
                                         island.hqHealth -= MISSILE_DAMAGE; // Apply damage to HQ
                                         damageApplied = true;
                                         hitSomething = true;
 
                                         if (island.hqHealth <= 0) {
-                                            console.log(`Headquarters on island destroyed!`);
                                             island.hasHeadquarters = false; // Destroy HQ
                                             // Optional: add a visual effect for destroyed HQ later
                                             updateLevelProgress();
@@ -4062,7 +4039,6 @@
                             for (const island of islands) {
                                 const missileHitCircle = { x: missile.worldX, y: missile.worldY, radius: MISSILE_HIT_RADIUS };
                                 if (circlePolygonCollision(missileHitCircle, island.points)) {
-                                    console.log(`Missile (ID: ${missile.id}) hit an island.`);
                                     hitSomething = true; // Mark as hit for sound purposes
                                     break;
                                 }
@@ -4078,7 +4054,6 @@
                                 });
                                 playExplosionSound(); // Play explosion sound
                             } else {
-                                console.log("Missile detonated in water, no damage applied, no sound played.");
                             }
                         }
                     }
@@ -4106,7 +4081,6 @@
 
                         // STOP if we have arrived at the destination OR if we get too close to the player.
                         if (distToTargetSq < 5**2 || distToPlayerSq < collisionStopDistance**2) {
-                            console.log("Resupply tender has arrived and is holding position.");
                             tender.state = 'arrived';
                             tender.speed = 0; 
                             updateUI();
@@ -4133,7 +4107,6 @@
                     if (currentTime - tender.departTime > 2000) {
                          tender.state = 'arrived';
                          delete tender.departTime; // Clean up the temporary property
-                         console.log("Tender has departed and is now holding at a new position.");
                     }
                 }
                     // State: 'approaching' - Moving from the holding position to a parallel docking spot.
@@ -4150,9 +4123,7 @@
                             tender.heading = tender.targetHeading;
                             tender.speed = 0;
                             if (tender.state !== 'docked') {
-                                console.log("TENDER FINISHED APPROACH. Setting state to docked and opening menu.");
                                 tender.state = 'docked';
-                                console.log("Tender is docked.");
                                 resupplyState = { decoys: { inProgress: false, progress: 0 }, mk48: { inProgress: false, progress: 0 }, tomahawk: { inProgress: false, progress: 0 } };
                                 repairState = { inProgress: false, progress: 0 };
                                 selectedIntelOption = null;
@@ -4284,10 +4255,10 @@
              * @param {number} currentDrawingZoomFactor - Current zoom for line widths.
              */
             function drawGrid(currentDrawingZoomFactor) {
-                const gridDrawStartX = Math.floor((submarine.worldX - canvas.width / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
-                const gridDrawEndX = Math.ceil((submarine.worldX + canvas.width / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
-                const gridDrawStartY = Math.floor((submarine.worldY - canvas.height / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
-                const gridDrawEndY = Math.ceil((submarine.worldY + canvas.height / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
+                const gridDrawStartX = Math.floor((submarine.worldX - canvasLogicalWidth / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
+                const gridDrawEndX = Math.ceil((submarine.worldX + canvasLogicalWidth / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
+                const gridDrawStartY = Math.floor((submarine.worldY - canvasLogicalHeight / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
+                const gridDrawEndY = Math.ceil((submarine.worldY + canvasLogicalHeight / (2 * currentDrawingZoomFactor)) / GRID_SIZE) * GRID_SIZE;
 
                 ctx.strokeStyle = '#21262d';
                 ctx.lineWidth = 0.5 / currentDrawingZoomFactor;
@@ -4478,7 +4449,7 @@
             function drawCompass() {
                 // Compass is always drawn at the center of the canvas, regardless of zoom or world position
                 ctx.save();
-                ctx.translate(canvas.width / 2, canvas.height / 2); // Center of canvas
+                ctx.translate(canvasLogicalWidth / 2, canvasLogicalHeight / 2); // Center of canvas
 
                 const ringRadius = COMPASS_VISUAL_RADIUS_PX;
 
@@ -4925,16 +4896,16 @@
                 // Set up the main camera transform
                 ctx.save();
                 if (submarine.isMapModeActive) {
-                    mapTransform.scale = Math.min(canvas.width / WORLD_WIDTH, canvas.height / WORLD_HEIGHT);
-                    mapTransform.translateX = (canvas.width - WORLD_WIDTH * mapTransform.scale) / 2;
-                    mapTransform.translateY = (canvas.height - WORLD_HEIGHT * mapTransform.scale) / 2;
-                
+                    mapTransform.scale = Math.min(canvasLogicalWidth / WORLD_WIDTH, canvasLogicalHeight / WORLD_HEIGHT);
+                    mapTransform.translateX = (canvasLogicalWidth - WORLD_WIDTH * mapTransform.scale) / 2;
+                    mapTransform.translateY = (canvasLogicalHeight - WORLD_HEIGHT * mapTransform.scale) / 2;
+
                     currentDrawingZoomFactor = mapTransform.scale; // Keep this for other functions that use it
-                
+
                     ctx.translate(mapTransform.translateX, mapTransform.translateY);
                     ctx.scale(mapTransform.scale, mapTransform.scale);
                 } else {
-                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.translate(canvasLogicalWidth / 2, canvasLogicalHeight / 2);
                     ctx.scale(currentDrawingZoomFactor, currentDrawingZoomFactor);
                     ctx.translate(-submarine.worldX, -submarine.worldY);
                 }
@@ -4943,10 +4914,10 @@
                 // First, define variables needed for both modes
                 let fadeFactor = Math.max(0, Math.min(1, (submarine.depth - FADE_START_DEPTH) / (FADE_END_DEPTH - FADE_START_DEPTH)));
                 const submergedOceanColor = interpolateColor(OCEAN_COLOR_BASE, OCEAN_COLOR_OBSCURED, fadeFactor); // THIS LINE WAS MISSING
-                const visibleWorldLeft = submarine.isMapModeActive ? 0 : submarine.worldX - (canvas.width / 2 / currentDrawingZoomFactor);
-                const visibleWorldTop = submarine.isMapModeActive ? 0 : submarine.worldY - (canvas.height / 2 / currentDrawingZoomFactor);
-                const visibleWorldWidth = submarine.isMapModeActive ? WORLD_WIDTH : canvas.width / currentDrawingZoomFactor;
-                const visibleWorldHeight = submarine.isMapModeActive ? WORLD_HEIGHT : canvas.height / currentDrawingZoomFactor;
+                const visibleWorldLeft = submarine.isMapModeActive ? 0 : submarine.worldX - (canvasLogicalWidth / 2 / currentDrawingZoomFactor);
+                const visibleWorldTop = submarine.isMapModeActive ? 0 : submarine.worldY - (canvasLogicalHeight / 2 / currentDrawingZoomFactor);
+                const visibleWorldWidth = submarine.isMapModeActive ? WORLD_WIDTH : canvasLogicalWidth / currentDrawingZoomFactor;
+                const visibleWorldHeight = submarine.isMapModeActive ? WORLD_HEIGHT : canvasLogicalHeight / currentDrawingZoomFactor;
 
                 // Now, handle drawing for each mode
                 if (submarine.isMapModeActive) {
@@ -5381,7 +5352,6 @@
                         if (weaponName === 'Tomahawk' && isAlreadySelected) {
                              if (submarine.missileTargets.length > 0) {
                                 submarine.missileTargets = [];
-                                console.log("Tomahawk re-selected. Previous missile targets cleared.");
                             }
                         }
                         
@@ -5393,7 +5363,6 @@
                 });
             
                 weaponsAndEquipmentDisplay.appendChild(fragment);
-                console.log("Weapon UI initialized successfully.");
             }
             
             // REPLACE the existing updateTargetingUI function with this one
@@ -5526,7 +5495,6 @@
                         extractionZone.x = WORLD_WIDTH / 2;
                         extractionZone.y = WORLD_HEIGHT - 200;
                         extractionZone.active = true;
-                        console.log("Extraction zone activated!");
                     }
                 }
             }
@@ -5556,7 +5524,6 @@
                 if (!hasAudioContextStarted) {
                     try {
                         await Tone.start();
-                        console.log("Audio context successfully started/resumed.");
                         initializeAudioSynths(); // Initialize synths AFTER Tone.start()
                         hasAudioContextStarted = true;
                     } catch (e) {
@@ -5594,21 +5561,17 @@
                                 if (submarine.targetedMasterId === targetMasterId) { // Check against masterId now
                                     // If the same ship (by masterId) is pressed again, deactivate targeting
                                     submarine.targetedMasterId = null;
-                                    console.log(`Deactivated targeting for Master #${targetMasterId}`);
                                 } else {
                                     // Set as new target
                                     submarine.targetedMasterId = targetMasterId;
-                                    console.log(`Targeting Master #${targetMasterId} (Hotkey: ${hotkeyDigit})`);
                                 }
                             } else {
                                 // If the mapped ship is not actively revealed or doesn't exist, clear the current target.
                                 submarine.targetedMasterId = null;
-                                console.log(`Cannot target Hotkey ${hotkeyDigit}: Mapped ship (Master #${targetMasterId}) not actively revealed or does not exist, untargeting.`);
                             }
                         } else {
                             // No ship is mapped to this hotkey slot, clear current target.
                             submarine.targetedMasterId = null;
-                            console.log(`No ship assigned to hotkey ${hotkeyDigit}, untargeting.`);
                         }
                         updateUI();
                         return;
@@ -5644,16 +5607,13 @@
                                 initialMasterIdToTrack = submarine.targetedMasterId;
                                 initialLastKnownTargetWorldX = targetShip.worldX;
                                 initialLastKnownTargetWorldY = targetShip.worldY;
-                                console.log(`Launched Mk 48 (ID: ${torpedoCounter + 1}) at Master #${submarine.targetedMasterId}!`);
                             } else {
-                                console.log(`Launched Mk 48 (ID: ${torpedoCounter + 1}) without a target. It will seek its own!`);
                             }
                             torpedoCounter++;
                             const newTorpedo = { id: torpedoCounter, worldX: submarine.worldX, worldY: submarine.worldY, speed: submarine.speed + TORPEDO_INITIAL_SPEED_BONUS, initialSpeed: submarine.speed + TORPEDO_INITIAL_SPEED_BONUS, maxAccelerationBonus: TORPEDO_MAX_ACCELERATION_BONUS, heading: submarine.heading, launchTime: currentTime, masterIdToTrack: initialMasterIdToTrack, targetSubmarine: false, lastKnownTargetWorldX: initialLastKnownTargetWorldX, lastKnownTargetWorldY: initialLastKnownTargetWorldY, lastPingTime: currentTime, type: 'player-torpedo' };
                             torpedoes.push(newTorpedo);
                             submarine.ammoMk48--; // Decrement ammo
                         } else {
-                            console.log("Out of Mk 48 torpedoes!");
                             flashElementRed('weapon-item-mk48');
                         }
                     } else if (WEAPON_LIST[currentWeaponIndex] === 'Tomahawk') {
@@ -5663,7 +5623,7 @@
                             const canFireMissile = submarine.depth <= MISSILE_MAX_DEPTH_FOR_FIRE && Math.abs(submarine.speed) < MISSILE_MAX_SPEED_FOR_FIRE;
                             if (!canFireMissile) { flashElementRed('weapon-item-tomahawk'); if (submarine.depth > MISSILE_MAX_DEPTH_FOR_FIRE) { flashElementRed('currentDepthDisplay'); } if (Math.abs(submarine.speed) >= MISSILE_MAX_SPEED_FOR_FIRE) { flashElementRed('currentSpeedDisplay'); } return; }
                             const availableTarget = submarine.missileTargets.find(target => !missiles.some(missile => missile.assignedTargetId === target.id));
-                            if (!availableTarget) { console.log("No untargeted locations for Tomahawk launch."); flashElementRed('weapon-item-tomahawk'); return; }
+                            if (!availableTarget) { flashElementRed('weapon-item-tomahawk'); return; }
                             const missileLaunchRadians = degreesToRadians(submarine.heading);
                             const rotatedLaunchX = -MISSILE_LAUNCH_LOCAL_Y_OFFSET * Math.sin(missileLaunchRadians);
                             const rotatedLaunchY = MISSILE_LAUNCH_LOCAL_Y_OFFSET * Math.cos(missileLaunchRadians);
@@ -5677,9 +5637,7 @@
                             missiles.push(newMissile);
                             lastMissileLaunchTime = currentTime;
                             submarine.ammoTomahawk--; // Decrement ammo
-                            console.log(`Tomahawk (ID: ${newMissile.id}) launched at target ID: ${newMissile.assignedTargetId}.`);
                         } else {
-                            console.log("Out of Tomahawk missiles!");
                             flashElementRed('weapon-item-tomahawk');
                         }
                     }
@@ -5787,9 +5745,7 @@
                             endTime: currentTime + PING_REVEAL_DURATION_MS
                         });
                         lastSonarPingTime = currentTime; // Update last ping time
-                        console.log("Playing player ping sound!");
                     } else {
-                        console.log("Sonar on cooldown!");
                     }
                 }
 
@@ -5811,10 +5767,8 @@
                             // Toggle periscopeDeployed state directly
                             submarine.targetPeriscopeState = !submarine.periscopeDeployed;
                             submarine.lastPeriscopeActionTime = currentTime; // Start cooldown for deploy/retract action
-                            console.log(`Periscope ${submarine.periscopeDeployed ? 'retraction' : 'deployment'} initiated!`);
                         } else {
                             // Not deployed, conditions not met, can't deploy
-                            console.log(`Cannot deploy periscope: conditions not met (depth ${MIN_PERISCOPE_DEPTH}-${MAX_PERISCOPE_DEPTH}m, speed < ${MAX_PERISCOPE_SPEED}m/s).`);
                             // Flash the relevant indicator(s)
                             if (!isDepthValid) {
                                 flashElementRed('currentDepthDisplay');
@@ -5824,7 +5778,6 @@
                             }
                         }
                     } else {
-                        console.log("Periscope on cooldown or animating.");
                     }
                 }
 
@@ -5832,12 +5785,10 @@
                 if (event.code === 'KeyC' && !event.repeat) {
                     const currentTime = performance.now();
                     if (currentTime - lastDecoyLaunchTime < DECOY_COOLDOWN_MS) {
-                        console.log("Decoys on cooldown.");
                         flashElementRed('decoyCountDisplay'); // Flash the UI to give feedback
                         return;
                     }
                     if (submarine.decoysRemaining <= 0) {
-                        console.log("Out of decoys!");
                         flashElementRed('decoyCountDisplay');
                         return;
                     }
@@ -5869,7 +5820,6 @@
                         };
                         decoys.push(newDecoy);
                     }
-                    console.log(`Launched decoys! ${submarine.decoysRemaining} remaining.`);
                 }
             });
 
@@ -5936,8 +5886,8 @@
                 const currentDrawingZoomFactor = submarine.currentViewZoomFactor;
                 
                 // Calculate un-clamped world coordinates for the mouse position
-                let rawWorldMouseX = (canvasMouseX - canvas.width / 2) / currentDrawingZoomFactor + submarine.worldX;
-                let rawWorldMouseY = (canvasMouseY - canvas.height / 2) / currentDrawingZoomFactor + submarine.worldY;
+                let rawWorldMouseX = (canvasMouseX - canvasLogicalWidth / 2) / currentDrawingZoomFactor + submarine.worldX;
+                let rawWorldMouseY = (canvasMouseY - canvasLogicalHeight / 2) / currentDrawingZoomFactor + submarine.worldY;
 
                 if (WEAPON_LIST[currentWeaponIndex] === 'Tomahawk') {
                     submarine.worldMouseX = rawWorldMouseX;
@@ -5963,7 +5913,6 @@
                 const worldX = (canvasMouseX - mapTransform.translateX) / mapTransform.scale;
                 const worldY = (canvasMouseY - mapTransform.translateY) / mapTransform.scale;
             
-                console.log(`Satellite scan initiated at (${worldX.toFixed(0)}, ${worldY.toFixed(0)})`);
             
                 // Create the temporary, active scan that reveals everything
                 revealedAreas.push({
@@ -6011,8 +5960,8 @@
                         } else {
                             // Use the original logic for normal view
                             const currentDrawingZoomFactor = submarine.currentViewZoomFactor;
-                            worldX = (canvasMouseX - canvas.width / 2) / currentDrawingZoomFactor + submarine.worldX;
-                            worldY = (canvasMouseY - canvas.height / 2) / currentDrawingZoomFactor + submarine.worldY;
+                            worldX = (canvasMouseX - canvasLogicalWidth / 2) / currentDrawingZoomFactor + submarine.worldX;
+                            worldY = (canvasMouseY - canvasLogicalHeight / 2) / currentDrawingZoomFactor + submarine.worldY;
                         }
                 
                         // The rest of the logic is the same for both modes
@@ -6023,7 +5972,6 @@
                         };
                         submarine.missileTargets.push(newTarget);
                         draw(); // Redraw to show the new target box
-                        console.log(`Missile target set at (${newTarget.worldX.toFixed(0)}, ${newTarget.worldY.toFixed(0)}). Total targets: ${submarine.missileTargets.length}`);
                     }
                 });
 
@@ -6031,10 +5979,14 @@
 
             // --- Canvas Resizing ---
             function resizeCanvas() {
-                canvas.width = canvas.clientWidth;
-                canvas.height = canvas.clientHeight;
+                const dpr = window.devicePixelRatio || 1;
+                canvasLogicalWidth = canvas.clientWidth;
+                canvasLogicalHeight = canvas.clientHeight;
+                canvas.width = canvasLogicalWidth * dpr;
+                canvas.height = canvasLogicalHeight * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 // Recalculate MIN_ZOOM_FACTOR_CALCULATED on resize
-                MIN_ZOOM_FACTOR_CALCULATED = canvas.height / MAX_VIEW_HEIGHT_ZOOM_OUT_UNITS;
+                MIN_ZOOM_FACTOR_CALCULATED = canvasLogicalHeight / MAX_VIEW_HEIGHT_ZOOM_OUT_UNITS;
                 // Ensure current zoom doesn't fall below the new minimum if canvas shrinks
                 submarine.currentViewZoomFactor = Math.max(submarine.currentViewZoomFactor, MIN_ZOOM_FACTOR_CALCULATED);
                 draw();
@@ -6070,15 +6022,12 @@
                     // --- Set up all other event listeners ---
                     document.getElementById('resupplyButtonBox').addEventListener('click', () => {
                         if (isResupplyAvailable && !resupplyTender) {
-                            console.log("Resupply requested!");
                             resupplyTender = createTender(resupplyRoute.startX, resupplyRoute.startY, resupplyRoute.endX, resupplyRoute.endY);
                             isResupplyAvailable = false;
                             updateUI();
                         } else if (resupplyTender && resupplyTender.state === 'arrived') {
-                            console.log(`RE-DOCK CLICKED. Tender state is: '${resupplyTender.state}'. Attempting final approach.`);
                             const distSq = (submarine.worldX - resupplyTender.worldX)**2 + (submarine.worldY - resupplyTender.worldY)**2;
                             if (distSq < DOCKING_ACTIVATION_RANGE**2 && Math.abs(submarine.speed) < 10) {
-                                console.log("Tender beginning final approach! Submarine engines stopped.");
 
                                 submarine.speed = 0;
                                 submarine.acceleration = 0;
@@ -6140,11 +6089,9 @@
                         if (selectedIntelOption) {
                             activeIntelAbility = selectedIntelOption;
                             lastIntelTime = performance.now();
-                            console.log(`Intelligence report activated: ${activeIntelAbility}`);
                             if (activeIntelAbility === 'satellite') {
                                 isSatelliteScanActive = true;
                                 submarine.isMapModeActive = true;
-                                console.log("Satellite Intelligence armed. Click on the map to designate a scan area.");
                             } else if (activeIntelAbility === 'spy-network') {
                                 const allEnemyUnits = [...patrolShips, ...enemySubmarines];
                                 const unrevealedShips = allEnemyUnits.filter(unit => !unit.isSpyNetworkRevealed);
@@ -6160,14 +6107,11 @@
                                             shipToReveal.assignedMasterId = masterShipCounter;
                                             shipToReveal.isMasterIdAssigned = true;
                                         }
-                                        console.log(`Spy network has permanently revealed Master #${shipToReveal.assignedMasterId}`);
                                     }
                                 } else {
-                                    console.log("Spy network activated, but no unrevealed targets were available.");
                                 }
                             }
                             else if (activeIntelAbility === 'aerial-patrol') {
-                                console.log("Aerial Patrol activated: revealing half of unknown islands.");
                             
                                 // 1. Find all islands that are not already revealed.
                                 const unrevealedIslands = islands.filter(island => {
@@ -6185,7 +6129,6 @@
                                 const countToReveal = Math.ceil(shuffledUnrevealed.length / 2);
                                 const islandsToReveal = shuffledUnrevealed.slice(0, countToReveal);
                             
-                                console.log(`Found ${unrevealedIslands.length} unrevealed islands. Revealing ${islandsToReveal.length}.`);
                             
                                 // 3. Add a new persistent revealed area for each selected island.
                                 islandsToReveal.forEach(island => {
@@ -6203,14 +6146,12 @@
                         }
                         if (resupplyTender) {
                             resupplyTender.state = 'departing'; // Change to a new 'departing' state
-                            console.log("Tender is in departing state")
                         }
                     });
                     document.getElementById('tryAgainButton').addEventListener('click', async () => {
                         if (!hasAudioContextStarted) {
                             try {
                                 await Tone.start();
-                                console.log("Audio context successfully started/resumed via Try Again button.");
                                 initializeAudioSynths();
                                 hasAudioContextStarted = true;
                             }
@@ -6229,7 +6170,6 @@
                         if (!hasAudioContextStarted) {
                             try {
                                 await Tone.start();
-                                console.log("Audio context successfully started.");
                                 initializeAudioSynths();
                                 hasAudioContextStarted = true;
                             } catch (e) {
@@ -6239,7 +6179,6 @@
                         document.getElementById('startScreen').style.display = 'none';
                         lastTimestamp = performance.now();
                         animationFrameId = requestAnimationFrame(gameLoop);
-                        console.log("Game started!");
                     });
                 
                     // Prepare the game state and draw the first "paused" frame
@@ -6248,7 +6187,6 @@
                     updateUI(); 
                     draw();
                 
-                    console.log("Game loaded and paused. Waiting for player to click 'Start Game'.");
                 });
         })(); // End of IIFE
     </script>
