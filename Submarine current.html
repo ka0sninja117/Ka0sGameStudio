@@ -1543,6 +1543,39 @@
              */
             function generateIslands() {
                 islands = [];
+
+                // Level 0: Test arena with hand-placed islands
+                if (currentLevel === 0) {
+                    const centerX = WORLD_WIDTH / 2;
+                    const centerY = WORLD_HEIGHT - 200;
+
+                    // Helper to create a small island at a specific position
+                    function createTestIsland(cx, cy, hasHQ) {
+                        const numVertices = 6;
+                        const radius = 80;
+                        const points = [];
+                        for (let i = 0; i < numVertices; i++) {
+                            const angle = (i / numVertices) * Math.PI * 2;
+                            const r = radius * (0.8 + Math.random() * 0.4);
+                            points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                        }
+                        return {
+                            points: points, color: ISLAND_COLOR_BASE,
+                            hasHeadquarters: hasHQ, hqHealth: hasHQ ? HQ_MAX_HEALTH : 0,
+                            isBoosting: false, boostEndTime: 0, starRotationAngle: 0
+                        };
+                    }
+
+                    // Island 1: HQ island west of player (patrol ship will orbit this)
+                    islands.push(createTestIsland(centerX - 800, centerY - 1000, true));
+                    // Island 2: HQ island east of player (enemy sub will patrol near this)
+                    islands.push(createTestIsland(centerX + 800, centerY - 1000, true));
+                    // Island 3: Plain island north of player (no enemies)
+                    islands.push(createTestIsland(centerX, centerY - 2000, false));
+
+                    return;
+                }
+
                 const subStartX = WORLD_WIDTH / 2;
                 const subStartY = WORLD_HEIGHT - 200;
                 const SAFE_ZONE_RADIUS = 750;
@@ -1744,6 +1777,14 @@
 
                 const hqIslands = islands.filter(island => island.hasHeadquarters);
 
+                // Level 0: Spawn exactly 1 patrol ship at the first HQ island only
+                if (currentLevel === 0) {
+                    if (hqIslands.length > 0) {
+                        patrolShips.push(createPatrolShip(hqIslands[0]));
+                    }
+                    return;
+                }
+
                 // 1. Spawn ships at every HQ island
                 for (const island of hqIslands) {
                     const newShip = createPatrolShip(island);
@@ -1766,11 +1807,38 @@
             function spawnEnemySubmarines() {
                 enemySubmarines = []; // Clear out subs from the previous level
             
-                if (currentLevel <= 1) return; //This can be commented out for Level 1 enemy sub testing
-            
+                // Level 0: Spawn exactly 1 enemy sub near the second HQ island
+                if (currentLevel === 0) {
+                    const hqIslands0 = islands.filter(island => island.hasHeadquarters);
+                    if (hqIslands0.length >= 2) {
+                        const hqCentroid = getPolygonCentroid(hqIslands0[1].points);
+                        const newSub = {
+                            worldX: hqCentroid.x, worldY: hqCentroid.y + 300,
+                            heading: 0, depth: ENEMY_SUB_FIXED_DEPTH, speed: 0,
+                            maxHealth: ENEMY_SUB_MAX_HEALTH, currentHealth: ENEMY_SUB_MAX_HEALTH,
+                            ammoMk48: ENEMY_SUB_AMMO_MK48, decoysRemaining: ENEMY_SUB_MAX_DECOYS,
+                            aiState: 'PATROLLING', patrolTargetIsland: null,
+                            huntLocation: null, orbitRadius: 0, orbitAngle: 0,
+                            orbitDirection: 1, stateTimer: 0, avoidanceTurnDirection: 0,
+                            isStuck: false, stuckStartTime: 0, previousAiState: null,
+                            isRevealedBySonar: false, revealedSonarEndTime: 0,
+                            isDetected: false, isMasterIdAssigned: false, assignedMasterId: null,
+                            lastFireTime: 0, lastCombatTriggerTime: 0,
+                            lastHuntPingTime: 0, lastHuntTriggerTime: 0,
+                            torpedoesFiredInVolley: 0, fleeingFromThreat: false,
+                            isFleeingToResupply: false, fleeTargetHq: null,
+                        };
+                        findNewPatrolTarget(newSub);
+                        enemySubmarines.push(newSub);
+                    }
+                    return;
+                }
+
+                if (currentLevel <= 1) return;
+
                 let numToSpawn = 0;
                 if (currentLevel === 1) {
-                    numToSpawn = 1; // For testing, always spawn 1 on level 1
+                    numToSpawn = 1;
                 } else {
                     numToSpawn = Math.floor(Math.random() * (currentLevel / 2));
                 }
@@ -1923,10 +1991,11 @@
             function populateAdminLevelButtons() {
                 adminLevelButtonsEl.innerHTML = '';
                 const maxLevel = 20;
-                for (let i = 1; i <= maxLevel; i++) {
+                for (let i = 0; i <= maxLevel; i++) {
                     const btn = document.createElement('button');
                     btn.className = 'admin-level-btn';
-                    btn.textContent = i;
+                    btn.textContent = i === 0 ? 'T' : i;
+                    btn.title = i === 0 ? 'Test Arena' : `Level ${i}`;
                     if (i === (adminSelectedLevel !== null ? adminSelectedLevel : currentLevel)) {
                         btn.classList.add('selected');
                     }
@@ -5619,6 +5688,10 @@
             function updateLevelProgress() {
                 if (!levelProgressDisplay) return;
             
+                if (currentLevel === 0) {
+                    levelProgressDisplay.textContent = 'Test Arena';
+                    return;
+                }
                 if (initialEnemyCount === 0) {
                     levelProgressDisplay.textContent = `Level ${currentLevel}: 100%`;
                     return;
