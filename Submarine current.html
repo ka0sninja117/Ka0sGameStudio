@@ -153,6 +153,89 @@
         #gameOverScreen button:hover {
             background-color: #0056b3;
         }
+
+        /* Admin Panel styles */
+        #adminPanel {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 70;
+        }
+        #adminPanel.show {
+            display: flex;
+        }
+        #adminPanel .admin-content {
+            background-color: #0d1117;
+            border: 2px solid #6a0dad;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            width: 90%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            font-family: 'Inter', sans-serif;
+        }
+        #adminPanel .admin-title {
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #FF8C00;
+            margin-bottom: 0.5rem;
+        }
+        #adminPanel .admin-section {
+            background-color: rgba(30, 30, 30, 0.7);
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+        }
+        #adminPanel .admin-section label {
+            display: block;
+            font-size: 0.9rem;
+            color: #b0b0b0;
+            margin-bottom: 0.5rem;
+        }
+        #adminPanel .admin-level-buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+        }
+        #adminPanel .admin-level-btn {
+            padding: 0.4rem 0;
+            border-radius: 0.25rem;
+            border: 1px solid #6a0dad;
+            background-color: #30363d;
+            color: #e6edf3;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.15s;
+        }
+        #adminPanel .admin-level-btn:hover {
+            background-color: #6a0dad;
+        }
+        #adminPanel .admin-level-btn.selected {
+            background-color: #6a0dad;
+            border-color: #9932CC;
+            box-shadow: 0 0 8px rgba(153, 50, 204, 0.6);
+            color: white;
+            font-weight: bold;
+        }
+        #adminPanel .admin-close-btn {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background-color: #586069;
+            border: none;
+            border-radius: 0.25rem;
+            color: #e6edf3;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        #adminPanel .admin-close-btn:hover {
+            background-color: #6a737d;
+        }
+
         #startScreen {
             position: absolute;
             inset: 0;
@@ -559,6 +642,18 @@
             <button id="tryAgainButton">Try Again</button>
         </div>
 
+        <div id="adminPanel" class="hidden">
+            <div class="admin-content">
+                <h3 class="admin-title">Admin Panel</h3>
+                <div class="admin-section">
+                    <label>Select Level:</label>
+                    <div id="adminLevelButtons" class="admin-level-buttons">
+                    </div>
+                </div>
+                <button id="closeAdminPanelBtn" class="admin-close-btn">Close</button>
+            </div>
+        </div>
+
         <div id="hotkeyDisplay" class="absolute top-4 left-4 text-gray-200 px-2 py-1 rounded-md text-xs">
             <div id="hotkeyContent">
                 WASD: Movement <br>
@@ -917,6 +1012,9 @@
             let radialDirectionDisplay, currentSpeedDisplay, accelerationDisplay;
             let currentDepthDisplay;
             let gameOverScreen, gameOverReasonDisplay, tryAgainButton; // Game Over UI elements
+            let adminPanelEl, adminLevelButtonsEl; // Admin Panel UI elements
+            let isAdminPanelOpen = false;
+            let adminSelectedLevel = null; // Level selected in admin panel (null = no change)
             let sonarPingHotkey, periscopeHotkey; // Reference to the sonar ping and periscope hotkey spans
             let targetingDisplay; // Reference to the new targeting UI element
             let weaponsAndEquipmentDisplay; // Reference to the new weapons display element
@@ -1820,6 +1918,54 @@
                 currentLevel++;
                 setupNewLevel(); // This already handles healing, reloading, and new map generation.
             }
+
+            // --- Admin Panel ---
+            function populateAdminLevelButtons() {
+                adminLevelButtonsEl.innerHTML = '';
+                const maxLevel = 20;
+                for (let i = 1; i <= maxLevel; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'admin-level-btn';
+                    btn.textContent = i;
+                    if (i === (adminSelectedLevel !== null ? adminSelectedLevel : currentLevel)) {
+                        btn.classList.add('selected');
+                    }
+                    btn.addEventListener('click', () => {
+                        adminSelectedLevel = i;
+                        populateAdminLevelButtons();
+                    });
+                    adminLevelButtonsEl.appendChild(btn);
+                }
+            }
+
+            function toggleAdminPanel() {
+                if (isAdminPanelOpen) {
+                    closeAdminPanel();
+                } else {
+                    openAdminPanel();
+                }
+            }
+
+            function openAdminPanel() {
+                if (isGameOver) return;
+                isAdminPanelOpen = true;
+                adminSelectedLevel = currentLevel;
+                populateAdminLevelButtons();
+                adminPanelEl.classList.add('show');
+            }
+
+            function closeAdminPanel() {
+                isAdminPanelOpen = false;
+                adminPanelEl.classList.remove('show');
+                if (adminSelectedLevel !== null && adminSelectedLevel !== currentLevel) {
+                    currentLevel = adminSelectedLevel;
+                    submarine.worldX = WORLD_WIDTH / 2;
+                    submarine.worldY = WORLD_HEIGHT - 200;
+                    setupNewLevel();
+                }
+                adminSelectedLevel = null;
+            }
+
             /**
              * Calculates the centroid (average point) of a polygon.
              * Used for echo ping origin.
@@ -5509,7 +5655,7 @@
                 lastTimestamp = timestamp;
 
                 // Update game state regardless of map mode
-                if (!isGameOver) {
+                if (!isGameOver && !isAdminPanelOpen) {
                     update(deltaTime);
                 }
                 draw();
@@ -5544,6 +5690,18 @@
                     draw(); // Redraw immediately to reflect map mode change
                     return;
                 }
+
+                // Admin panel toggle: P + . chord (both keys must be held)
+                if (!event.repeat && (event.code === 'KeyP' || event.code === 'Period')) {
+                    keysPressed[event.code] = true;
+                    if (keysPressed['KeyP'] && keysPressed['Period']) {
+                        toggleAdminPanel();
+                        return;
+                    }
+                }
+
+                // Block all other input while admin panel is open
+                if (isAdminPanelOpen) return;
 
                 // Handle number keys for targeting (1-9)
                 if (event.code.startsWith('Digit') && !event.repeat) {
@@ -6008,7 +6166,10 @@
                     gameOverScreen = document.getElementById('gameOverScreen');
                     gameOverReasonDisplay = document.getElementById('gameOverReason');
                     levelProgressDisplay = document.getElementById('levelProgressDisplay');
-                
+                    adminPanelEl = document.getElementById('adminPanel');
+                    adminLevelButtonsEl = document.getElementById('adminLevelButtons');
+                    document.getElementById('closeAdminPanelBtn').addEventListener('click', closeAdminPanel);
+
                     // Initialize UI components that create elements and listeners
                     initializeIntelUI();
                     initializeWeaponsUI();
