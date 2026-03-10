@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.17';
+        const GAME_VERSION = 'v1.18';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1162,6 +1162,14 @@
         const SPIKE_LAUNCH_COOLDOWN = 2000;     // 2 second cooldown
         const SPIKE_LAUNCH_DAMAGE_MULT = 0.8;   // 80% of player melee attack
         const SPIKE_LAUNCH_SPEED = 5;           // px per frame (~2.5x player base speed, clearly visible)
+
+        // --- Stealth system constants ---
+        const STEALTH_NOISE_BURST_DURATION = 2000; // ms after pounce/dash where stealth is minimal
+        const STEALTH_BURROW_BONUS = 0.85;          // flat bonus to stealth factor while burrowed
+        const STEALTH_STATIONARY_MULT = 1.0;        // multiplier when stationary
+        const STEALTH_MOVING_MULT = 0.5;            // multiplier when moving normally
+        const STEALTH_NOISE_MULT = 0.1;             // multiplier during/just-after pounce or dash
+
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
         let movementAbilityStartX = 0;
@@ -1179,6 +1187,8 @@
         let burrowStartTime = 0;
         let tremorSenseStartTime = 0;
         let spikeLaunchProjectiles = []; // Array of active Spike Launch projectiles
+        let currentStealthFactor = 0;    // 0.0–1.0, computed each frame; scales NPC detection radius down
+        let lastNoiseBurstTime = 0;      // timestamp of last pounce/dash activation
 
         // New visual effect variables
         let playerVisualScale = 1; // Current scale factor for the player icon
@@ -2464,13 +2474,32 @@
                     }
                 });
 
+                // --- Update currentStealthFactor (0.0–1.0) ---
+                {
+                    const baseStealthFactor = playerStats.stealth / 100;
+                    const isInNoiseBurst = lastNoiseBurstTime > 0 && (currentTime - lastNoiseBurstTime) < STEALTH_NOISE_BURST_DURATION;
+                    const isAbilityMoving = isPerformingMovementAbility && (lastActivatedAbilityRef === 'pounce' || lastActivatedAbilityRef === 'dash');
+                    if (isAbilityMoving || isInNoiseBurst) {
+                        // Pounce/dash: brief noise burst, very low stealth
+                        currentStealthFactor = baseStealthFactor * STEALTH_NOISE_MULT;
+                    } else if (isBurrowing) {
+                        // Burrowing: hefty flat bonus (stacks with base stealth stat)
+                        currentStealthFactor = Math.min(1.0, baseStealthFactor + STEALTH_BURROW_BONUS);
+                    } else if (isMoving) {
+                        currentStealthFactor = baseStealthFactor * STEALTH_MOVING_MULT;
+                    } else {
+                        currentStealthFactor = baseStealthFactor * STEALTH_STATIONARY_MULT;
+                    }
+                }
+
                 // --- Level 2 detection scan (runs every frame, independent of movement) ---
                 npcs.forEach(npc => {
                     if (npc.level < 2 || npc.state !== 'patrol') return;
-                    // Detect player (burrowed players are undetectable)
-                    if (!isBurrowing) {
+                    // Detect player — detection radius scaled by stealth factor
+                    {
+                        const effectiveDetectionRadius = npc.detectionRadius * (1 - currentStealthFactor);
                         const pdx = playerX - npc.x, pdy = playerY - npc.y;
-                        if (Math.sqrt(pdx * pdx + pdy * pdy) <= npc.detectionRadius) {
+                        if (Math.sqrt(pdx * pdx + pdy * pdy) <= effectiveDetectionRadius) {
                             enterChase(npc, 'player');
                             return;
                         }
@@ -3649,6 +3678,8 @@
             cooldowns.dash.lastUsed = 0;
             cooldowns.burrow.lastUsed = 0;
             cooldowns.spikeLaunch.lastUsed = 0;
+            lastNoiseBurstTime = 0;
+            currentStealthFactor = 0;
 
             inCombat = false;
             combatTarget = null;
@@ -4514,6 +4545,7 @@
                 preAbilityTarget = targetedNpc; // Save target so it can be restored after ability
                 startCooldown(abilityKey);
                 lastActivatedAbilityRef = abilityKey;
+                lastNoiseBurstTime = performance.now(); // Trigger noise burst — stealth drops for 2s
 
                 let actualTravelDistance = 0;
                 let dx = 0;
