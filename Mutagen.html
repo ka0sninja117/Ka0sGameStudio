@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19';
+        const GAME_VERSION = 'v1.19.1';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1655,10 +1655,14 @@
                 }
             });
 
-            // Foliage patch base layer — drawn below the player (dense undergrowth floor)
+            // Foliage patch base layer — drawn below the player (bright canopy floor)
+            ctx.globalAlpha = 1;
             foliagePatches.forEach(p => {
-                ctx.fillStyle = 'rgba(18, 62, 24, 0.88)';
+                ctx.fillStyle = 'rgba(55, 145, 55, 0.88)';  // clearly lighter/brighter than forest floor
                 ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.strokeStyle = 'rgba(20, 80, 20, 0.75)'; // dark outline so edges are visible
+                ctx.lineWidth = 2;
+                ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
         }
 
@@ -3428,8 +3432,11 @@
                 // Creates the "hiding under canopy" effect: player is sandwiched under the foliage.
                 ctx.globalAlpha = 1;
                 foliagePatches.forEach(p => {
-                    ctx.fillStyle = 'rgba(42, 105, 50, 0.52)';
+                    ctx.fillStyle = 'rgba(38, 110, 40, 0.55)'; // mid-green canopy top, semi-transparent
                     ctx.fillRect(p.x, p.y, p.w, p.h);
+                    ctx.strokeStyle = 'rgba(15, 60, 15, 0.85)'; // crisp dark border
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(p.x, p.y, p.w, p.h);
                 });
 
                 // Draw NPCs and their hitcircles
