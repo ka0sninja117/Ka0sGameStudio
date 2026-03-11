@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19.2';
+        const GAME_VERSION = 'v1.19.3';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1172,6 +1172,10 @@
         const STEALTH_STATIONARY_MULT = 1.0;        // multiplier when stationary
         const STEALTH_MOVING_MULT = 0.5;            // multiplier when moving normally
         const STEALTH_NOISE_MULT = 0.1;             // multiplier during/just-after pounce or dash
+        // Tier-disadvantage stealth: per tier the NPC is above the player, bonus escalates
+        // Formula: 1 - 0.55^tierDiff  →  1 tier: +0.45, 2 tiers: +0.70, 3 tiers: +0.83, …
+        // Applied only inside the NPC detection scan; NOT shown in the stealth stat bar.
+        const STEALTH_TIER_DECAY = 0.55;
 
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
@@ -2543,9 +2547,12 @@
                 // --- Level 2 detection scan (runs every frame, independent of movement) ---
                 npcs.forEach(npc => {
                     if (npc.level < 2 || npc.state !== 'patrol') return;
-                    // Detect player — detection radius scaled by stealth factor
+                    // Detect player — detection radius scaled by stealth + tier-disadvantage bonus
                     {
-                        const effectiveDetectionRadius = npc.detectionRadius * (1 - currentStealthFactor);
+                        const tierDiff = npc.level - playerStats.playerLevel;
+                        const tierBonus = tierDiff > 0 ? 1 - Math.pow(STEALTH_TIER_DECAY, tierDiff) : 0;
+                        const combinedStealth = Math.min(1.0, currentStealthFactor + tierBonus);
+                        const effectiveDetectionRadius = npc.detectionRadius * (1 - combinedStealth);
                         const pdx = playerX - npc.x, pdy = playerY - npc.y;
                         if (Math.sqrt(pdx * pdx + pdy * pdy) <= effectiveDetectionRadius) {
                             enterChase(npc, 'player');
