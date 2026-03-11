@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.18';
+        const GAME_VERSION = 'v1.19';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1055,6 +1055,8 @@
 
         // Array to store pre-generated forest background elements
         let forestElements = [];
+        let foliagePatches = []; // { x, y, w, h } — player can hide under these
+        let isInFoliage = false; // true when player center is inside a foliage patch
 
         // --- Combat Variables ---
         let inCombat = false;
@@ -1613,6 +1615,33 @@
                 const color = `rgba(60, 118, 59, ${0.4 + Math.random() * 0.2})`;
                 forestElements.push({ type: 'rect', x, y, width: size, height: size, color });
             }
+
+            // Generate foliage patches in clusters — player can hide inside these
+            foliagePatches = [];
+            const numClusters = 6;
+            for (let c = 0; c < numClusters; c++) {
+                const clusterX = 200 + Math.random() * (worldWidth - 400);
+                const clusterY = 200 + Math.random() * (worldHeight - 400);
+                const patchCount = 4 + Math.floor(Math.random() * 3); // 4–6 per cluster
+                for (let p = 0; p < patchCount; p++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const spread = (60 + Math.random() * 100) * Math.random();
+                    const cx = clusterX + Math.cos(angle) * spread;
+                    const cy = clusterY + Math.sin(angle) * spread;
+                    // Varied shapes: wide, tall, or squarish
+                    let pw, ph;
+                    const shapeRoll = Math.random();
+                    if (shapeRoll < 0.33) {
+                        pw = 130 + Math.random() * 90; ph = 35 + Math.random() * 25; // wide strip
+                    } else if (shapeRoll < 0.66) {
+                        pw = 35 + Math.random() * 25; ph = 110 + Math.random() * 70; // tall strip
+                    } else {
+                        const s = 65 + Math.random() * 75;
+                        pw = s; ph = s * (0.7 + Math.random() * 0.6);               // squarish blob
+                    }
+                    foliagePatches.push({ x: cx - pw / 2, y: cy - ph / 2, w: pw, h: ph });
+                }
+            }
         }
 
         function renderForestBackground() {
@@ -1624,6 +1653,12 @@
                     ctx.fillStyle = element.color;
                     ctx.fillRect(element.x, element.y, element.width, element.height);
                 }
+            });
+
+            // Foliage patch base layer — drawn below the player (dense undergrowth floor)
+            foliagePatches.forEach(p => {
+                ctx.fillStyle = 'rgba(18, 62, 24, 0.88)';
+                ctx.fillRect(p.x, p.y, p.w, p.h);
             });
         }
 
@@ -2474,6 +2509,12 @@
                     }
                 });
 
+                // --- Check if player is inside a foliage patch (center-based AABB) ---
+                isInFoliage = foliagePatches.some(p =>
+                    playerX > p.x && playerX < p.x + p.w &&
+                    playerY > p.y && playerY < p.y + p.h
+                );
+
                 // --- Update currentStealthFactor (0.0–1.0) ---
                 {
                     const baseStealthFactor = playerStats.stealth / 100;
@@ -2490,6 +2531,8 @@
                     } else {
                         currentStealthFactor = baseStealthFactor * STEALTH_STATIONARY_MULT;
                     }
+                    // Foliage bonus: being inside a patch doubles stealth (capped at 1.0)
+                    if (isInFoliage) currentStealthFactor = Math.min(1.0, currentStealthFactor * 2);
                 }
 
                 // --- Level 2 detection scan (runs every frame, independent of movement) ---
@@ -3328,7 +3371,7 @@
 
                 ctx.translate(playerDrawX, playerDrawY);
                 ctx.scale(playerVisualScale, playerVisualScale);
-                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : 1;
+                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : (isInFoliage ? 0.5 : 1);
                 ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
 
                 const emojiFontSize = playerSize * 1.5;
@@ -3358,7 +3401,7 @@
                     ctx.save();
                     ctx.translate(playerDrawX, playerDrawY); // Use playerDrawX/Y for consistency
                     ctx.scale(playerVisualScale, playerVisualScale);
-                    ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : 1;
+                    ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : (isInFoliage ? 0.5 : 1);
                     ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
                 }
                 ctx.restore();
@@ -3380,6 +3423,14 @@
                 }
 
                 // Removed the separate showPounceLandingIndicator drawing block.
+
+                // Foliage overlay layer — drawn above the player, below NPCs.
+                // Creates the "hiding under canopy" effect: player is sandwiched under the foliage.
+                ctx.globalAlpha = 1;
+                foliagePatches.forEach(p => {
+                    ctx.fillStyle = 'rgba(42, 105, 50, 0.52)';
+                    ctx.fillRect(p.x, p.y, p.w, p.h);
+                });
 
                 // Draw NPCs and their hitcircles
                 npcs.forEach(npc => {
@@ -3680,6 +3731,7 @@
             cooldowns.spikeLaunch.lastUsed = 0;
             lastNoiseBurstTime = 0;
             currentStealthFactor = 0;
+            isInFoliage = false;
 
             inCombat = false;
             combatTarget = null;
