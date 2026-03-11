@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19.1';
+        const GAME_VERSION = 'v1.19.2';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1168,6 +1168,7 @@
         // --- Stealth system constants ---
         const STEALTH_NOISE_BURST_DURATION = 2000; // ms after pounce/dash where stealth is minimal
         const STEALTH_BURROW_BONUS = 0.85;          // flat bonus to stealth factor while burrowed
+        const STEALTH_FOLIAGE_BONUS = 0.40;         // flat additive bonus while inside a foliage patch
         const STEALTH_STATIONARY_MULT = 1.0;        // multiplier when stationary
         const STEALTH_MOVING_MULT = 0.5;            // multiplier when moving normally
         const STEALTH_NOISE_MULT = 0.1;             // multiplier during/just-after pounce or dash
@@ -2535,8 +2536,8 @@
                     } else {
                         currentStealthFactor = baseStealthFactor * STEALTH_STATIONARY_MULT;
                     }
-                    // Foliage bonus: being inside a patch doubles stealth (capped at 1.0)
-                    if (isInFoliage) currentStealthFactor = Math.min(1.0, currentStealthFactor * 2);
+                    // Foliage bonus: flat additive so players with 0 base stealth still benefit
+                    if (isInFoliage) currentStealthFactor = Math.min(1.0, currentStealthFactor + STEALTH_FOLIAGE_BONUS);
                 }
 
                 // --- Level 2 detection scan (runs every frame, independent of movement) ---
@@ -3169,7 +3170,7 @@
             drawStatLine('Attack', playerStats.attack);
             drawStatLine('Defense', playerStats.defense, false);
             drawStatLine('Stamina', playerStats.stamina, true);
-            drawStatLine('Stealth', playerStats.stealth, true);
+            drawStatLine('Stealth', currentStealthFactor * 100, true);
             drawStatLine('Speed', playerStats.speed, true);
 
             // --- Draw second separator line ---
