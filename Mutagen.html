@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19.3';
+        const GAME_VERSION = 'v1.19.4';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1166,15 +1166,17 @@
         const SPIKE_LAUNCH_SPEED = 5;           // px per frame (~2.5x player base speed, clearly visible)
 
         // --- Stealth system constants ---
-        const STEALTH_NOISE_BURST_DURATION = 2000; // ms after pounce/dash where stealth is minimal
-        const STEALTH_BURROW_BONUS = 0.85;          // flat bonus to stealth factor while burrowed
-        const STEALTH_FOLIAGE_BONUS = 0.40;         // flat additive bonus while inside a foliage patch
-        const STEALTH_STATIONARY_MULT = 1.0;        // multiplier when stationary
-        const STEALTH_MOVING_MULT = 0.5;            // multiplier when moving normally
-        const STEALTH_NOISE_MULT = 0.1;             // multiplier during/just-after pounce or dash
-        // Tier-disadvantage stealth: per tier the NPC is above the player, bonus escalates
-        // Formula: 1 - 0.55^tierDiff  →  1 tier: +0.45, 2 tiers: +0.70, 3 tiers: +0.83, …
-        // Applied only inside the NPC detection scan; NOT shown in the stealth stat bar.
+        // stealthValue (signed %) = stat + env bonuses - movement noise - ability burst; range ~-150 to +100
+        // Positive = stealthy (shrinks detection), Negative = noisy (grows detection)
+        // effectiveDetectionRadius = STEALTH_BASE_DETECTION × (1 − stealthValue / 100)
+        const STEALTH_BASE_DETECTION = 200;        // px: NPC detection radius at stealthValue = 0%
+        const STEALTH_NOISE_FACTOR = 50;           // movement noise: -(speed/baseSpeed) × NOISE_FACTOR
+        const STEALTH_ABILITY_BURST = 125;         // peak noise at pounce/dash activation (fades to 0 over burst duration)
+        const STEALTH_NOISE_BURST_DURATION = 2000; // ms over which ability burst noise fades to zero
+        const STEALTH_FOLIAGE_BONUS = 40;          // flat +40% stealth inside a foliage patch
+        const STEALTH_BURROW_BONUS = 30;           // flat +30% stealth while burrowed underground
+        // Tier-disadvantage: per tier the NPC is above the player, a stealth penalty (%) escalates
+        // Formula: (1 - 0.55^tierDiff) × 100  →  1 tier: 45%, 2 tiers: 70%, 3 tiers: 83%, …
         const STEALTH_TIER_DECAY = 0.55;
 
         let currentMovementAbilityDuration = 0; // Duration for current active movement
@@ -1194,7 +1196,7 @@
         let burrowStartTime = 0;
         let tremorSenseStartTime = 0;
         let spikeLaunchProjectiles = []; // Array of active Spike Launch projectiles
-        let currentStealthFactor = 0;    // 0.0–1.0, computed each frame; scales NPC detection radius down
+        let currentStealthValue = 0;     // signed %, computed each frame; drives NPC effective detection radius
         let lastNoiseBurstTime = 0;      // timestamp of last pounce/dash activation
 
         // New visual effect variables
@@ -2524,24 +2526,35 @@
                     playerY > p.y && playerY < p.y + p.h
                 );
 
-                // --- Update currentStealthFactor (0.0–1.0) ---
+                // --- Update currentStealthValue (signed %, ~-150 to +100) ---
+                // Positive = stealthy (shrinks detection radius), Negative = noisy (grows detection radius)
+                // effectiveDetectionRadius = STEALTH_BASE_DETECTION × (1 − stealthValue / 100)
                 {
-                    const baseStealthFactor = playerStats.stealth / 100;
-                    const isInNoiseBurst = lastNoiseBurstTime > 0 && (currentTime - lastNoiseBurstTime) < STEALTH_NOISE_BURST_DURATION;
+                    let sv = playerStats.stealth; // base stat contribution (0–100)
+
+                    // Movement noise — proportional to actual speed vs base; skipped during ability movement
+                    // (pounce/dash activation triggers its own burst below instead)
                     const isAbilityMoving = isPerformingMovementAbility && (lastActivatedAbilityRef === 'pounce' || lastActivatedAbilityRef === 'dash');
-                    if (isAbilityMoving || isInNoiseBurst) {
-                        // Pounce/dash: brief noise burst, very low stealth
-                        currentStealthFactor = baseStealthFactor * STEALTH_NOISE_MULT;
-                    } else if (isBurrowing) {
-                        // Burrowing: hefty flat bonus (stacks with base stealth stat)
-                        currentStealthFactor = Math.min(1.0, baseStealthFactor + STEALTH_BURROW_BONUS);
-                    } else if (isMoving) {
-                        currentStealthFactor = baseStealthFactor * STEALTH_MOVING_MULT;
-                    } else {
-                        currentStealthFactor = baseStealthFactor * STEALTH_STATIONARY_MULT;
+                    if (isMoving && !isAbilityMoving) {
+                        let effectiveSpeed = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
+                        if (isBurrowing) effectiveSpeed *= playerAbilities.burrow >= 2 ? BURROW_LV2_SPEED_MULT : 0.5;
+                        if (isTremorSenseActive) effectiveSpeed *= 0.5;
+                        sv -= (effectiveSpeed / basePlayerSpeed) * STEALTH_NOISE_FACTOR;
                     }
-                    // Foliage bonus: flat additive so players with 0 base stealth still benefit
-                    if (isInFoliage) currentStealthFactor = Math.min(1.0, currentStealthFactor + STEALTH_FOLIAGE_BONUS);
+
+                    // Ability burst noise (pounce/dash) — fades linearly from peak to 0
+                    if (lastNoiseBurstTime > 0) {
+                        const elapsed = currentTime - lastNoiseBurstTime;
+                        if (elapsed < STEALTH_NOISE_BURST_DURATION) {
+                            sv -= STEALTH_ABILITY_BURST * (1 - elapsed / STEALTH_NOISE_BURST_DURATION);
+                        }
+                    }
+
+                    // Environmental bonuses (additive, independent of state)
+                    if (isBurrowing) sv += STEALTH_BURROW_BONUS;
+                    if (isInFoliage) sv += STEALTH_FOLIAGE_BONUS;
+
+                    currentStealthValue = sv;
                 }
 
                 // --- Level 2 detection scan (runs every frame, independent of movement) ---
@@ -2549,10 +2562,11 @@
                     if (npc.level < 2 || npc.state !== 'patrol') return;
                     // Detect player — detection radius scaled by stealth + tier-disadvantage bonus
                     {
+                        // Higher-tier NPCs subtract from the player's effective stealth (they see through it better)
                         const tierDiff = npc.level - playerStats.playerLevel;
-                        const tierBonus = tierDiff > 0 ? 1 - Math.pow(STEALTH_TIER_DECAY, tierDiff) : 0;
-                        const combinedStealth = Math.min(1.0, currentStealthFactor + tierBonus);
-                        const effectiveDetectionRadius = npc.detectionRadius * (1 - combinedStealth);
+                        const tierPenalty = tierDiff > 0 ? (1 - Math.pow(STEALTH_TIER_DECAY, tierDiff)) * 100 : 0;
+                        const effectiveStealth = currentStealthValue - tierPenalty;
+                        const effectiveDetectionRadius = Math.max(0, STEALTH_BASE_DETECTION * (1 - effectiveStealth / 100));
                         const pdx = playerX - npc.x, pdy = playerY - npc.y;
                         if (Math.sqrt(pdx * pdx + pdy * pdy) <= effectiveDetectionRadius) {
                             enterChase(npc, 'player');
@@ -3177,7 +3191,7 @@
             drawStatLine('Attack', playerStats.attack);
             drawStatLine('Defense', playerStats.defense, false);
             drawStatLine('Stamina', playerStats.stamina, true);
-            drawStatLine('Stealth', currentStealthFactor * 100, true);
+            drawStatLine('Stealth', currentStealthValue, true);
             drawStatLine('Speed', playerStats.speed, true);
 
             // --- Draw second separator line ---
@@ -3745,7 +3759,7 @@
             cooldowns.burrow.lastUsed = 0;
             cooldowns.spikeLaunch.lastUsed = 0;
             lastNoiseBurstTime = 0;
-            currentStealthFactor = 0;
+            currentStealthValue = 0;
             isInFoliage = false;
 
             inCombat = false;
