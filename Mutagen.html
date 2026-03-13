@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19.5';
+        const GAME_VERSION = 'v1.19.6';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1172,7 +1172,7 @@
         const STEALTH_BASE_DETECTION = 200;        // px: NPC detection radius at stealthValue = 0%
         const STEALTH_NOISE_FACTOR = 50;           // movement noise: -(speed/baseSpeed) × NOISE_FACTOR
         const STEALTH_ABILITY_BURST = 125;         // peak noise at pounce/dash activation (fades to 0 over burst duration)
-        const STEALTH_NOISE_BURST_DURATION = 2000; // ms over which ability burst noise fades to zero
+        const STEALTH_NOISE_BURST_DURATION = 750;  // ms over which ability burst noise fades to zero
         const STEALTH_FOLIAGE_BONUS = 40;          // flat +40% stealth inside a foliage patch
         const STEALTH_BURROW_BONUS = 30;           // flat +30% stealth while burrowed underground
         // Tier-disadvantage: per tier the NPC is above the player, a stealth penalty (%) escalates
