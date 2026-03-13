@@ -2269,22 +2269,20 @@
                         // dt capped at 50ms to prevent large healing spikes after frame drops
                         const dt = lastRegenTickTime > 0 ? Math.min(50, currentTime - lastRegenTickTime) / 1000 : 0;
                         if (dt > 0) {
-                            // Passive heal
+                            // Passive heal — no per-frame rounding; floats accumulate and toFixed(1) handles display
                             const passiveHeal = playerStats.maxHp * REGEN_PASSIVE_RATE * dt;
-                            playerStats.currentHp = Math.min(hpCap,
-                                Math.round((playerStats.currentHp + passiveHeal) * 10) / 10);
+                            playerStats.currentHp = Math.min(hpCap, playerStats.currentHp + passiveHeal);
 
                             // Active heal (held key)
                             if (isActiveRegenHeld) {
                                 const activeHeal = playerStats.maxHp * REGEN_ACTIVE_RATE * dt;
-                                playerStats.currentHp = Math.min(hpCap,
-                                    Math.round((playerStats.currentHp + activeHeal) * 10) / 10);
+                                playerStats.currentHp = Math.min(hpCap, playerStats.currentHp + activeHeal);
 
                                 // Escalating Hunger cost
                                 const hungerCostPerSec = REGEN_ACTIVE_BASE_HUNGER *
                                     Math.pow(REGEN_ACTIVE_HUNGER_MULT, activeRegenSessionCount - 1);
                                 playerStats.currentHunger = Math.min(playerStats.maxHunger,
-                                    Math.round((playerStats.currentHunger + hungerCostPerSec * dt) * 10) / 10);
+                                    playerStats.currentHunger + hungerCostPerSec * dt);
 
                                 // Auto-stop when HP reaches the cap
                                 if (playerStats.currentHp >= hpCap) {
