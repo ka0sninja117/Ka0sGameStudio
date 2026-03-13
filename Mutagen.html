@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19.6';
+        const GAME_VERSION = 'v1.20';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -988,10 +988,10 @@
         let gameState = 'startScreen'; // 'startScreen', 'originSelection', 'inGame', 'pausedMap', 'gameOver'
 
         const PLAYER_LEVEL_STATS = {
-            1: { maxHp: 20, attack: 8, defense: 1.0, stamina: 1, stealth: 1, speed: 1 },
-            2: { maxHp: 100, attack: 40, defense: 10.0, stamina: 5, stealth: 5, speed: 5 },
-            3: { maxHp: 600, attack: 240, defense: 90.0, stamina: 25, stealth: 25, speed: 25 },
-            4: { maxHp: 4200, attack: 1680, defense: 840.0, stamina: 55, stealth: 55, speed: 55 }
+            1: { maxHp: 60,    attack: 8,    defense: 1.0,  stamina: 1,  stealth: 1,  speed: 1  },
+            2: { maxHp: 300,   attack: 40,   defense: 10.0, stamina: 5,  stealth: 5,  speed: 5  },
+            3: { maxHp: 1800,  attack: 240,  defense: 90.0, stamina: 25, stealth: 25, speed: 25 },
+            4: { maxHp: 12600, attack: 1680, defense: 840.0,stamina: 55, stealth: 55, speed: 55 }
         };
 
         const NPC_XP_REWARDS = {
@@ -1013,8 +1013,8 @@
         // Character Stats (Consolidated into an object)
         let playerStats = {
             isPlayer: true,
-            currentHp: 50,
-            maxHp: 50,
+            currentHp: 60,
+            maxHp: 60,
             attack: 20,
             defense: 5,
             stamina: 0,
@@ -1178,6 +1178,23 @@
         // Tier-disadvantage: per tier the NPC is above the player, a stealth penalty (%) escalates
         // Formula: (1 - 0.55^tierDiff) × 100  →  1 tier: 45%, 2 tiers: 70%, 3 tiers: 83%, …
         const STEALTH_TIER_DECAY = 0.55;
+
+        // --- Defense mitigation system ---
+        // Defense stat maps to a % damage reduction: mitigation = min(cap, defStat / (base×3) × cap)
+        // Full cap is reached when defStat = 3× that level's base defense stat.
+        const DEFENSE_MITIGATION_CAPS = { 1: 0.30, 2: 0.45, 3: 0.55, 4: 0.70 };
+
+        // --- Per-level stat caps (Option A) ---
+        // Attack: 2.25× base → glass cannon 4-hit kills same-level NPCs
+        // Defense: 3× base → full mitigation cap threshold
+        // Stealth: prevents permanent invisibility (formula clamps contribution at 80 anyway)
+        // Speed: prevents movement faster than pounce/dash abilities
+        const PLAYER_STAT_CAPS = {
+            1: { attack: 18,   defense: 3,    stealth: 15,  speed: 15  },
+            2: { attack: 90,   defense: 30,   stealth: 40,  speed: 50  },
+            3: { attack: 540,  defense: 270,  stealth: 75,  speed: 90  },
+            4: { attack: 3780, defense: 2520, stealth: 90,  speed: 150 }
+        };
 
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
@@ -1934,24 +1951,29 @@
 
         // Lightweight NPC-vs-NPC damage (no floating text, no player stat tracking)
         function dealDamageNpcToNpc(attacker, defender) {
-            let damage = attacker.attack - defender.defense;
-            damage = damage > 0 ? Math.max(0.1, damage) : 0;
+            const mitigation = getMitigation(defender);
+            let damage = Math.max(0.1, attacker.attack * (1 - mitigation));
             damage = Math.round(damage * 10) / 10;
             defender.currentHp = Math.max(0, Math.round((defender.currentHp - damage) * 10) / 10);
         }
 
+        // Returns the fraction of incoming damage absorbed by the defender (0.0–cap).
+        // mitigation = min(levelCap, defStat / (3 × levelBaseDefStat) × levelCap)
+        // Full cap is reached at defStat = 3× that level's PLAYER_LEVEL_STATS base defense.
+        function getMitigation(defender) {
+            const level = defender.isPlayer ? playerStats.playerLevel : (defender.level || 1);
+            const cap    = DEFENSE_MITIGATION_CAPS[level] ?? 0.30;
+            const refDef = PLAYER_LEVEL_STATS[level].defense * 3;
+            return Math.min(cap, (defender.defense / refDef) * cap);
+        }
+
         function dealDamage(attacker, defender, currentTime) {
-            // 1. Calculate raw damage with flat defense subtraction.
-            let effectiveDamage = attacker.attack - defender.defense;
+            // Damage = attacker.attack × (1 − defenderMitigation%)
+            // mitigation scales linearly from 0 to levelCap as defStat goes 0 → 3×base.
+            const mitigation = getMitigation(defender);
+            let effectiveDamage = Math.max(0.1, attacker.attack * (1 - mitigation));
 
-            // 2. If positive damage, floor it at 0.1; otherwise no damage is dealt.
-            if (effectiveDamage > 0) {
-                effectiveDamage = Math.max(0.1, effectiveDamage);
-            } else {
-                effectiveDamage = 0;
-            }
-
-            // 3. Round to one decimal place for clean numbers.
+            // Round to one decimal place for clean numbers.
             effectiveDamage = Math.round(effectiveDamage * 10) / 10;
         
             const actualHpReduction = Math.min(effectiveDamage, defender.currentHp);
@@ -2366,8 +2388,8 @@
                     let spikeHit = false;
                     for (const npc of npcs) {
                         if (checkCircleCollision(spike.x, spike.y, 4, npc.x, npc.y, npc.radius)) {
-                            // 80% of post-defense melee damage: pass an attack value that produces (playerStats.attack - npc.defense) * 0.8 after dealDamage subtracts defense
-                            const spikeAttack = playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT + npc.defense * (1 - SPIKE_LAUNCH_DAMAGE_MULT);
+                            // 80% of melee damage: dealDamage applies mitigation, so scaling attack by 0.8 produces 80% of melee effective damage
+                            const spikeAttack = playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT;
                             dealDamage({ attack: spikeAttack, isPlayer: true, x: spike.x, y: spike.y, radius: 4 }, npc, currentTime);
                             spikeLaunchProjectiles.splice(i, 1);
                             if (npc.currentHp <= 0) {
@@ -2530,7 +2552,8 @@
                 // Positive = stealthy (shrinks detection radius), Negative = noisy (grows detection radius)
                 // effectiveDetectionRadius = STEALTH_BASE_DETECTION × (1 − stealthValue / 100)
                 {
-                    let sv = playerStats.stealth; // base stat contribution (0–100)
+                    // Clamp stat contribution so detection never hits 0px at rest (cap at 80 → min 40px radius)
+                    let sv = Math.min(80, playerStats.stealth); // base stat contribution (0–80)
 
                     // Movement noise — proportional to actual speed vs base; skipped during ability movement
                     // (pounce/dash activation triggers its own burst below instead)
@@ -3871,8 +3894,17 @@
                 if (playerGeneticOrigin.bonusStats.speed) combinedSpeed *= (1 + playerGeneticOrigin.bonusStats.speed);
             }
             
+            // Apply per-level stat caps (Option A) — prevents runaway stacking
+            const caps = PLAYER_STAT_CAPS[level];
+            if (caps) {
+                combinedAttack  = Math.min(caps.attack,  combinedAttack);
+                combinedDefense = Math.min(caps.defense, combinedDefense);
+                combinedStealth = Math.min(caps.stealth, combinedStealth);
+                combinedSpeed   = Math.min(caps.speed,   combinedSpeed);
+            }
+
             const hpGained = combinedMaxHp - oldMaxHp;
-            
+
             // Update playerStats with the final calculated values
             playerStats.maxHp = combinedMaxHp;
             playerStats.attack = combinedAttack;
