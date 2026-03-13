@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.19.4';
+        const GAME_VERSION = 'v1.19.5';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -3191,7 +3191,10 @@
             drawStatLine('Attack', playerStats.attack);
             drawStatLine('Defense', playerStats.defense, false);
             drawStatLine('Stamina', playerStats.stamina, true);
-            drawStatLine('Stealth', currentStealthValue, true);
+            // Stealth is bipolar: positive = hidden, negative = noisy. Show explicit sign so direction is clear.
+            ctx.fillStyle = 'white';
+            ctx.fillText(`Stealth: ${currentStealthValue >= 0 ? '+' : ''}${currentStealthValue.toFixed(1)}%`, panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY);
+            currentDrawingY += PLAYER_INFO_STAT_LINE_HEIGHT;
             drawStatLine('Speed', playerStats.speed, true);
 
             // --- Draw second separator line ---
