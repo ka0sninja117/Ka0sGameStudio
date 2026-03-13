@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.20';
+        const GAME_VERSION = 'v1.21';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1195,6 +1195,23 @@
             3: { attack: 540,  defense: 270,  stealth: 75,  speed: 90  },
             4: { attack: 3780, defense: 2520, stealth: 90,  speed: 150 }
         };
+
+        // --- NPC attack pacing (Option A, 40% adjustment) ---
+        // Slower attacks with harder hits — same net DPS but creates dodge windows.
+        const NPC_ATTACK_INTERVAL_MULT = 1.4;  // NPC attacks every 700ms instead of 500ms
+        const NPC_ATTACK_DAMAGE_MULT   = 1.4;  // Each NPC hit is 40% harder to compensate
+
+        // --- HP Regeneration system ---
+        // Passive regen activates after no damage for REGEN_NO_DAMAGE_DELAY ms, up to 80% max HP.
+        // Active regen (hold H) adds faster healing but burns Hunger at an escalating rate.
+        // Hunger cost resets when the player takes damage; each re-press costs more this "window".
+        const REGEN_NO_DAMAGE_DELAY       = 3000;  // ms of no damage before passive kicks in
+        const REGEN_PASSIVE_RATE          = 0.003; // 0.3% maxHp per second
+        const REGEN_ACTIVE_RATE           = 0.015; // additional 1.5% maxHp per second while held
+        const REGEN_HP_CAP                = 0.80;  // neither regen type heals above 80% maxHp
+        const REGEN_ACTIVE_BASE_HUNGER    = 3;     // Hunger/sec on first active regen press
+        const REGEN_ACTIVE_HUNGER_MULT    = 2.5;   // multiplier per re-press (3 → 7.5 → 18.75 → …)
+        const REGEN_KEY                   = 'h';
 
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
@@ -1983,6 +2000,10 @@
             if (defender.isPlayer) {
                 playerStats.currentHp -= effectiveDamage;
                 playerStats.currentHp = Math.max(0, Math.round(playerStats.currentHp * 10) / 10);
+                // Reset regen window on any damage taken
+                lastDamageTakenTime = currentTime;
+                activeRegenSessionCount = 0;
+                isActiveRegenHeld = false;
             } else {
                 defender.currentHp -= effectiveDamage;
                 defender.currentHp = Math.max(0, Math.round(defender.currentHp * 10) / 10);
@@ -2149,6 +2170,12 @@
         let lastHungerIncreaseTime = 0;
         const HUNGER_INCREASE_INTERVAL = 5000; // 5 seconds
 
+        // HP regen state
+        let lastDamageTakenTime = -Infinity; // timestamp of last damage taken by player; -Infinity → regen ready immediately
+        let activeRegenSessionCount = 0;     // number of active-regen presses since last damage; drives escalating Hunger cost
+        let isActiveRegenHeld = false;       // true while the regen key is held and conditions are valid
+        let lastRegenTickTime = 0;           // used for dt-based regen calculation
+
         /**
          * Determines which character (player or NPC) has the first strike advantage
          * based on their orientation towards the opponent. Sets their initial attack timers.
@@ -2173,7 +2200,7 @@
                 playerLastAttackTime = currentTime;
                 playerAttackCooldown = 0; // First attack is immediate
                 npcObj.lastAttackTime = currentTime + FIRST_STRIKE_DELAY;
-                npcObj.attackCooldown = 500; // Will be set to 500 after the first delayed attack
+                npcObj.attackCooldown = Math.round(combatDelay * NPC_ATTACK_INTERVAL_MULT); // 700ms
             } else {
                 npcObj.lastAttackTime = currentTime;
                 npcObj.attackCooldown = 0; // First attack is immediate
@@ -2227,6 +2254,46 @@
                         // Hunger can now go below 1, so no Math.min here
                     }
                     lastHungerIncreaseTime = currentTime;
+                }
+
+                // --- HP Regeneration (passive + active) ---
+                {
+                    const hpCap = playerStats.maxHp * REGEN_HP_CAP;
+                    const timeSinceDamage = currentTime - lastDamageTakenTime;
+                    const passiveReady = timeSinceDamage >= REGEN_NO_DAMAGE_DELAY && playerStats.currentHp < hpCap;
+
+                    if (!passiveReady) {
+                        // Cancel active regen if conditions no longer hold (took damage, HP at cap, etc.)
+                        isActiveRegenHeld = false;
+                    } else {
+                        // dt capped at 50ms to prevent large healing spikes after frame drops
+                        const dt = lastRegenTickTime > 0 ? Math.min(50, currentTime - lastRegenTickTime) / 1000 : 0;
+                        if (dt > 0) {
+                            // Passive heal
+                            const passiveHeal = playerStats.maxHp * REGEN_PASSIVE_RATE * dt;
+                            playerStats.currentHp = Math.min(hpCap,
+                                Math.round((playerStats.currentHp + passiveHeal) * 10) / 10);
+
+                            // Active heal (held key)
+                            if (isActiveRegenHeld) {
+                                const activeHeal = playerStats.maxHp * REGEN_ACTIVE_RATE * dt;
+                                playerStats.currentHp = Math.min(hpCap,
+                                    Math.round((playerStats.currentHp + activeHeal) * 10) / 10);
+
+                                // Escalating Hunger cost
+                                const hungerCostPerSec = REGEN_ACTIVE_BASE_HUNGER *
+                                    Math.pow(REGEN_ACTIVE_HUNGER_MULT, activeRegenSessionCount - 1);
+                                playerStats.currentHunger = Math.min(playerStats.maxHunger,
+                                    Math.round((playerStats.currentHunger + hungerCostPerSec * dt) * 10) / 10);
+
+                                // Auto-stop when HP reaches the cap
+                                if (playerStats.currentHp >= hpCap) {
+                                    isActiveRegenHeld = false;
+                                }
+                            }
+                        }
+                    }
+                    lastRegenTickTime = currentTime;
                 }
 
                 // Update attack animation state
@@ -2755,14 +2822,14 @@
                         if (!(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) { // Prevent NPC attack if player just dashed through
                             // Orient NPC towards player before attacking
                             combatTarget.directionAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
-                            // This is the NEW, SIMPLIFIED code
-                            dealDamage(combatTarget, playerStats, currentTime);
+                            // NPC_ATTACK_DAMAGE_MULT compensates for slower attack rate (same net DPS, harder individual hits)
+                            dealDamage({ ...combatTarget, attack: combatTarget.attack * NPC_ATTACK_DAMAGE_MULT }, playerStats, currentTime);
                             combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration; // Reset chase timer on hit
                             combatTarget.isAttacking = true;
                             combatTarget.attackAnimStartTime = currentTime;
                         }
                         combatTarget.lastAttackTime = currentTime;
-                        combatTarget.attackCooldown = combatDelay; // Subsequent attacks every 0.5 seconds
+                        combatTarget.attackCooldown = combatDelay * NPC_ATTACK_INTERVAL_MULT; // 700ms between attacks
                     }
 
 
@@ -4578,6 +4645,18 @@
             const allowAbilityUse = gameState === 'inGame' && adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex' && !gameOver;
             if (!allowAbilityUse) return;
 
+            // Active HP regen key (H) — activates one session of fast healing, costs Hunger
+            if (event.key.toLowerCase() === REGEN_KEY) {
+                const now = performance.now();
+                const hpCap = playerStats.maxHp * REGEN_HP_CAP;
+                const passiveReady = (now - lastDamageTakenTime) >= REGEN_NO_DAMAGE_DELAY && playerStats.currentHp < hpCap;
+                if (passiveReady && !isActiveRegenHeld) {
+                    isActiveRegenHeld = true;
+                    activeRegenSessionCount++;
+                }
+                return;
+            }
+
             const keybind = event.key.toLowerCase();
             const slotIndex = hotbarSlots.findIndex(slot => slot.keybind.toLowerCase() === keybind);
 
@@ -4724,6 +4803,9 @@
 
         window.addEventListener('keyup', (event) => {
             keysPressed[event.key.toLowerCase()] = false;
+            if (event.key.toLowerCase() === REGEN_KEY) {
+                isActiveRegenHeld = false;
+            }
         });
 
         closeAdminPanelBtn.addEventListener('click', hideAllPanels);
