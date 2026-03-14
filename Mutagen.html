@@ -2686,14 +2686,25 @@
                     // Resolve target position
                     let targetX, targetY, targetRadius;
                     if (npc.aggroTarget === 'player') {
+                        // Burrowing: player is underground — NPC immediately loses interest
+                        if (isBurrowing) {
+                            returnToPatrol(npc);
+                            return;
+                        }
+
                         targetX = playerX; targetY = playerY; targetRadius = playerRadius;
-                        // Level 2: lose interest if player escapes detection range (1.5× buffer)
-                        if (npc.level >= 2) {
-                            const pdx = targetX - npc.x, pdy = targetY - npc.y;
-                            if (Math.sqrt(pdx * pdx + pdy * pdy) > npc.detectionRadius * 1.5) {
-                                returnToPatrol(npc);
-                                return;
-                            }
+
+                        // Re-evaluate stealth-adjusted detection radius each frame.
+                        // If the player has moved beyond 1.5× effective range (foliage, stealth stat, etc.),
+                        // the NPC gives up the chase — applies to all levels.
+                        const tierDiff = npc.level - playerStats.playerLevel;
+                        const tierPenalty = tierDiff > 0 ? (1 - Math.pow(STEALTH_TIER_DECAY, tierDiff)) * 100 : 0;
+                        const effectiveStealth = currentStealthValue - tierPenalty;
+                        const effectiveDetRadius = Math.max(0, STEALTH_BASE_DETECTION * (1 - effectiveStealth / 100));
+                        const pdx = targetX - npc.x, pdy = targetY - npc.y;
+                        if (Math.sqrt(pdx * pdx + pdy * pdy) > effectiveDetRadius * 1.5) {
+                            returnToPatrol(npc);
+                            return;
                         }
                     } else if (npc.aggroTarget && npcs.includes(npc.aggroTarget)) {
                         targetX = npc.aggroTarget.x;
