@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.21';
+        const GAME_VERSION = 'v1.22';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1077,8 +1077,17 @@
         let preAbilityTarget = null;
 
         // Attack animation variables
-        const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation
+        const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation (player + NPC-vs-NPC)
         const ATTACK_LURCH_DISTANCE = 8; // pixels for the lurch distance
+
+        // NPC telegraph attack phases (player-facing combat only)
+        // Pull-back is the visible wind-up; pause is the danger cue; lunge is the strike.
+        // Direction is locked at pause start — NPC commits to the angle even if player dodges.
+        const NPC_TELEGRAPH_PULLBACK_MS   = 350; // ms — slow pull-back (readable telegraph)
+        const NPC_TELEGRAPH_PAUSE_MS      = 200; // ms — held pause (player's dodge window)
+        const NPC_TELEGRAPH_LUNGE_MS      = 150; // ms — fast forward strike
+        const NPC_TELEGRAPH_PULLBACK_DIST = 12;  // px — visual pull-back distance
+        const NPC_TELEGRAPH_LUNGE_DIST    = 16;  // px — visual lunge distance
 
         // Player specific attack timing
         let playerLastAttackTime = 0;
@@ -1902,7 +1911,9 @@
                 lastAttackTime: 0,
                 attackCooldown: 500,
                 isAttacking: false,
-                attackAnimStartTime: 0
+                attackAnimStartTime: 0,
+                attackPhase: null,       // null | 'pullback' | 'pause' | 'lunge' — telegraph phases (player combat only)
+                attackLockAngle: 0       // direction locked in at pause start; NPC commits to this angle
             };
         }
         function generateNPCs() {
@@ -2299,7 +2310,9 @@
                     playerIsAttacking = false;
                 }
                 npcs.forEach(npc => {
-                    if (npc.isAttacking && (currentTime - npc.attackAnimStartTime >= ATTACK_ANIM_DURATION)) {
+                    // Only auto-clear for NPC-vs-NPC attacks (no attackPhase).
+                    // Telegraph phases on the combatTarget are cleared by the phase-transition logic.
+                    if (npc.isAttacking && !npc.attackPhase && (currentTime - npc.attackAnimStartTime >= ATTACK_ANIM_DURATION)) {
                         npc.isAttacking = false;
                     }
                 });
@@ -2753,6 +2766,9 @@
                             }
                         }
                     } else {
+                        // NPC is committed to a telegraph animation — hold position, don't chase
+                        if (npc.attackPhase) return;
+
                         // Chase: move toward target
                         npc.state = 'chasing';
                         const npcSpeed = Math.max(0.1, baseNpcSpeed * (1 + npc.speed / 100));
@@ -2791,14 +2807,22 @@
 
 
                 if (inCombat && combatTarget) {
-                    // Check if player moved away from combat target or used a mobility ability
-                    // Combat only ends if player explicitly moves away or uses certain abilities (burrow, pounce).
-                    const combatShouldContinue = checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce'); // Updated from jump
+                    // Combat ends when player leaves melee range, UNLESS the NPC is mid-telegraph
+                    // (the lunge completes and the range check at the end decides if it hits).
+                    // Burrowing and pounce hard-break combat and abort any in-progress telegraph.
+                    const hardBreak = isBurrowing || (isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce');
+                    const combatShouldContinue =
+                        (checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) ||
+                         combatTarget.attackPhase !== null)
+                        && !hardBreak;
 
                     if (!combatShouldContinue) {
                         inCombat = false;
                         if (combatTarget) {
                             combatTarget.inCombat = false;
+                            // Abort any in-progress telegraph (hard break or player ran through lunge)
+                            combatTarget.attackPhase = null;
+                            combatTarget.isAttacking = false;
                             // Keep NPC chasing if it still has interest, otherwise return to patrol
                             if (combatTarget.loseInterestAt > 0 && currentTime < combatTarget.loseInterestAt) {
                                 combatTarget.state = 'chasing';
@@ -2826,19 +2850,43 @@
                         }
                     }
 
-                    // NPC attack logic (always, if in combat and not prevented by player's dash)
-                    if (currentTime - combatTarget.lastAttackTime >= combatTarget.attackCooldown) {
-                        if (!(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) { // Prevent NPC attack if player just dashed through
-                            // Orient NPC towards player before attacking
-                            combatTarget.directionAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
-                            // NPC_ATTACK_DAMAGE_MULT compensates for slower attack rate (same net DPS, harder individual hits)
-                            dealDamage({ ...combatTarget, attack: combatTarget.attack * NPC_ATTACK_DAMAGE_MULT }, playerStats, currentTime);
-                            combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration; // Reset chase timer on hit
-                            combatTarget.isAttacking = true;
+                    // NPC attack logic — telegraph system:
+                    // Cooldown expiry (while in melee range) starts the pull-back phase.
+                    // Damage is only dealt at the END of the lunge phase, with a fresh range check.
+                    if (currentTime - combatTarget.lastAttackTime >= combatTarget.attackCooldown && !combatTarget.attackPhase) {
+                        const inMeleeRange = checkCircleCollision(combatTarget.x, combatTarget.y, combatTarget.radius, playerX, playerY, playerRadius);
+                        if (inMeleeRange && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) {
+                            // Lock the attack angle and begin pull-back
+                            combatTarget.attackLockAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
+                            combatTarget.directionAngle  = combatTarget.attackLockAngle;
+                            combatTarget.attackPhase     = 'pullback';
                             combatTarget.attackAnimStartTime = currentTime;
+                            combatTarget.isAttacking     = true;
+                            combatTarget.loseInterestAt  = currentTime + combatTarget.loseInterestDuration;
                         }
-                        combatTarget.lastAttackTime = currentTime;
-                        combatTarget.attackCooldown = combatDelay * NPC_ATTACK_INTERVAL_MULT; // 700ms between attacks
+                        combatTarget.lastAttackTime   = currentTime;
+                        combatTarget.attackCooldown   = combatDelay * NPC_ATTACK_INTERVAL_MULT;
+                    }
+
+                    // Phase transitions for the active telegraph
+                    if (combatTarget.attackPhase) {
+                        const phaseElapsed = currentTime - combatTarget.attackAnimStartTime;
+                        if (combatTarget.attackPhase === 'pullback' && phaseElapsed >= NPC_TELEGRAPH_PULLBACK_MS) {
+                            combatTarget.attackPhase     = 'pause';
+                            combatTarget.attackAnimStartTime = currentTime;
+                        } else if (combatTarget.attackPhase === 'pause' && phaseElapsed >= NPC_TELEGRAPH_PAUSE_MS) {
+                            combatTarget.attackPhase     = 'lunge';
+                            combatTarget.attackAnimStartTime = currentTime;
+                        } else if (combatTarget.attackPhase === 'lunge' && phaseElapsed >= NPC_TELEGRAPH_LUNGE_MS) {
+                            // Lunge complete — deal damage only if player is still in melee range
+                            if (checkCircleCollision(combatTarget.x, combatTarget.y, combatTarget.radius, playerX, playerY, playerRadius) &&
+                                !(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) {
+                                dealDamage({ ...combatTarget, attack: combatTarget.attack * NPC_ATTACK_DAMAGE_MULT }, playerStats, currentTime);
+                                combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration;
+                            }
+                            combatTarget.attackPhase = null;
+                            combatTarget.isAttacking = false;
+                        }
                     }
 
 
@@ -3570,15 +3618,28 @@
                     let npcDrawY = npc.y;
 
                     if (npc.isAttacking) {
-                        const animProgress = (currentTime - npc.attackAnimStartTime) / ATTACK_ANIM_DURATION;
                         let lurchOffset = 0;
-                        if (animProgress < 0.5) {
-                            lurchOffset = lerp(0, ATTACK_LURCH_DISTANCE, animProgress * 2);
+                        const angle = npc.attackPhase ? npc.attackLockAngle : npc.directionAngle;
+                        if (npc.attackPhase === 'pullback') {
+                            // Slow pull-back: ease from 0 to -PULLBACK_DIST
+                            const t = Math.min(1, (currentTime - npc.attackAnimStartTime) / NPC_TELEGRAPH_PULLBACK_MS);
+                            lurchOffset = lerp(0, -NPC_TELEGRAPH_PULLBACK_DIST, t);
+                        } else if (npc.attackPhase === 'pause') {
+                            // Hold fully pulled back
+                            lurchOffset = -NPC_TELEGRAPH_PULLBACK_DIST;
+                        } else if (npc.attackPhase === 'lunge') {
+                            // Fast lunge from fully pulled back to beyond centre
+                            const t = Math.min(1, (currentTime - npc.attackAnimStartTime) / NPC_TELEGRAPH_LUNGE_MS);
+                            lurchOffset = lerp(-NPC_TELEGRAPH_PULLBACK_DIST, NPC_TELEGRAPH_LUNGE_DIST, t);
                         } else {
-                            lurchOffset = lerp(ATTACK_LURCH_DISTANCE, 0, (animProgress - 0.5) * 2);
+                            // NPC-vs-NPC: simple forward lurch, no telegraph
+                            const animProgress = (currentTime - npc.attackAnimStartTime) / ATTACK_ANIM_DURATION;
+                            lurchOffset = animProgress < 0.5
+                                ? lerp(0, ATTACK_LURCH_DISTANCE, animProgress * 2)
+                                : lerp(ATTACK_LURCH_DISTANCE, 0, (animProgress - 0.5) * 2);
                         }
-                        npcDrawX += Math.cos(npc.directionAngle) * lurchOffset;
-                        npcDrawY += Math.sin(npc.directionAngle) * lurchOffset;
+                        npcDrawX += Math.cos(angle) * lurchOffset;
+                        npcDrawY += Math.sin(angle) * lurchOffset;
                     }
 
                     ctx.translate(npcDrawX, npcDrawY);
