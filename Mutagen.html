@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.22';
+        const GAME_VERSION = 'v1.23';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -1089,6 +1089,12 @@
         const NPC_TELEGRAPH_PULLBACK_DIST = 12;  // px — visual pull-back distance
         const NPC_TELEGRAPH_LUNGE_DIST    = 16;  // px — visual lunge distance
 
+        // Universal dodge roll — available to every player, bound to Shift
+        const DODGE_ROLL_DISTANCE    = 70;   // world-px travel distance
+        const DODGE_ROLL_DURATION_MS = 150;  // ms of movement
+        const DODGE_ROLL_IFRAME_MS   = 120;  // ms of invincibility (front-loaded)
+        const DODGE_ROLL_COOLDOWN_MS = 750;  // ms cooldown
+
         // Player specific attack timing
         let playerLastAttackTime = 0;
         let playerAttackCooldown = 500; // Default cooldown
@@ -1230,7 +1236,8 @@
         let movementAbilityEndY = 0;
         let postMovementImmobilityDuration = 250; // milliseconds after Pounce/Dash (can vary by ability)
         let canMoveFreeLy = true; // True if player can initiate normal movement or another movement ability
-        let lastActivatedAbilityRef = null; // To track which ability was just activated for post-movement effects
+        let lastActivatedAbilityRef = null; // To track which ability was just activated
+        let dodgeRollLastUsed = -Infinity; // timestamp — tracks Shift dodge roll cooldown for post-movement effects
 
         // New Burrow specific variables
         let isBurrowing = false;
@@ -1996,6 +2003,12 @@
         }
 
         function dealDamage(attacker, defender, currentTime) {
+            // Dodge roll i-frames: ignore all incoming damage for the first DODGE_ROLL_IFRAME_MS
+            if (defender.isPlayer && isPerformingMovementAbility && lastActivatedAbilityRef === 'dodgeRoll' &&
+                currentTime - movementAbilityStartTime < DODGE_ROLL_IFRAME_MS) {
+                return;
+            }
+
             // Damage = attacker.attack × (1 − defenderMitigation%)
             // mitigation scales linearly from 0 to levelCap as defStat goes 0 → 3×base.
             const mitigation = getMitigation(defender);
@@ -2422,6 +2435,13 @@
                             npcs.forEach(npc => npc.dashedThrough = false);
 
                             // Resume targeting if a target was active before the dash
+                            const resumeTarget = targetedNpc || preAbilityTarget;
+                            if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                                targetedNpc = resumeTarget;
+                                isMoving = true;
+                            }
+                        } else if (lastActivatedAbilityRef === 'dodgeRoll') {
+                            postMovementImmobilityDuration = 0; // player can move immediately after rolling
                             const resumeTarget = targetedNpc || preAbilityTarget;
                             if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
                                 targetedNpc = resumeTarget;
@@ -3170,6 +3190,51 @@
                     }
                 }
             });
+
+            // Dodge roll indicator — always visible, separate from ability slots
+            const dodgeSize = currentHotbarSlotSize;
+            const dodgeSlotX = hotbarX + actualHotbarWidth + HOTBAR_SPACING + 8;
+            const dodgeSlotY = hotbarY;
+            const dodgeCooldownRemaining = Math.max(0, DODGE_ROLL_COOLDOWN_MS - (performance.now() - dodgeRollLastUsed));
+            const dodgeReady = dodgeCooldownRemaining <= 0;
+
+            ctx.fillStyle = 'rgba(30, 30, 30, 0.9)';
+            ctx.fillRect(dodgeSlotX, dodgeSlotY, dodgeSize, dodgeSize);
+            ctx.strokeStyle = dodgeReady ? '#aaa' : '#555';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(dodgeSlotX, dodgeSlotY, dodgeSize, dodgeSize);
+
+            // Keybind label
+            ctx.fillStyle = dodgeReady ? '#FFD700' : 'rgba(255,215,0,0.45)';
+            ctx.font = `bold ${dodgeSize * 0.3}px "Inter", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('⇧', dodgeSlotX + dodgeSize / 2, dodgeSlotY + dodgeSize * 0.08 + 2);
+
+            // Ability name label
+            ctx.fillStyle = 'white';
+            ctx.font = `${dodgeSize * 0.18}px "Inter", sans-serif`;
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('Dodge', dodgeSlotX + dodgeSize / 2, dodgeSlotY + dodgeSize - 4);
+
+            // Cooldown pie overlay
+            if (!dodgeReady) {
+                const cx = dodgeSlotX + dodgeSize / 2;
+                const cy = dodgeSlotY + dodgeSize / 2;
+                const r  = dodgeSize / 2;
+                const fraction = dodgeCooldownRemaining / DODGE_ROLL_COOLDOWN_MS;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction, false);
+                ctx.lineTo(cx, cy);
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${dodgeSize * 0.35}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(Math.ceil(dodgeCooldownRemaining / 1000), cx, cy);
+            }
         }
 
         function drawPlayerInfoPanel() {
@@ -3547,7 +3612,12 @@
 
                 ctx.translate(playerDrawX, playerDrawY);
                 ctx.scale(playerVisualScale, playerVisualScale);
-                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : (isInFoliage ? 0.5 : 1);
+                // Flash semi-transparent during dodge-roll i-frames so the player has clear feedback
+                const isInDodgeIframe = isPerformingMovementAbility && lastActivatedAbilityRef === 'dodgeRoll'
+                    && (currentTime - movementAbilityStartTime) < DODGE_ROLL_IFRAME_MS;
+                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4)
+                    : isInDodgeIframe ? 0.45
+                    : (isInFoliage ? 0.5 : 1);
                 ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
 
                 const emojiFontSize = playerSize * 1.5;
@@ -3640,6 +3710,28 @@
                         }
                         npcDrawX += Math.cos(angle) * lurchOffset;
                         npcDrawY += Math.sin(angle) * lurchOffset;
+                    }
+
+                    // Red cone danger indicator during the pause phase (player's dodge window).
+                    // Drawn at the NPC's real world position (not the lurch-offset draw position).
+                    if (npc.attackPhase === 'pause') {
+                        const elapsed = currentTime - npc.attackAnimStartTime;
+                        const pulse = 0.28 + 0.12 * Math.sin(elapsed * 0.018); // ~3 Hz pulsation
+                        const coneReach = npc.radius + playerRadius + NPC_TELEGRAPH_LUNGE_DIST;
+                        const halfAngle  = Math.PI * 52 / 180; // 104° total arc
+                        ctx.save();
+                        ctx.translate(npc.x, npc.y);
+                        ctx.rotate(npc.attackLockAngle);
+                        ctx.fillStyle = `rgba(220, 40, 40, ${pulse})`;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.arc(0, 0, coneReach, -halfAngle, halfAngle);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.strokeStyle = `rgba(255, 80, 80, ${Math.min(1, pulse + 0.3)})`;
+                        ctx.lineWidth = 1.5 / zoomScale;
+                        ctx.stroke();
+                        ctx.restore();
                     }
 
                     ctx.translate(npcDrawX, npcDrawY);
@@ -4723,6 +4815,37 @@
                 if (passiveReady && !isActiveRegenHeld) {
                     isActiveRegenHeld = true;
                     activeRegenSessionCount++;
+                }
+                return;
+            }
+
+            // Universal dodge roll — Shift key, no hotbar slot required
+            if (event.key === 'Shift') {
+                event.preventDefault();
+                const now = performance.now();
+                if (!isPerformingMovementAbility && !isBurrowing &&
+                    now - dodgeRollLastUsed >= DODGE_ROLL_COOLDOWN_MS) {
+                    const mouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+                    const mouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+                    const dx = mouseWorldX - playerX;
+                    const dy = mouseWorldY - playerY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const rollAngle = dist > 0 ? Math.atan2(dy, dx) : playerDirectionAngle;
+                    movementAbilityStartX = playerX;
+                    movementAbilityStartY = playerY;
+                    movementAbilityEndX = Math.max(playerSize / 2, Math.min(
+                        playerX + Math.cos(rollAngle) * DODGE_ROLL_DISTANCE, worldWidth - playerSize / 2));
+                    movementAbilityEndY = Math.max(playerSize / 2, Math.min(
+                        playerY + Math.sin(rollAngle) * DODGE_ROLL_DISTANCE, worldHeight - playerSize / 2));
+                    currentMovementAbilityDuration = DODGE_ROLL_DURATION_MS;
+                    movementAbilityStartTime = now;
+                    isPerformingMovementAbility = true;
+                    lastActivatedAbilityRef = 'dodgeRoll';
+                    canMoveFreeLy = false;
+                    isMoving = false;
+                    playerDirectionAngle = rollAngle;
+                    preAbilityTarget = targetedNpc;
+                    dodgeRollLastUsed = now;
                 }
                 return;
             }
