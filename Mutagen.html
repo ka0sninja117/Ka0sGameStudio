@@ -2850,10 +2850,11 @@
                                 returnToPatrol(combatTarget);
                             }
                         }
+                        // Clear the red targeting triangle — stale indicator is confusing once combat ends
+                        if (targetedNpc && targetedNpc === combatTarget) targetedNpc = null;
                         combatTarget = null;
                         isMoving = false;
                         showTargetIndicator = false;
-                        // targetedNpc is *not* cleared here, as player might still want to target the NPC without being in combat
                     } else {
 
                     // Player attack logic: Only if targetedNpc is set AND it's the current combatTarget
@@ -2899,10 +2900,14 @@
                             combatTarget.attackAnimStartTime = currentTime;
                         } else if (combatTarget.attackPhase === 'lunge' && phaseElapsed >= NPC_TELEGRAPH_LUNGE_MS) {
                             // Lunge complete — deal damage only if player is still in melee range
-                            if (checkCircleCollision(combatTarget.x, combatTarget.y, combatTarget.radius, playerX, playerY, playerRadius) &&
-                                !(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) {
+                            const lungeHit = checkCircleCollision(combatTarget.x, combatTarget.y, combatTarget.radius, playerX, playerY, playerRadius) &&
+                                !(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash');
+                            if (lungeHit) {
                                 dealDamage({ ...combatTarget, attack: combatTarget.attack * NPC_ATTACK_DAMAGE_MULT }, playerStats, currentTime);
                                 combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration;
+                            } else {
+                                // NPC missed — clear targeting triangle immediately so it doesn't linger
+                                if (targetedNpc && targetedNpc === combatTarget) targetedNpc = null;
                             }
                             combatTarget.attackPhase = null;
                             combatTarget.isAttacking = false;
