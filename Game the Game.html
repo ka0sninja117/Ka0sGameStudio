@@ -118,6 +118,27 @@
             }
         }
 
+        /* Pulse animation used by the countdown timer */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.05); }
+        }
+
+        /* Timer color states */
+        .green-pulse {
+            color: #00CC00 !important;
+            animation: pulse 1s infinite alternate;
+        }
+        .red-pulse {
+            color: #ff3333 !important;
+            animation: pulse 0.5s infinite alternate;
+        }
+
+        /* Title screen word rotation animation */
+        @keyframes rotateStreetSign {
+            0%   { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
 
         #title-screen .word {
             display: inline-block;
@@ -232,14 +253,14 @@
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
         }
 
-        /* --- Information Screen Specific Styles --- */
-        #info-screen .screen-container {
+        /* --- Shared Information Screen Styles (used by both #info-screen and #party-info-screen) --- */
+        .info-screen-shared .screen-container {
             padding: 15px;
             gap: 10px;
-            padding-top: 15px; /* Reset padding-top for info screen to its default */
+            padding-top: 15px;
         }
 
-        #info-screen h2 {
+        .info-screen-shared h2 {
             font-family: 'Bangers', cursive;
             font-size: 1.8em;
             color: #ff6b6b;
@@ -249,7 +270,7 @@
             line-height: 1.1;
         }
 
-        #info-screen p {
+        .info-screen-shared p {
             font-family: 'Comic Neue', cursive;
             font-size: 1.0em;
             color: #444;
@@ -258,18 +279,18 @@
             word-wrap: break-word;
             text-shadow: none;
         }
-        /* New style for the spelling warning */
-        #info-screen .spelling-warning {
-            font-family: 'Comic Neue', cursive; /* Match main info text font */
-            font-size: 0.75em; /* Small-ish text */
-            color: #d9534f; /* Reddish color for warning */
+
+        .info-screen-shared .spelling-warning {
+            font-family: 'Comic Neue', cursive;
+            font-size: 0.75em;
+            color: #d9534f;
             margin-top: 5px;
             margin-bottom: 5px;
             font-weight: bold;
             line-height: 1.3;
         }
 
-        #info-screen .multiplier-chart {
+        .info-screen-shared .multiplier-chart {
             display: grid;
             grid-template-columns: 1fr 0.5fr;
             gap: 3px;
@@ -283,11 +304,11 @@
             border: 2px solid #8fd3f4;
         }
 
-        #info-screen .chart-header, #info-screen .chart-row {
+        .info-screen-shared .chart-header, .info-screen-shared .chart-row {
             display: contents;
         }
 
-        #info-screen .chart-header div, #info-screen .chart-row div {
+        .info-screen-shared .chart-header div, .info-screen-shared .chart-row div {
             padding: 8px 5px;
             text-align: center;
             font-size: 0.7em;
@@ -295,7 +316,7 @@
             box-sizing: border-box;
         }
 
-        #info-screen .chart-header div {
+        .info-screen-shared .chart-header div {
             background: #8fd3f4;
             color: #fff;
             font-weight: bold;
@@ -303,28 +324,28 @@
             font-size: 0.75em;
         }
 
-        #info-screen .chart-row:nth-child(odd) div {
+        .info-screen-shared .chart-row:nth-child(odd) div {
             background: #e6f7ff;
         }
 
-        #info-screen .chart-row:nth-child(even) div {
+        .info-screen-shared .chart-row:nth-child(even) div {
             background: #d0eeff;
         }
 
-        #info-screen .chart-row .answer-type {
+        .info-screen-shared .chart-row .answer-type {
             color: #007bff;
             font-weight: bold;
             text-align: left;
             padding-left: 10px;
         }
 
-        #info-screen .multiplier {
+        .info-screen-shared .multiplier {
             color: #ff6b6b;
             font-weight: bold;
             font-size: 0.8em;
         }
 
-        #info-screen .continue-button {
+        .info-screen-shared .continue-button {
             background: linear-gradient(135deg, #6BFF6B 0%, #00CC00 100%);
             color: #fff;
             font-family: 'Press Start 2P', cursive;
@@ -340,131 +361,64 @@
             margin-top: 10px;
         }
 
-        #info-screen .continue-button:hover {
+        .info-screen-shared .continue-button:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
         }
 
-        #info-screen .continue-button:active {
+        .info-screen-shared .continue-button:active {
             transform: translateY(0);
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
         }
 
-        /* --- Party Info Screen Specific Styles (reusing info-screen styles) --- */
+        /* --- Party Info Screen Overrides (smaller sizing for compact layout) --- */
         #party-info-screen .screen-container {
-            padding: 10px; /* Reduced padding */
-            gap: 8px; /* Reduced gap */
+            padding: 10px;
+            gap: 8px;
             padding-top: 10px;
         }
 
-        #party-info-screen h2 {
-            font-family: 'Bangers', cursive;
-            font-size: 1.8em;
-            color: #ff6b6b;
-            margin-bottom: 5px;
-            letter-spacing: 1px;
-            text-shadow: 2px 2px #ffb6b6, 4px 4px #ffdbdb;
-            line-height: 1.1;
+        #party-info-screen p {
+            font-size: 0.95em;
+            margin: 0 0 5px 0;
+            line-height: 1.4;
         }
 
-        #party-info-screen p {
-            font-family: 'Comic Neue', cursive;
-            font-size: 0.95em; /* Slightly smaller font */
-            color: #444;
-            margin: 0 0 5px 0; /* Reduced margin */
-            line-height: 1.4; /* Tighter line height */
-            word-wrap: break-word;
-            text-shadow: none;
-        }
         #party-info-screen .spelling-warning {
-            font-family: 'Comic Neue', cursive;
-            font-size: 0.7em; /* Even smaller warning text */
-            color: #d9534f;
+            font-size: 0.7em;
             margin-top: 3px;
-            margin-bottom: 8px; /* Adjusted margin */
-            font-weight: bold;
+            margin-bottom: 8px;
             line-height: 1.2;
         }
 
         #party-info-screen .multiplier-chart {
-            display: grid;
-            grid-template-columns: 1fr 0.5fr;
-            gap: 2px; /* Reduced gap */
-            width: 90%; /* Slightly narrower */
-            margin-top: 5px; /* Reduced margin */
-            margin-bottom: 10px; /* Reduced margin */
-            background: #f0f8ff;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
-            border: 2px solid #8fd3f4;
-        }
-
-        #party-info-screen .chart-header, #party-info-screen .chart-row {
-            display: contents;
+            gap: 2px;
+            width: 90%;
+            margin-top: 5px;
+            margin-bottom: 10px;
         }
 
         #party-info-screen .chart-header div, #party-info-screen .chart-row div {
-            padding: 6px 4px; /* Reduced padding */
-            text-align: center;
-            font-size: 0.65em; /* Reduced font size */
-            word-wrap: break-word;
-            box-sizing: border-box;
+            padding: 6px 4px;
+            font-size: 0.65em;
         }
 
         #party-info-screen .chart-header div {
-            background: #8fd3f4;
-            color: #fff;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
             font-size: 0.7em;
         }
 
-        #party-info-screen .chart-row:nth-child(odd) div {
-            background: #e6f7ff;
-        }
-
-        #party-info-screen .chart-row:nth-child(even) div {
-            background: #d0eeff;
-        }
-
         #party-info-screen .chart-row .answer-type {
-            color: #007bff;
-            font-weight: bold;
-            text-align: left;
-            padding-left: 8px; /* Reduced padding */
+            padding-left: 8px;
         }
 
         #party-info-screen .multiplier {
-            color: #ff6b6b;
-            font-weight: bold;
             font-size: 0.7em;
         }
 
         #party-info-screen .continue-button {
-            background: linear-gradient(135deg, #6BFF6B 0%, #00CC00 100%);
-            color: #fff;
-            font-family: 'Press Start 2P', cursive;
             font-size: 0.75em;
             padding: 6px 14px;
-            border: none;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
             margin-top: 8px;
-        }
-
-        #party-info-screen .continue-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-        }
-
-        #party-info-screen .continue-button:active {
-            transform: translateY(0);
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
         }
 
 
@@ -1568,49 +1522,27 @@
                 max-width: 250px; /* Larger max-width on desktop */
             }
 
-            #info-screen h2, #party-setup-screen h2 {
+            .info-screen-shared h2, #party-setup-screen h2 {
                 font-size: 2.5em;
             }
 
-            #info-screen p, #party-setup-screen p {
+            .info-screen-shared p, #party-setup-screen p {
                 font-size: 1.1em;
             }
-            #info-screen .spelling-warning {
+            .info-screen-shared .spelling-warning {
                 font-size: 0.85em;
             }
 
-            #info-screen .multiplier-chart {
+            .info-screen-shared .multiplier-chart {
                 width: 70%;
             }
 
-            #info-screen .chart-header div, #info-screen .chart-row div {
+            .info-screen-shared .chart-header div, .info-screen-shared .chart-row div {
                 font-size: 0.8em;
                 padding: 10px 8px;
             }
 
-            #info-screen .continue-button {
-                font-size: 1em;
-                padding: 10px 20px;
-            }
-
-            /* Party Info screen for desktop */
-            #party-info-screen h2 {
-                font-size: 2.5em;
-            }
-            #party-info-screen p {
-                font-size: 1.1em;
-            }
-            #party-info-screen .spelling-warning {
-                font-size: 0.85em;
-            }
-            #party-info-screen .multiplier-chart {
-                width: 70%;
-            }
-            #party-info-screen .chart-header div, #party-info-screen .chart-row div {
-                font-size: 0.8em;
-                padding: 10px 8px;
-            }
-            #party-info-screen .continue-button {
+            .info-screen-shared .continue-button {
                 font-size: 1em;
                 padding: 10px 20px;
             }
@@ -1896,7 +1828,7 @@
         </div>
     </div>
 
-    <div id="info-screen" style="display: none;">
+    <div id="info-screen" class="info-screen-shared" style="display: none;">
         <div class="screen-container">
             <h2>How to Play (Solo Mode)</h2> <!-- Updated title -->
             <p>In this game you will be presented with trivia questions. However, you get to choose how you answer!</p>
@@ -1928,7 +1860,7 @@
     </div>
 
     <!-- New Party Info Screen -->
-    <div id="party-info-screen" style="display: none;">
+    <div id="party-info-screen" class="info-screen-shared" style="display: none;">
         <div class="screen-container">
             <h2>How to Play (Party Mode)</h2>
             <p>In Party Mode, you'll see a board with different categories and point values. Select a category and a point value to answer a question!</p>
@@ -2138,7 +2070,7 @@
         <div class="screen-container">
             <h2>Versus</h2> <!-- Updated H2 text -->
             <p>Enter a challenge code to play a friend's game.</p>
-            <input type="text" id="challenge-code-input" placeholder="Enter Challenge Code">
+            <input type="text" id="challenge-code-input" placeholder="Enter Challenge Code" maxlength="6">
             <button id="start-challenge-button" class="nav-button">Start Challenge</button>
             <div id="challenge-feedback" class="error-message" style="display:none;"></div>
             <button id="back-to-menu-challenge" class="nav-button">Back to Menu</button>
@@ -2187,9 +2119,9 @@
                             </tr>
                             <tr class="total-row">
                                 <td class="row-header">Overall Total</td>
-                                <td id="overall-correct-count">0</td>
-                                <td id="overall-incorrect-count">0</td>
-                                <td id="overall-grand-total">0</td>
+                                <td id="your-overall-correct-count">0</td>
+                                <td id="your-overall-incorrect-count">0</td>
+                                <td id="your-overall-grand-total">0</td>
                             </tr>
                         </tbody>
                     </table>
@@ -2614,7 +2546,8 @@
                 currentQuestionData = triviaQuestions[actualQuestionIndex];
                 // Display the question immediately for solo/challenge
                 document.getElementById('question-display').textContent = currentQuestionData.question;
-                startTimer(TIMER_DURATION_SELECTION, 'selection'); // Start timer for selecting answer type
+                // No timer for solo/versus mode selection phase
+                document.getElementById('countdown-timer').style.display = 'none';
             }
             // For party mode, currentQuestionData is set by handleJeopardyCellClick *before* this point,
             // and the initial question-display text (Category : Points) is also set there.
@@ -2685,29 +2618,25 @@
             // Remove the party-selection-mode class from game-screen when an answer type is selected
             document.getElementById('game-screen').classList.remove('party-selection-mode');
 
-            // Only clear selection timer if it was actually running (i.e., not party mode)
-            if (gameMode !== 'party') {
-                clearInterval(timerInterval); // Stop the "select type" timer
-            } else {
-                 // For party mode, the timer was hidden during selection.
-                 // Now that an answer type is chosen, start the actual answer timer.
-                 // (No clearInterval for selection timer because it wasn't started in party mode)
-            }
-            
             selectedAnswerType = type;
             document.getElementById('response-selection-area').style.display = 'none'; // Hide type selection buttons
 
             // --- IMPORTANT: Display actual question AFTER answer type is selected ---
             document.getElementById('question-display').textContent = currentQuestionData.question;
 
-            let answerTimerDuration;
-            // Determine the duration for the answer input timer
-            if (type === 'freeText') {
-                answerTimerDuration = ANSWER_TIMER_DURATIONS.freeText(currentQuestionData.correctAnswer);
+            if (gameMode === 'party') {
+                // Party mode: start answer timer with 25% extra time
+                let answerTimerDuration;
+                if (type === 'freeText') {
+                    answerTimerDuration = ANSWER_TIMER_DURATIONS.freeText(currentQuestionData.correctAnswer);
+                } else {
+                    answerTimerDuration = ANSWER_TIMER_DURATIONS[type];
+                }
+                startTimer(Math.ceil(answerTimerDuration * 1.25), 'answer');
             } else {
-                answerTimerDuration = ANSWER_TIMER_DURATIONS[type];
+                // Solo/versus: no timer, hide the timer element
+                document.getElementById('countdown-timer').style.display = 'none';
             }
-            startTimer(answerTimerDuration, 'answer'); // Start the "answer input" timer
 
             renderResponseInput(type); // Render the dynamic input elements
         }
@@ -2721,7 +2650,10 @@
             inputArea.innerHTML = ''; // Clear existing input elements
             inputArea.style.display = 'flex'; // Show the input area
 
-            document.getElementById('countdown-timer').style.display = 'block'; // Ensure timer remains visible
+            // Only show timer in party mode (solo/versus has no timer)
+            if (gameMode === 'party') {
+                document.getElementById('countdown-timer').style.display = 'block';
+            }
 
             if (type === 'freeText') {
                 const input = document.createElement('input');
@@ -3241,7 +3173,6 @@
                 challengeId = newChallengeId; // Store the generated ID globally
                 document.getElementById('generated-challenge-code').textContent = newChallengeId; // Display the code
                 document.getElementById('generated-challenge-container').style.display = 'block'; // Make the container visible
-                console.log("Challenge generated successfully:", newChallengeId);
             } catch (error) {
                 console.error("Error generating challenge:", error);
                 // Provide visual feedback for error
@@ -3471,7 +3402,6 @@
                             results: newResults,
                             status: 'completed'
                         }, { merge: true }); // Use merge to avoid overwriting other fields
-                        console.log("Challenge results updated in Firestore.");
                     }
                 } catch (error) {
                     console.error("Error updating challenge results in Firestore:", error);
@@ -3836,18 +3766,15 @@
 
             // Show and prepare party specific elements
             const partyResultsContent = document.getElementById('party-results-content');
-            console.log("showPartyResultsScreen: Setting partyResultsContent display to flex.");
             partyResultsContent.style.display = 'flex';
             partyResultsContent.style.flexDirection = 'column';
             partyResultsContent.style.alignItems = 'center';
 
             const partyLeaderboardContainer = document.getElementById('party-leaderboard-container');
             partyLeaderboardContainer.innerHTML = '';
-            console.log("showPartyResultsScreen: Setting partyLeaderboardContainer display to flex.");
             partyLeaderboardContainer.style.display = 'flex';
 
             const partyFunStats = document.getElementById('party-fun-stats');
-            console.log("showPartyResultsScreen: Setting partyFunStats display to block.");
             partyFunStats.style.display = 'block';
             // Reset animation properties for re-run, but DO NOT set opacity to 0 here explicitly.
             partyFunStats.classList.remove('revealed');
@@ -3898,7 +3825,6 @@
                 // Trigger CSS animation
                 setTimeout(() => {
                     leaderboardItem.classList.add('revealed');
-                    console.log(`Leaderboard item for ${team.name} revealed.`);
                 }, 10);
             }
 
@@ -3920,13 +3846,10 @@
             }
             finalScoreDisplay.textContent = winningMessage;
             finalScoreDisplay.style.opacity = 1;
-            console.log("Final score display updated and visible.");
 
             // Reveal and populate fun stats section
             await new Promise(resolve => setTimeout(resolve, 2000)); // Increased delay to ensure previous animations finish
-            console.log("Attempting to reveal fun stats.");
             partyFunStats.classList.add('revealed'); // This will trigger the CSS transition to opacity: 1
-            console.log("Added 'revealed' class to partyFunStats.");
 
             let overallHighestPositiveGain = { teams: [], amount: 0 }; // Now an array of teams
             let overallLargestNegativeLoss = { teams: [], amount: 0 }; // Now an array of teams
@@ -4029,9 +3952,6 @@
             overallLargestNegativeLoss.amount = largestLossValue;
 
 
-            console.log("Calculated overallHighestPositiveGain:", overallHighestPositiveGain);
-            console.log("Calculated overallLargestNegativeLoss:", overallLargestNegativeLoss);
-
             const highestPositiveGainElement = document.getElementById('highest-positive-gain');
             const largestNegativeLossElement = document.getElementById('largest-negative-loss');
             const mostDifficultCorrectElement = document.getElementById('most-difficult-correct');
@@ -4120,13 +4040,13 @@
             }
 
             updatePointsDisplay();
-            console.log("showPartyResultsScreen finished.");
         }
 
         /**
-         * Resets all game state variables to their initial values and returns to the title menu.
+         * Resets all game state variables to their initial values.
+         * Called by both returnToMenu() and window.onload.
          */
-        function returnToMenu() {
+        function resetGameState() {
             clearInterval(timerInterval);
             totalPoints = 0;
             currentQuestionIndex = 0;
@@ -4155,6 +4075,13 @@
             };
             updatePointsDisplay();
             document.getElementById('points-total').style.display = 'none';
+        }
+
+        /**
+         * Resets all game state variables to their initial values and returns to the title menu.
+         */
+        function returnToMenu() {
+            resetGameState();
             showScreen('title-screen');
         }
 
@@ -4201,10 +4128,10 @@
             const team = partyTeams[teamIndex];
             const originalQuestionIndex = lastAnswerLog.questionIndex;
             const originalQuestionData = triviaQuestions[originalQuestionIndex];
-            const selectedAnswerType = lastAnswerLog.answerType;
+            const overruledAnswerType = lastAnswerLog.answerType;
             const baseQuestionDifficulty = lastAnswerLog.baseQuestionDifficulty;
             const jeopardyPointsValue = lastAnswerLog.jeopardyPointsValue;
-            const multiplier = MULTIPLIERS[selectedAnswerType];
+            const multiplier = MULTIPLIERS[overruledAnswerType];
 
             const oldIsCorrect = lastAnswerLog.isCorrect;
             const newIsCorrect = !oldIsCorrect;
@@ -4241,11 +4168,11 @@
 
             // Update gameStats (global counts)
             if (oldIsCorrect) {
-                gameStats[selectedAnswerType].correct--;
-                gameStats[selectedAnswerType].incorrect++;
+                gameStats[overruledAnswerType].correct--;
+                gameStats[overruledAnswerType].incorrect++;
             } else {
-                gameStats[selectedAnswerType].incorrect--;
-                gameStats[selectedAnswerType].correct++;
+                gameStats[overruledAnswerType].incorrect--;
+                gameStats[overruledAnswerType].correct++;
             }
 
             // Update the lastAnswerLog entry itself
@@ -4275,40 +4202,30 @@
         }
 
         /**
+         * Displays a temporary alert message overlay that fades in and out.
+         * @param {string} message - The message to display.
+         * @param {number} duration - How long (ms) the alert stays visible before fading out.
+         */
+        function tempAlert(message, duration = 2000) {
+            const alertBox = document.createElement('div');
+            alertBox.className = 'temp-alert-box';
+            alertBox.textContent = message;
+            document.body.appendChild(alertBox);
+            setTimeout(() => { alertBox.style.opacity = 1; }, 10);
+            setTimeout(() => {
+                alertBox.style.opacity = 0;
+                alertBox.addEventListener('transitionend', () => alertBox.remove(), { once: true });
+            }, duration);
+        }
+
+        /**
          * Initializes the game when the window loads.
          * Sets up initial screen, game state, and all event listeners.
          */
         window.onload = function() {
             initializeFirebase();
             showScreen('title-screen');
-            
-            // Reset all game variables to ensure a clean start
-            totalPoints = 0;
-            hasGameBeenPlayed = false;
-            gameMode = 'normal';
-            challengeQuestionsOrder = [];
-            challengeId = '';
-            player1ChallengeData = null;
-            playerAnswersLog = [];
-            numTeams = MIN_TEAMS;
-            document.getElementById('num-teams-display').textContent = numTeams;
-            document.getElementById('decrease-teams').disabled = true;
-            document.getElementById('increase-teams').disabled = false;
-            partyTeams = [];
-            jeopardyBoard = {};
-            currentTeamIndex = 0;
-            currentJeopardyPoints = 0;
-            currentTrueFalseStatement = '';
-            gameStats = {
-                freeText: { correct: 0, incorrect: 0 },
-                multipleChoice: { correct: 0, incorrect: 0 },
-                trueFalse: { correct: 0, incorrect: 0 },
-                easyQuestionsAnswered: 0,
-                hardQuestionsAnswered: 0,
-                answeredQuestionsLog: []
-            };
-            updatePointsDisplay();
-            document.getElementById('points-total').style.display = 'none';
+            resetGameState();
 
             // --- Event Listeners for UI Buttons ---
             // Main menu buttons
@@ -4340,36 +4257,17 @@
             document.getElementById('increase-teams').addEventListener('click', () => updateTeamCount(1));
             document.getElementById('decrease-teams').addEventListener('click', () => updateTeamCount(-1));
             document.getElementById('start-party-game-button').addEventListener('click', () => {
-                const teamNames = [];
-                let allNamesValid = true;
+                // Validate that all team name inputs are filled
                 for (let i = 1; i <= numTeams; i++) {
                     const teamNameInput = document.getElementById(`team-name-${i}`);
-                    const teamName = teamNameInput.value.trim();
-                    if (teamName) {
-                        const colorIndex = (i - 1) % teamColors.length;
-                        teamNames.push({
-                            name: teamName,
-                            score: 0,
-                            color: teamColors[colorIndex],
-                            labelColor: teamLabelColors[colorIndex],
-                            maxPositiveGain: 0,
-                            maxNegativeLoss: 0
-                        });
-                        teamNameInput.style.border = '';
-                    } else {
-                        tempAlert(`Please enter a name for Team ${i}.`); 
-                        allNamesValid = false;
-                        break;
+                    if (!teamNameInput.value.trim()) {
+                        tempAlert(`Please enter a name for Team ${i}.`);
+                        return;
                     }
                 }
-                if (allNamesValid) {
-                    partyTeams = teamNames;
-                    currentTeamIndex = 0;
-                    console.log("Starting party game with teams:", partyTeams);
-                    
-                    showScreen('party-board-screen');
-                    startGame('party');
-                }
+                // Team objects are constructed inside startGame('party')
+                showScreen('party-board-screen');
+                startGame('party');
             });
             document.getElementById('back-to-menu-party-setup').addEventListener('click', () => {
                 returnToMenu(); 
@@ -4436,7 +4334,6 @@
                     handleOverruleDecision();
                 }, () => {
                     // No action needed for 'No'
-                    console.log("Decision reversal cancelled.");
                 });
             });
 
