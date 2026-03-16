@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GtG Question Editor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            min-height: 100vh;
+            background-color: #111;
+            background-image:
+                radial-gradient(ellipse at 20% 50%, rgba(0, 80, 40, 0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(0, 80, 160, 0.10) 0%, transparent 60%);
+            font-family: 'Inter', sans-serif;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            padding: 30px 20px 60px;
+        }
+
+        /* ── Header ── */
+        .editor-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .editor-header h1 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: clamp(0.7rem, 2.5vw, 1rem);
+            color: #fff;
+            text-shadow: 0 0 16px rgba(34, 197, 94, 0.5);
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .editor-header .back-link {
+            color: #666;
+            font-size: 0.8rem;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .editor-header .back-link:hover { color: #22c55e; }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 16px;
+            max-width: 100%;
+        }
+        .toolbar input[type="text"] {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #eee;
+            padding: 7px 12px;
+            font-size: 0.82rem;
+            font-family: inherit;
+            width: 220px;
+        }
+        .toolbar input[type="text"]:focus { border-color: #22c55e; outline: none; }
+        .toolbar input[type="text"]::placeholder { color: #555; }
+        .toolbar select {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #eee;
+            padding: 7px 10px;
+            font-size: 0.82rem;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .toolbar select:focus { border-color: #22c55e; outline: none; }
+
+        .btn {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #ccc;
+            padding: 7px 14px;
+            font-size: 0.82rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .btn:hover { background: #252525; border-color: #555; color: #fff; }
+        .btn-primary { border-color: #22c55e; color: #22c55e; }
+        .btn-primary:hover { background: #22c55e; color: #111; }
+        .btn-danger { border-color: #ef4444; color: #ef4444; }
+        .btn-danger:hover { background: #ef4444; color: #fff; }
+        .btn-amber { border-color: #f59e0b; color: #f59e0b; }
+        .btn-amber:hover { background: #f59e0b; color: #111; }
+
+        .toolbar .spacer { flex-grow: 1; }
+
+        .badge {
+            background: #252525;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            color: #888;
+            white-space: nowrap;
+        }
+        .badge strong { color: #22c55e; }
+
+        /* ── Stats row ── */
+        .stats-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+            font-size: 0.72rem;
+            color: #666;
+        }
+        .stat-chip {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 3px 10px;
+        }
+        .stat-chip span { color: #aaa; }
+
+        /* ── Table ── */
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            background: #161616;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1100px;
+            font-size: 0.82rem;
+        }
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #1c1c1c;
+            border-bottom: 2px solid #333;
+            padding: 10px 8px;
+            text-align: left;
+            font-weight: 600;
+            color: #999;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        thead th:hover { color: #22c55e; }
+        thead th .sort-arrow { margin-left: 4px; font-size: 0.65rem; }
+
+        tbody tr {
+            border-bottom: 1px solid #222;
+            transition: background 0.1s;
+        }
+        tbody tr:nth-child(even) { background: #1a1a1a; }
+        tbody tr:hover { background: #1f2a1f; }
+        tbody tr.invalid { background: rgba(239, 68, 68, 0.08); }
+        tbody tr.invalid td:first-child { border-left: 3px solid #ef4444; }
+
+        td {
+            padding: 6px 6px;
+            vertical-align: top;
+        }
+
+        /* ── Cell inputs ── */
+        td input[type="text"], td textarea, td select {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: #ddd;
+            padding: 4px 6px;
+            font-size: 0.82rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        td textarea {
+            resize: vertical;
+            min-height: 38px;
+            line-height: 1.4;
+        }
+        td input[type="text"]:hover, td textarea:hover { border-color: #333; background: #1c1c1c; }
+        td input[type="text"]:focus, td textarea:focus, td select:focus {
+            border-color: #22c55e;
+            background: #1c1c1c;
+            outline: none;
+        }
+        td select {
+            cursor: pointer;
+            background: transparent;
+        }
+        td select option { background: #1c1c1c; }
+
+        td .invalid-field { border-color: #ef4444 !important; }
+
+        /* row number column */
+        td.row-num {
+            color: #555;
+            font-size: 0.72rem;
+            text-align: center;
+            width: 36px;
+            min-width: 36px;
+            padding-top: 10px;
+        }
+
+        /* question column wider */
+        .col-question { min-width: 260px; }
+        .col-answer { min-width: 120px; }
+        .col-wrong { min-width: 140px; }
+        .col-diff { width: 60px; min-width: 60px; }
+        .col-board { min-width: 110px; }
+        .col-cats { min-width: 130px; }
+        .col-actions { width: 50px; min-width: 50px; text-align: center; }
+
+        .delete-btn {
+            background: none;
+            border: none;
+            color: #555;
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: color 0.15s, background 0.15s;
+            line-height: 1;
+        }
+        .delete-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+        }
+        .empty-state .icon { font-size: 2rem; margin-bottom: 12px; }
+
+        /* ── Import overlay ── */
+        .import-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .import-overlay.active { display: flex; }
+        .import-box {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 28px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .import-box h3 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.65rem;
+            margin-bottom: 16px;
+            color: #22c55e;
+        }
+        .import-box p { font-size: 0.82rem; color: #888; margin-bottom: 16px; }
+        .import-box .btn-row { display: flex; gap: 10px; justify-content: center; }
+
+        .drop-zone {
+            border: 2px dashed #333;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 16px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            color: #666;
+            font-size: 0.85rem;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.05);
+            color: #aaa;
+        }
+
+        /* ── Undo toast ── */
+        .undo-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #1c1c1c;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 0.82rem;
+            color: #eee;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            z-index: 50;
+            opacity: 0;
+            transition: transform 0.25s ease, opacity 0.25s ease;
+            pointer-events: none;
+        }
+        .undo-toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .undo-toast .btn { padding: 4px 12px; font-size: 0.75rem; }
+
+        /* ── Responsive ── */
+        @media (max-width: 700px) {
+            body { padding: 16px 10px 40px; }
+            .toolbar { gap: 6px; }
+            .toolbar input[type="text"] { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-header">
+        <h1>GtG Question Editor</h1>
+        <a class="back-link" href="index.html">&larr; Back to Ka0s Game Studio</a>
+    </div>
+
+    <div class="toolbar">
+        <input type="text" id="search-input" placeholder="Search questions...">
+        <select id="filter-category">
+            <option value="">All Categories</option>
+        </select>
+        <select id="filter-difficulty">
+            <option value="">All Difficulties</option>
+            <option value="1">Difficulty 1</option>
+            <option value="2">Difficulty 2</option>
+            <option value="3">Difficulty 3</option>
+            <option value="4">Difficulty 4</option>
+            <option value="5">Difficulty 5</option>
+        </select>
+        <div class="spacer"></div>
+        <div class="badge" id="count-badge">Loading...</div>
+        <button class="btn btn-primary" id="btn-add" title="Add new question">+ Add</button>
+        <button class="btn btn-amber" id="btn-import" title="Import JSON file">Import</button>
+        <button class="btn btn-primary" id="btn-export" title="Download as gtg-questions.json">Export JSON</button>
+    </div>
+
+    <div class="stats-row" id="stats-row"></div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th class="col-question" data-col="question">Question <span class="sort-arrow"></span></th>
+                    <th class="col-answer" data-col="correctAnswer">Answer <span class="sort-arrow"></span></th>
+                    <th class="col-wrong">Wrong 1</th>
+                    <th class="col-wrong">Wrong 2</th>
+                    <th class="col-wrong">Wrong 3</th>
+                    <th class="col-diff" data-col="difficulty">Diff <span class="sort-arrow"></span></th>
+                    <th class="col-board" data-col="boardCategory">Board Cat <span class="sort-arrow"></span></th>
+                    <th class="col-cats">Categories</th>
+                    <th class="col-actions"></th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+
+    <!-- Import overlay -->
+    <div class="import-overlay" id="import-overlay">
+        <div class="import-box">
+            <h3>Import Questions</h3>
+            <p>Drop a JSON file or click to browse. This will replace the current question set.</p>
+            <div class="drop-zone" id="drop-zone">Drop JSON file here or click to browse</div>
+            <input type="file" id="file-input" accept=".json" style="display:none">
+            <div class="btn-row">
+                <button class="btn" id="btn-cancel-import">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo toast -->
+    <div class="undo-toast" id="undo-toast">
+        <span id="undo-msg">Question deleted</span>
+        <button class="btn btn-amber" id="btn-undo">Undo</button>
+    </div>
+
+    <script>
+        // ── State ──
+        let questions = [];
+        let filteredIndices = [];
+        let sortCol = null;
+        let sortAsc = true;
+        let undoStack = []; // { index, data }
+        let hasUnsaved = false;
+
+        const tbody = document.getElementById('table-body');
+        const searchInput = document.getElementById('search-input');
+        const filterCategory = document.getElementById('filter-category');
+        const filterDifficulty = document.getElementById('filter-difficulty');
+        const countBadge = document.getElementById('count-badge');
+        const statsRow = document.getElementById('stats-row');
+        const undoToast = document.getElementById('undo-toast');
+        let undoTimeout = null;
+
+        // ── Load ──
+        async function loadQuestions() {
+            try {
+                const resp = await fetch('gtg-questions.json');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                questions = await resp.json();
+                onDataChanged();
+                rebuildCategoryFilter();
+            } catch (e) {
+                console.error('Failed to load questions:', e);
+                tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><div class="icon">⚠️</div>Failed to load gtg-questions.json</td></tr>`;
+            }
+        }
+
+        // ── Category filter dropdown ──
+        function rebuildCategoryFilter() {
+            const cats = new Set();
+            questions.forEach(q => cats.add(q.boardCategory));
+            const sorted = [...cats].sort();
+            const val = filterCategory.value;
+            filterCategory.innerHTML = '<option value="">All Categories</option>';
+            sorted.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                filterCategory.appendChild(opt);
+            });
+            filterCategory.value = val;
+        }
+
+        // ── Filter + Sort ──
+        function applyFilterSort() {
+            const search = searchInput.value.toLowerCase().trim();
+            const cat = filterCategory.value;
+            const diff = filterDifficulty.value;
+
+            filteredIndices = [];
+            questions.forEach((q, i) => {
+                if (cat && q.boardCategory !== cat) return;
+                if (diff && q.difficulty !== parseInt(diff)) return;
+                if (search) {
+                    const haystack = (q.question + ' ' + q.correctAnswer + ' ' + q.incorrectAnswers.join(' ') + ' ' + q.boardCategory + ' ' + q.categories.join(' ')).toLowerCase();
+                    if (!haystack.includes(search)) return;
+                }
+                filteredIndices.push(i);
+            });
+
+            if (sortCol) {
+                filteredIndices.sort((a, b) => {
+                    let va = questions[a][sortCol];
+                    let vb = questions[b][sortCol];
+                    if (typeof va === 'number') return sortAsc ? va - vb : vb - va;
+                    va = (va || '').toString().toLowerCase();
+                    vb = (vb || '').toString().toLowerCase();
+                    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+                });
+            }
+        }
+
+        // ── Stats ──
+        function updateStats() {
+            const catCounts = {};
+            const diffCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+            questions.forEach(q => {
+                catCounts[q.boardCategory] = (catCounts[q.boardCategory] || 0) + 1;
+                if (diffCounts[q.difficulty] !== undefined) diffCounts[q.difficulty]++;
+            });
+            let html = '';
+            Object.keys(catCounts).sort().forEach(c => {
+                html += `<div class="stat-chip">${c}: <span>${catCounts[c]}</span></div>`;
+            });
+            html += `<div class="stat-chip">Diff: <span>${Object.entries(diffCounts).map(([d,n]) => `${d}(${n})`).join(' ')}</span></div>`;
+            statsRow.innerHTML = html;
+            countBadge.innerHTML = `<strong>${filteredIndices.length}</strong> / ${questions.length} questions`;
+        }
+
+        // ── Validation ──
+        function validateQuestion(q) {
+            const issues = [];
+            if (!q.question || !q.question.trim()) issues.push('question');
+            if (!q.correctAnswer || !q.correctAnswer.trim()) issues.push('correctAnswer');
+            if (!q.incorrectAnswers || q.incorrectAnswers.length < 3 || q.incorrectAnswers.some(a => !a || !a.trim())) issues.push('incorrectAnswers');
+            if (!q.difficulty || q.difficulty < 1 || q.difficulty > 5) issues.push('difficulty');
+            if (!q.boardCategory || !q.boardCategory.trim()) issues.push('boardCategory');
+            if (!q.categories || q.categories.length === 0 || q.categories.some(c => !c || !c.trim())) issues.push('categories');
+            return issues;
+        }
+
+        // ── Render ──
+        function renderTable() {
+            if (filteredIndices.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><div class="icon">📭</div>${questions.length === 0 ? 'No questions loaded' : 'No questions match filters'}</td></tr>`;
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+
+            filteredIndices.forEach((qi, displayIdx) => {
+                const q = questions[qi];
+                const issues = validateQuestion(q);
+                const tr = document.createElement('tr');
+                if (issues.length > 0) tr.classList.add('invalid');
+                tr.dataset.qi = qi;
+
+                // Row number
+                const tdNum = document.createElement('td');
+                tdNum.className = 'row-num';
+                tdNum.textContent = displayIdx + 1;
+                tr.appendChild(tdNum);
+
+                // Question (textarea)
+                tr.appendChild(makeTextareaCell(qi, 'question', q.question, issues.includes('question')));
+
+                // Correct answer
+                tr.appendChild(makeInputCell(qi, 'correctAnswer', q.correctAnswer, issues.includes('correctAnswer')));
+
+                // Wrong answers 1-3
+                for (let w = 0; w < 3; w++) {
+                    tr.appendChild(makeWrongCell(qi, w, (q.incorrectAnswers && q.incorrectAnswers[w]) || '', issues.includes('incorrectAnswers')));
+                }
+
+                // Difficulty
+                tr.appendChild(makeDifficultyCell(qi, q.difficulty, issues.includes('difficulty')));
+
+                // Board category
+                tr.appendChild(makeInputCell(qi, 'boardCategory', q.boardCategory || '', issues.includes('boardCategory')));
+
+                // Categories (comma-separated)
+                tr.appendChild(makeCategoriesCell(qi, q.categories || [], issues.includes('categories')));
+
+                // Delete
+                const tdDel = document.createElement('td');
+                tdDel.className = 'col-actions';
+                const delBtn = document.createElement('button');
+                delBtn.className = 'delete-btn';
+                delBtn.textContent = '✕';
+                delBtn.title = 'Delete question';
+                delBtn.addEventListener('click', () => deleteQuestion(qi));
+                tdDel.appendChild(delBtn);
+                tr.appendChild(tdDel);
+
+                fragment.appendChild(tr);
+            });
+
+            tbody.innerHTML = '';
+            tbody.appendChild(fragment);
+        }
+
+        function makeTextareaCell(qi, field, value, invalid) {
+            const td = document.createElement('td');
+            const ta = document.createElement('textarea');
+            ta.value = value || '';
+            ta.rows = 2;
+            if (invalid) ta.classList.add('invalid-field');
+            ta.addEventListener('change', () => {
+                questions[qi][field] = ta.value;
+                markDirty();
+            });
+            td.appendChild(ta);
+            return td;
+        }
+
+        function makeInputCell(qi, field, value, invalid) {
+            const td = document.createElement('td');
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.value = value || '';
+            if (invalid) inp.classList.add('invalid-field');
+            inp.addEventListener('change', () => {
+                questions[qi][field] = inp.value;
+                markDirty();
+                if (field === 'boardCategory') rebuildCategoryFilter();
+            });
+            td.appendChild(inp);
+            return td;
+        }
+
+        function makeWrongCell(qi, idx, value, invalid) {
+            const td = document.createElement('td');
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.value = value;
+            if (invalid && !value.trim()) inp.classList.add('invalid-field');
+            inp.addEventListener('change', () => {
+                if (!questions[qi].incorrectAnswers) questions[qi].incorrectAnswers = ['', '', ''];
+                questions[qi].incorrectAnswers[idx] = inp.value;
+                markDirty();
+            });
+            td.appendChild(inp);
+            return td;
+        }
+
+        function makeDifficultyCell(qi, value, invalid) {
+            const td = document.createElement('td');
+            const sel = document.createElement('select');
+            if (invalid) sel.classList.add('invalid-field');
+            for (let d = 1; d <= 5; d++) {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d;
+                if (d === value) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            sel.addEventListener('change', () => {
+                questions[qi].difficulty = parseInt(sel.value);
+                markDirty();
+            });
+            td.appendChild(sel);
+            return td;
+        }
+
+        function makeCategoriesCell(qi, cats, invalid) {
+            const td = document.createElement('td');
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.value = cats.join(', ');
+            if (invalid) inp.classList.add('invalid-field');
+            inp.title = 'Comma-separated list';
+            inp.addEventListener('change', () => {
+                questions[qi].categories = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+                markDirty();
+            });
+            td.appendChild(inp);
+            return td;
+        }
+
+        // ── Data operations ──
+        function onDataChanged() {
+            applyFilterSort();
+            renderTable();
+            updateStats();
+        }
+
+        function markDirty() {
+            hasUnsaved = true;
+        }
+
+        function addQuestion() {
+            const newQ = {
+                question: '',
+                correctAnswer: '',
+                incorrectAnswers: ['', '', ''],
+                difficulty: 1,
+                boardCategory: '',
+                categories: []
+            };
+            questions.push(newQ);
+            markDirty();
+
+            // Clear filters so new row is visible
+            searchInput.value = '';
+            filterCategory.value = '';
+            filterDifficulty.value = '';
+            rebuildCategoryFilter();
+            onDataChanged();
+
+            // Scroll to and focus the new row
+            const lastRow = tbody.querySelector('tr:last-child');
+            if (lastRow) {
+                lastRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const firstInput = lastRow.querySelector('textarea');
+                if (firstInput) setTimeout(() => firstInput.focus(), 100);
+            }
+        }
+
+        function deleteQuestion(qi) {
+            const removed = questions.splice(qi, 1)[0];
+            undoStack.push({ index: qi, data: removed });
+            markDirty();
+            rebuildCategoryFilter();
+            onDataChanged();
+            showUndoToast();
+        }
+
+        // ── Undo ──
+        function showUndoToast() {
+            undoToast.classList.add('show');
+            clearTimeout(undoTimeout);
+            undoTimeout = setTimeout(() => undoToast.classList.remove('show'), 5000);
+        }
+
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            if (undoStack.length === 0) return;
+            const item = undoStack.pop();
+            questions.splice(item.index, 0, item.data);
+            rebuildCategoryFilter();
+            onDataChanged();
+            undoToast.classList.remove('show');
+        });
+
+        // ── Export ──
+        function exportJSON() {
+            const issues = questions.some(q => validateQuestion(q).length > 0);
+            if (issues && !confirm('Some questions have validation issues. Export anyway?')) return;
+
+            const json = JSON.stringify(questions, null, 4) + '\n';
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'gtg-questions.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            hasUnsaved = false;
+        }
+
+        // ── Import ──
+        const importOverlay = document.getElementById('import-overlay');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        document.getElementById('btn-import').addEventListener('click', () => {
+            importOverlay.classList.add('active');
+        });
+        document.getElementById('btn-cancel-import').addEventListener('click', () => {
+            importOverlay.classList.remove('active');
+        });
+        importOverlay.addEventListener('click', (e) => {
+            if (e.target === importOverlay) importOverlay.classList.remove('active');
+        });
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) handleImportFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) handleImportFile(fileInput.files[0]);
+        });
+
+        function handleImportFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!Array.isArray(data)) throw new Error('JSON must be an array');
+                    questions = data;
+                    hasUnsaved = true;
+                    rebuildCategoryFilter();
+                    onDataChanged();
+                    importOverlay.classList.remove('active');
+                } catch (err) {
+                    alert('Invalid JSON file: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ── Sort ──
+        document.querySelectorAll('thead th[data-col]').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.dataset.col;
+                if (sortCol === col) {
+                    sortAsc = !sortAsc;
+                } else {
+                    sortCol = col;
+                    sortAsc = true;
+                }
+                // Update sort arrows
+                document.querySelectorAll('thead th .sort-arrow').forEach(s => s.textContent = '');
+                th.querySelector('.sort-arrow').textContent = sortAsc ? '▲' : '▼';
+                onDataChanged();
+            });
+        });
+
+        // ── Filter listeners ──
+        searchInput.addEventListener('input', onDataChanged);
+        filterCategory.addEventListener('change', onDataChanged);
+        filterDifficulty.addEventListener('change', onDataChanged);
+
+        // ── Button listeners ──
+        document.getElementById('btn-add').addEventListener('click', addQuestion);
+        document.getElementById('btn-export').addEventListener('click', exportJSON);
+
+        // ── Unsaved changes warning ──
+        window.addEventListener('beforeunload', (e) => {
+            if (hasUnsaved) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // ── Init ──
+        loadQuestions();
+    </script>
+</body>
+</html>
