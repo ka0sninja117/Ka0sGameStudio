@@ -118,6 +118,27 @@
             }
         }
 
+        /* Pulse animation used by the countdown timer */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.05); }
+        }
+
+        /* Timer color states */
+        .green-pulse {
+            color: #00CC00 !important;
+            animation: pulse 1s infinite alternate;
+        }
+        .red-pulse {
+            color: #ff3333 !important;
+            animation: pulse 0.5s infinite alternate;
+        }
+
+        /* Title screen word rotation animation */
+        @keyframes rotateStreetSign {
+            0%   { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
 
         #title-screen .word {
             display: inline-block;
@@ -2187,9 +2208,9 @@
                             </tr>
                             <tr class="total-row">
                                 <td class="row-header">Overall Total</td>
-                                <td id="overall-correct-count">0</td>
-                                <td id="overall-incorrect-count">0</td>
-                                <td id="overall-grand-total">0</td>
+                                <td id="your-overall-correct-count">0</td>
+                                <td id="your-overall-incorrect-count">0</td>
+                                <td id="your-overall-grand-total">0</td>
                             </tr>
                         </tbody>
                     </table>
@@ -4272,6 +4293,23 @@
             );
             updateAllTeamsScoreSummary(); // This is crucial for Party mode to show the updated team scores.
             renderJeopardyBoard(); // Re-render the Jeopardy board to reflect any changes if needed
+        }
+
+        /**
+         * Displays a temporary alert message overlay that fades in and out.
+         * @param {string} message - The message to display.
+         * @param {number} duration - How long (ms) the alert stays visible before fading out.
+         */
+        function tempAlert(message, duration = 2000) {
+            const alertBox = document.createElement('div');
+            alertBox.className = 'temp-alert-box';
+            alertBox.textContent = message;
+            document.body.appendChild(alertBox);
+            setTimeout(() => { alertBox.style.opacity = 1; }, 10);
+            setTimeout(() => {
+                alertBox.style.opacity = 0;
+                alertBox.addEventListener('transitionend', () => alertBox.remove(), { once: true });
+            }, duration);
         }
 
         /**
