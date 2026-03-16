@@ -2546,7 +2546,8 @@
                 currentQuestionData = triviaQuestions[actualQuestionIndex];
                 // Display the question immediately for solo/challenge
                 document.getElementById('question-display').textContent = currentQuestionData.question;
-                startTimer(TIMER_DURATION_SELECTION, 'selection'); // Start timer for selecting answer type
+                // No timer for solo/versus mode selection phase
+                document.getElementById('countdown-timer').style.display = 'none';
             }
             // For party mode, currentQuestionData is set by handleJeopardyCellClick *before* this point,
             // and the initial question-display text (Category : Points) is also set there.
@@ -2617,29 +2618,25 @@
             // Remove the party-selection-mode class from game-screen when an answer type is selected
             document.getElementById('game-screen').classList.remove('party-selection-mode');
 
-            // Only clear selection timer if it was actually running (i.e., not party mode)
-            if (gameMode !== 'party') {
-                clearInterval(timerInterval); // Stop the "select type" timer
-            } else {
-                 // For party mode, the timer was hidden during selection.
-                 // Now that an answer type is chosen, start the actual answer timer.
-                 // (No clearInterval for selection timer because it wasn't started in party mode)
-            }
-            
             selectedAnswerType = type;
             document.getElementById('response-selection-area').style.display = 'none'; // Hide type selection buttons
 
             // --- IMPORTANT: Display actual question AFTER answer type is selected ---
             document.getElementById('question-display').textContent = currentQuestionData.question;
 
-            let answerTimerDuration;
-            // Determine the duration for the answer input timer
-            if (type === 'freeText') {
-                answerTimerDuration = ANSWER_TIMER_DURATIONS.freeText(currentQuestionData.correctAnswer);
+            if (gameMode === 'party') {
+                // Party mode: start answer timer with 25% extra time
+                let answerTimerDuration;
+                if (type === 'freeText') {
+                    answerTimerDuration = ANSWER_TIMER_DURATIONS.freeText(currentQuestionData.correctAnswer);
+                } else {
+                    answerTimerDuration = ANSWER_TIMER_DURATIONS[type];
+                }
+                startTimer(Math.ceil(answerTimerDuration * 1.25), 'answer');
             } else {
-                answerTimerDuration = ANSWER_TIMER_DURATIONS[type];
+                // Solo/versus: no timer, hide the timer element
+                document.getElementById('countdown-timer').style.display = 'none';
             }
-            startTimer(answerTimerDuration, 'answer'); // Start the "answer input" timer
 
             renderResponseInput(type); // Render the dynamic input elements
         }
@@ -2653,7 +2650,10 @@
             inputArea.innerHTML = ''; // Clear existing input elements
             inputArea.style.display = 'flex'; // Show the input area
 
-            document.getElementById('countdown-timer').style.display = 'block'; // Ensure timer remains visible
+            // Only show timer in party mode (solo/versus has no timer)
+            if (gameMode === 'party') {
+                document.getElementById('countdown-timer').style.display = 'block';
+            }
 
             if (type === 'freeText') {
                 const input = document.createElement('input');
