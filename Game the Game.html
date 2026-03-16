@@ -2245,62 +2245,25 @@
             }
         }
 
-        // --- Trivia Questions ---
-        // Reduced question set and new questions added to fill categories/difficulty levels
-        const triviaQuestions = [
-            // Animals
-            { question: "What is a baby goat commonly called?", correctAnswer: "Kid", incorrectAnswers: ["Calf", "Lamb", "Chick"], difficulty: 1, boardCategory: "Animals", categories: ["Animals"] },
-            { question: "How many legs does a crab have?", correctAnswer: "10", incorrectAnswers: ["6", "8", "12"], difficulty: 1, boardCategory: "Animals", categories: ["Animals"] },
-            { question: "What is a group of lions collectively known as?", correctAnswer: "Pride", incorrectAnswers: ["Herd", "Pack", "Flock"], difficulty: 2, boardCategory: "Animals", categories: ["Animals"] },
-            { question: "Which animal is most famous for its ability to change color?", correctAnswer: "Chameleon", incorrectAnswers: ["Lizard", "Gecko", "Snake"], difficulty: 3, boardCategory: "Animals", categories: ["Animals"] },
-            { question: "What is the fastest land animal?", correctAnswer: "Cheetah", incorrectAnswers: ["Lion", "Gazelle", "Horse"], difficulty: 3, boardCategory: "Animals", categories: ["Biology", "Animals"] },
-            { question: "What is the only mammal capable of true sustained flight?", correctAnswer: "Bat", incorrectAnswers: ["Flying Squirrel", "Sugar Glider", "Bird"], difficulty: 4, boardCategory: "Animals", categories: ["Animals", "Biology"] },
-            { question: "Which marine animal has the largest brain?", correctAnswer: "Sperm Whale", incorrectAnswers: ["Dolphin", "Orca", "Great White Shark"], difficulty: 5, boardCategory: "Animals", categories: ["Animals", "Biology"] },
+        // --- Trivia Questions (loaded from external JSON) ---
+        let triviaQuestions = [];
+        let questionsLoaded = false;
 
-            // Geography
-            { question: "What is the capital of France?", correctAnswer: "Paris", incorrectAnswers: ["London", "Rome", "Berlin"], difficulty: 1, boardCategory: "Geography", categories: ["Geography", "World Capitals"] },
-            { question: "What is the largest continent?", correctAnswer: "Asia", incorrectAnswers: ["Africa", "Europe", "America"], difficulty: 1, boardCategory: "Geography", categories: ["Geography"] },
-            { question: "What is the capital of Spain?", correctAnswer: "Madrid", incorrectAnswers: ["Barcelona", "Lisbon", "Rome"], difficulty: 1, boardCategory: "Geography", categories: ["Geography", "World Capitals"] },
-            { question: "What is the capital of Germany?", correctAnswer: "Berlin", incorrectAnswers: ["Munich", "Hamburg", "Frankfurt"], difficulty: 1, boardCategory: "Geography", categories: ["Geography", "World Capitals"] },
-            { question: "What city is Big Ben in?", correctAnswer: "London", incorrectAnswers: ["Paris", "Rome", "Berlin"], difficulty: 1, boardCategory: "Geography", categories: ["Geography", "Landmarks"] },
-            { question: "What is the capital of Japan?", correctAnswer: "Tokyo", incorrectAnswers: ["Kyoto", "Osaka", "Seoul"], difficulty: 2, boardCategory: "Geography", categories: ["Geography", "World Capitals"] },
-            { question: "What is the world's largest island?", correctAnswer: "Greenland", incorrectAnswers: ["Australia", "Borneo", "Madagascar"], difficulty: 2, boardCategory: "Geography", categories: ["Geography"] },
-            { question: "What is the longest river?", correctAnswer: "Nile", incorrectAnswers: ["Amazon", "Yangtze", "Danube"], difficulty: 3, boardCategory: "Geography", categories: ["Geography", "Rivers"] },
-            { question: "What is the deepest known point in Earth's oceans?", correctAnswer: "Mariana", incorrectAnswers: ["Java", "Tonga", "Puerto"], difficulty: 4, boardCategory: "Geography", categories: ["Geography", "Oceans"] },
-            { question: "What is the smallest country in the world by land area?", correctAnswer: "Vatican City", incorrectAnswers: ["Monaco", "Nauru", "San Marino"], difficulty: 5, boardCategory: "Geography", categories: ["Geography", "World Facts"] },
-
-            // History
-            { question: "Who invented the light bulb?", correctAnswer: "Edison", incorrectAnswers: ["Tesla", "Bell", "Watt"], difficulty: 1, boardCategory: "History", categories: ["History", "Inventions"] },
-            { question: "Who was the first Roman Emperor?", correctAnswer: "Augustus", incorrectAnswers: ["Julius Caesar", "Nero", "Caligula"], difficulty: 2, boardCategory: "History", categories: ["History", "Rome"] },
-            { question: "In what year did World War II begin?", correctAnswer: "1939", incorrectAnswers: ["1914", "1941", "1945"], difficulty: 3, boardCategory: "History", categories: ["History", "World Wars"] },
-            { question: "What was the primary purpose of the Magna Carta?", correctAnswer: "Limit the power of the king", incorrectAnswers: ["Declare independence", "Establish democracy", "Fund crusades"], difficulty: 4, boardCategory: "History", categories: ["History", "Law"] },
-            { question: "Who was the last Pharaoh of ancient Egypt?", correctAnswer: "Cleopatra VII", incorrectAnswers: ["Nefertiti", "Hatshepsut", "Tutankhamun"], difficulty: 5, boardCategory: "History", categories: ["History", "Ancient Civilizations"] },
-
-            // Science
-            { question: "What gas do plants absorb from the atmosphere?", correctAnswer: "Carbon Dioxide", incorrectAnswers: ["Oxygen", "Nitrogen", "Hydrogen"], difficulty: 1, boardCategory: "Science", categories: ["Science", "Biology"] },
-            { question: "What is the chemical symbol for water?", correctAnswer: "H2O", incorrectAnswers: ["O2", "CO2", "NaCl"], difficulty: 2, boardCategory: "Science", categories: ["Science", "Chemistry"] },
-            { question: "What color is created by mixing red and green light?", correctAnswer: "Yellow", incorrectAnswers: ["Cyan", "Magenta", "White"], difficulty: 2, boardCategory: "Science", categories: ["Science", "Physics"] },
-            { question: "What is the hardest mineral?", correctAnswer: "Diamond", incorrectAnswers: ["Gold", "Iron", "Quartz"], difficulty: 3, boardCategory: "Science", categories: ["Science", "Materials"] },
-            { question: "What is the scientific study of life called?", correctAnswer: "Biology", incorrectAnswers: ["Physics", "Geology", "Chemistry"], difficulty: 3, boardCategory: "Science", categories: ["Science"] },
-            { question: "What is the largest organ in the human body?", correctAnswer: "Skin", incorrectAnswers: ["Liver", "Heart", "Brain"], difficulty: 4, boardCategory: "Science", categories: ["Biology", "Human Body"] },
-            { question: "What is the process by which plants convert light energy into chemical energy?", correctAnswer: "Photosynthesis", incorrectAnswers: ["Respiration", "Transpiration", "Fermentation"], difficulty: 4, boardCategory: "Science", categories: ["Science", "Biology"] },
-            { question: "What is the name for the highly compressed, super-dense core of a collapsed massive star?", correctAnswer: "Neutron Star", incorrectAnswers: ["White Dwarf", "Red Giant", "Pulsar"], difficulty: 5, boardCategory: "Science", categories: ["Science", "Astronomy"] },
-
-            // Space
-            { question: "Which planet is Red?", correctAnswer: "Mars", incorrectAnswers: ["Jupiter", "Venus", "Saturn"], difficulty: 1, boardCategory: "Space", categories: ["Space", "Planets"] },
-            { question: "What is the primary source of energy for Earth?", correctAnswer: "Sun", incorrectAnswers: ["Moon", "Wind", "Water"], difficulty: 1, boardCategory: "Space", categories: ["Science", "Space"] },
-            { question: "What is the name of our galaxy?", correctAnswer: "Milky Way", incorrectAnswers: ["Andromeda", "Triangulum", "Sombrero"], difficulty: 2, boardCategory: "Space", categories: ["Space", "Galaxies"] },
-            { question: "Which famous comet is visible from Earth approximately every 76 years?", correctAnswer: "Halley's Comet", incorrectAnswers: ["Comet Hale-Bopp", "Comet McNaught", "Comet Hyakutake"], difficulty: 3, boardCategory: "Space", categories: ["Space", "Comets"] },
-            { question: "What phenomenon causes a star to twinkle?", correctAnswer: "Atmospheric Refraction", incorrectAnswers: ["Stellar Flare", "Cosmic Dust", "Gravitational Lensing"], difficulty: 4, boardCategory: "Space", categories: ["Space", "Physics"] },
-            { question: "What is the theoretical boundary around a black hole beyond which nothing can escape?", correctAnswer: "Event Horizon", incorrectAnswers: ["Singularity", "Accretion Disk", "Wormhole"], difficulty: 5, boardCategory: "Space", categories: ["Space", "Black Holes"] },
-            
-            // Technology
-            { question: "What company makes the PlayStation console?", correctAnswer: "Sony", incorrectAnswers: ["Microsoft", "Nintendo", "Sega"], difficulty: 1, boardCategory: "Technology", categories: ["Technology", "Gaming"] },
-            { question: "What does 'CPU' stand for in computing?", correctAnswer: "Central Processing Unit", incorrectAnswers: ["Computer Personal Unit", "Central Power Utility", "Core Processing Unit"], difficulty: 2, boardCategory: "Technology", categories: ["Technology", "Computing"] },
-            { question: "Which common internet protocol is used to send and receive email?", correctAnswer: "SMTP", incorrectAnswers: ["HTTP", "FTP", "TCP/IP"], difficulty: 3, boardCategory: "Technology", categories: ["Technology", "Internet"] },
-            { question: "What is the primary function of a blockchain in cryptocurrencies?", correctAnswer: "Securely recording transactions", incorrectAnswers: ["Generating new coins", "Facilitating anonymous payments", "Processing graphics"], difficulty: 4, boardCategory: "Technology", categories: ["Technology", "Blockchain"] },
-            { question: "What is the name of the first programming language for electronic computers, developed by John Backus at IBM?", correctAnswer: "FORTRAN", incorrectAnswers: ["COBOL", "BASIC", "Assembly"], difficulty: 5, boardCategory: "Technology", categories: ["Technology", "Programming"] }
-        ];
+        /**
+         * Loads trivia questions from the external JSON file.
+         * Must complete before any game mode can start.
+         */
+        async function loadQuestions() {
+            try {
+                const response = await fetch('gtg-questions.json');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                triviaQuestions = await response.json();
+                questionsLoaded = true;
+            } catch (error) {
+                console.error("Failed to load questions:", error);
+                tempAlert("Error loading questions. Please refresh the page.");
+            }
+        }
 
         // Multipliers for points based on answer type
         const MULTIPLIERS = {
@@ -2472,6 +2435,10 @@
          * @param {Array} [challengeQuestions=[]] - Array of question indices for challenge mode.
          */
         function startGame(mode = 'normal', challengeQuestions = []) {
+            if (!questionsLoaded || triviaQuestions.length === 0) {
+                tempAlert("Questions are still loading. Please try again.");
+                return;
+            }
             currentQuestionIndex = 0;
             totalPoints = 0;
             hasGameBeenPlayed = false;
@@ -4237,10 +4204,11 @@
          * Initializes the game when the window loads.
          * Sets up initial screen, game state, and all event listeners.
          */
-        window.onload = function() {
+        window.onload = async function() {
             initializeFirebase();
             showScreen('title-screen');
             resetGameState();
+            await loadQuestions();
 
             // --- Event Listeners for UI Buttons ---
             // Main menu buttons
