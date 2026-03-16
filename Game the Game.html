@@ -95,6 +95,16 @@
             perspective: 1000px;
         }
 
+        /* Version display on title screen */
+        .gtg-version-display {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.6em;
+            color: #999;
+            opacity: 0.5;
+            margin-top: 10px;
+            letter-spacing: 0.5px;
+        }
+
         /* Keyframes for new shadow-pulse animation */
         @keyframes shadow-pulse {
             0% {
@@ -1825,6 +1835,7 @@
                     <button id="versus-mode-button" class="challenge-button">Versus</button> <!-- Updated ID and text -->
                 </div>
             </div>
+            <span id="gtg-version" class="gtg-version-display"></span>
         </div>
     </div>
 
@@ -2188,6 +2199,10 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Game Version
+        const GAME_VERSION = 'v1.1';
+        document.getElementById('gtg-version').textContent = GAME_VERSION;
 
         // Firebase Initialization (DO NOT MODIFY __app_id, __firebase_config, __initial_auth_token)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
