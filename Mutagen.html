@@ -3642,7 +3642,7 @@
                     : (isInFoliage ? 0.5 : 1);
                 // Sprite direction is baked into the image — no canvas rotation needed.
                 const grubSprite = getGrubSprite(playerDirectionAngle);
-                ctx.drawImage(grubSprite, -playerSize, -playerSize, playerSize * 2, playerSize * 2);
+                ctx.drawImage(grubSprite, -playerSize * 1.5, -playerSize * 1.5, playerSize * 3, playerSize * 3);
 
                 // Draw player hitcircle (wireframe)
                 if (showHitCircles) {
