@@ -1867,6 +1867,7 @@
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
             <button id="info-continue-button" class="continue-button">Continue</button>
+            <button id="back-to-menu-info" class="nav-button">Back to Menu</button>
         </div>
     </div>
 
@@ -1901,6 +1902,7 @@
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
             <button id="party-info-continue-button" class="continue-button">Continue</button>
+            <button id="back-to-menu-party-info" class="nav-button">Back to Menu</button>
         </div>
     </div>
 
@@ -4228,6 +4230,14 @@
             document.getElementById('info-continue-button').addEventListener('click', () => {
                 showScreen('game-screen');
                 startGame('normal');
+            });
+
+            // Info screen back buttons
+            document.getElementById('back-to-menu-info').addEventListener('click', () => {
+                returnToMenu();
+            });
+            document.getElementById('back-to-menu-party-info').addEventListener('click', () => {
+                returnToMenu();
             });
 
             // Party info screen
