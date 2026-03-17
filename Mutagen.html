@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.17';
+        const GAME_VERSION = 'v1.23';
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -988,10 +988,10 @@
         let gameState = 'startScreen'; // 'startScreen', 'originSelection', 'inGame', 'pausedMap', 'gameOver'
 
         const PLAYER_LEVEL_STATS = {
-            1: { maxHp: 20, attack: 8, defense: 1.0, stamina: 1, stealth: 1, speed: 1 },
-            2: { maxHp: 100, attack: 40, defense: 10.0, stamina: 5, stealth: 5, speed: 5 },
-            3: { maxHp: 600, attack: 240, defense: 90.0, stamina: 25, stealth: 25, speed: 25 },
-            4: { maxHp: 4200, attack: 1680, defense: 840.0, stamina: 55, stealth: 55, speed: 55 }
+            1: { maxHp: 60,    attack: 8,    defense: 1.0,  stamina: 1,  stealth: 1,  speed: 1  },
+            2: { maxHp: 300,   attack: 40,   defense: 10.0, stamina: 5,  stealth: 5,  speed: 5  },
+            3: { maxHp: 1800,  attack: 240,  defense: 90.0, stamina: 25, stealth: 25, speed: 25 },
+            4: { maxHp: 12600, attack: 1680, defense: 840.0,stamina: 55, stealth: 55, speed: 55 }
         };
 
         const NPC_XP_REWARDS = {
@@ -1013,8 +1013,8 @@
         // Character Stats (Consolidated into an object)
         let playerStats = {
             isPlayer: true,
-            currentHp: 50,
-            maxHp: 50,
+            currentHp: 60,
+            maxHp: 60,
             attack: 20,
             defense: 5,
             stamina: 0,
@@ -1055,6 +1055,8 @@
 
         // Array to store pre-generated forest background elements
         let forestElements = [];
+        let foliagePatches = []; // { x, y, w, h } — player can hide under these
+        let isInFoliage = false; // true when player center is inside a foliage patch
 
         // --- Combat Variables ---
         let inCombat = false;
@@ -1075,8 +1077,23 @@
         let preAbilityTarget = null;
 
         // Attack animation variables
-        const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation
+        const ATTACK_ANIM_DURATION = 150; // milliseconds for the lurch animation (player + NPC-vs-NPC)
         const ATTACK_LURCH_DISTANCE = 8; // pixels for the lurch distance
+
+        // NPC telegraph attack phases (player-facing combat only)
+        // Pull-back is the visible wind-up; pause is the danger cue; lunge is the strike.
+        // Direction is locked at pause start — NPC commits to the angle even if player dodges.
+        const NPC_TELEGRAPH_PULLBACK_MS   = 350; // ms — slow pull-back (readable telegraph)
+        const NPC_TELEGRAPH_PAUSE_MS      = 200; // ms — held pause (player's dodge window)
+        const NPC_TELEGRAPH_LUNGE_MS      = 150; // ms — fast forward strike
+        const NPC_TELEGRAPH_PULLBACK_DIST = 12;  // px — visual pull-back distance
+        const NPC_TELEGRAPH_LUNGE_DIST    = 16;  // px — visual lunge distance
+
+        // Universal dodge roll — available to every player, bound to Shift
+        const DODGE_ROLL_DISTANCE    = 70;   // world-px travel distance
+        const DODGE_ROLL_DURATION_MS = 150;  // ms of movement
+        const DODGE_ROLL_IFRAME_MS   = 120;  // ms of invincibility (front-loaded)
+        const DODGE_ROLL_COOLDOWN_MS = 750;  // ms cooldown
 
         // Player specific attack timing
         let playerLastAttackTime = 0;
@@ -1162,6 +1179,55 @@
         const SPIKE_LAUNCH_COOLDOWN = 2000;     // 2 second cooldown
         const SPIKE_LAUNCH_DAMAGE_MULT = 0.8;   // 80% of player melee attack
         const SPIKE_LAUNCH_SPEED = 5;           // px per frame (~2.5x player base speed, clearly visible)
+
+        // --- Stealth system constants ---
+        // stealthValue (signed %) = stat + env bonuses - movement noise - ability burst; range ~-150 to +100
+        // Positive = stealthy (shrinks detection), Negative = noisy (grows detection)
+        // effectiveDetectionRadius = STEALTH_BASE_DETECTION × (1 − stealthValue / 100)
+        const STEALTH_BASE_DETECTION = 200;        // px: NPC detection radius at stealthValue = 0%
+        const STEALTH_NOISE_FACTOR = 50;           // movement noise: -(speed/baseSpeed) × NOISE_FACTOR
+        const STEALTH_ABILITY_BURST = 125;         // peak noise at pounce/dash activation (fades to 0 over burst duration)
+        const STEALTH_NOISE_BURST_DURATION = 750;  // ms over which ability burst noise fades to zero
+        const STEALTH_FOLIAGE_BONUS = 40;          // flat +40% stealth inside a foliage patch
+        const STEALTH_BURROW_BONUS = 30;           // flat +30% stealth while burrowed underground
+        // Tier-disadvantage: per tier the NPC is above the player, a stealth penalty (%) escalates
+        // Formula: (1 - 0.55^tierDiff) × 100  →  1 tier: 45%, 2 tiers: 70%, 3 tiers: 83%, …
+        const STEALTH_TIER_DECAY = 0.55;
+
+        // --- Defense mitigation system ---
+        // Defense stat maps to a % damage reduction: mitigation = min(cap, defStat / (base×3) × cap)
+        // Full cap is reached when defStat = 3× that level's base defense stat.
+        const DEFENSE_MITIGATION_CAPS = { 1: 0.30, 2: 0.45, 3: 0.55, 4: 0.70 };
+
+        // --- Per-level stat caps (Option A) ---
+        // Attack: 2.25× base → glass cannon 4-hit kills same-level NPCs
+        // Defense: 3× base → full mitigation cap threshold
+        // Stealth: prevents permanent invisibility (formula clamps contribution at 80 anyway)
+        // Speed: prevents movement faster than pounce/dash abilities
+        const PLAYER_STAT_CAPS = {
+            1: { attack: 18,   defense: 3,    stealth: 15,  speed: 15  },
+            2: { attack: 90,   defense: 30,   stealth: 40,  speed: 50  },
+            3: { attack: 540,  defense: 270,  stealth: 75,  speed: 90  },
+            4: { attack: 3780, defense: 2520, stealth: 90,  speed: 150 }
+        };
+
+        // --- NPC attack pacing (Option A, 40% adjustment) ---
+        // Slower attacks with harder hits — same net DPS but creates dodge windows.
+        const NPC_ATTACK_INTERVAL_MULT = 1.4;  // NPC attacks every 700ms instead of 500ms
+        const NPC_ATTACK_DAMAGE_MULT   = 1.4;  // Each NPC hit is 40% harder to compensate
+
+        // --- HP Regeneration system ---
+        // Passive regen activates after no damage for REGEN_NO_DAMAGE_DELAY ms, up to 80% max HP.
+        // Active regen (hold H) adds faster healing but burns Hunger at an escalating rate.
+        // Hunger cost resets when the player takes damage; each re-press costs more this "window".
+        const REGEN_NO_DAMAGE_DELAY       = 3000;  // ms of no damage before passive kicks in
+        const REGEN_PASSIVE_RATE          = 0.003; // 0.3% maxHp per second
+        const REGEN_ACTIVE_RATE           = 0.030; // additional 3.0% maxHp per second while held
+        const REGEN_HP_CAP                = 0.80;  // neither regen type heals above 80% maxHp
+        const REGEN_ACTIVE_BASE_HUNGER    = 3;     // Hunger/sec on first active regen press
+        const REGEN_ACTIVE_HUNGER_MULT    = 2.5;   // multiplier per re-press (3 → 7.5 → 18.75 → …)
+        const REGEN_KEY                   = 'h';
+
         let currentMovementAbilityDuration = 0; // Duration for current active movement
         let movementAbilityStartTime = 0;
         let movementAbilityStartX = 0;
@@ -1170,7 +1236,8 @@
         let movementAbilityEndY = 0;
         let postMovementImmobilityDuration = 250; // milliseconds after Pounce/Dash (can vary by ability)
         let canMoveFreeLy = true; // True if player can initiate normal movement or another movement ability
-        let lastActivatedAbilityRef = null; // To track which ability was just activated for post-movement effects
+        let lastActivatedAbilityRef = null; // To track which ability was just activated
+        let dodgeRollLastUsed = -Infinity; // timestamp — tracks Shift dodge roll cooldown for post-movement effects
 
         // New Burrow specific variables
         let isBurrowing = false;
@@ -1179,6 +1246,8 @@
         let burrowStartTime = 0;
         let tremorSenseStartTime = 0;
         let spikeLaunchProjectiles = []; // Array of active Spike Launch projectiles
+        let currentStealthValue = 0;     // signed %, computed each frame; drives NPC effective detection radius
+        let lastNoiseBurstTime = 0;      // timestamp of last pounce/dash activation
 
         // New visual effect variables
         let playerVisualScale = 1; // Current scale factor for the player icon
@@ -1603,6 +1672,33 @@
                 const color = `rgba(60, 118, 59, ${0.4 + Math.random() * 0.2})`;
                 forestElements.push({ type: 'rect', x, y, width: size, height: size, color });
             }
+
+            // Generate foliage patches in clusters — player can hide inside these
+            foliagePatches = [];
+            const numClusters = 6;
+            for (let c = 0; c < numClusters; c++) {
+                const clusterX = 200 + Math.random() * (worldWidth - 400);
+                const clusterY = 200 + Math.random() * (worldHeight - 400);
+                const patchCount = 4 + Math.floor(Math.random() * 3); // 4–6 per cluster
+                for (let p = 0; p < patchCount; p++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const spread = (60 + Math.random() * 100) * Math.random();
+                    const cx = clusterX + Math.cos(angle) * spread;
+                    const cy = clusterY + Math.sin(angle) * spread;
+                    // Varied shapes: wide, tall, or squarish
+                    let pw, ph;
+                    const shapeRoll = Math.random();
+                    if (shapeRoll < 0.33) {
+                        pw = 130 + Math.random() * 90; ph = 35 + Math.random() * 25; // wide strip
+                    } else if (shapeRoll < 0.66) {
+                        pw = 35 + Math.random() * 25; ph = 110 + Math.random() * 70; // tall strip
+                    } else {
+                        const s = 65 + Math.random() * 75;
+                        pw = s; ph = s * (0.7 + Math.random() * 0.6);               // squarish blob
+                    }
+                    foliagePatches.push({ x: cx - pw / 2, y: cy - ph / 2, w: pw, h: ph });
+                }
+            }
         }
 
         function renderForestBackground() {
@@ -1614,6 +1710,16 @@
                     ctx.fillStyle = element.color;
                     ctx.fillRect(element.x, element.y, element.width, element.height);
                 }
+            });
+
+            // Foliage patch base layer — drawn below the player (bright canopy floor)
+            ctx.globalAlpha = 1;
+            foliagePatches.forEach(p => {
+                ctx.fillStyle = 'rgba(55, 145, 55, 0.88)';  // clearly lighter/brighter than forest floor
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.strokeStyle = 'rgba(20, 80, 20, 0.75)'; // dark outline so edges are visible
+                ctx.lineWidth = 2;
+                ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
         }
 
@@ -1812,7 +1918,9 @@
                 lastAttackTime: 0,
                 attackCooldown: 500,
                 isAttacking: false,
-                attackAnimStartTime: 0
+                attackAnimStartTime: 0,
+                attackPhase: null,       // null | 'pullback' | 'pause' | 'lunge' — telegraph phases (player combat only)
+                attackLockAngle: 0       // direction locked in at pause start; NPC commits to this angle
             };
         }
         function generateNPCs() {
@@ -1878,24 +1986,35 @@
 
         // Lightweight NPC-vs-NPC damage (no floating text, no player stat tracking)
         function dealDamageNpcToNpc(attacker, defender) {
-            let damage = attacker.attack - defender.defense;
-            damage = damage > 0 ? Math.max(0.1, damage) : 0;
+            const mitigation = getMitigation(defender);
+            let damage = Math.max(0.1, attacker.attack * (1 - mitigation));
             damage = Math.round(damage * 10) / 10;
             defender.currentHp = Math.max(0, Math.round((defender.currentHp - damage) * 10) / 10);
         }
 
-        function dealDamage(attacker, defender, currentTime) {
-            // 1. Calculate raw damage with flat defense subtraction.
-            let effectiveDamage = attacker.attack - defender.defense;
+        // Returns the fraction of incoming damage absorbed by the defender (0.0–cap).
+        // mitigation = min(levelCap, defStat / (3 × levelBaseDefStat) × levelCap)
+        // Full cap is reached at defStat = 3× that level's PLAYER_LEVEL_STATS base defense.
+        function getMitigation(defender) {
+            const level = defender.isPlayer ? playerStats.playerLevel : (defender.level || 1);
+            const cap    = DEFENSE_MITIGATION_CAPS[level] ?? 0.30;
+            const refDef = PLAYER_LEVEL_STATS[level].defense * 3;
+            return Math.min(cap, (defender.defense / refDef) * cap);
+        }
 
-            // 2. If positive damage, floor it at 0.1; otherwise no damage is dealt.
-            if (effectiveDamage > 0) {
-                effectiveDamage = Math.max(0.1, effectiveDamage);
-            } else {
-                effectiveDamage = 0;
+        function dealDamage(attacker, defender, currentTime) {
+            // Dodge roll i-frames: ignore all incoming damage for the first DODGE_ROLL_IFRAME_MS
+            if (defender.isPlayer && isPerformingMovementAbility && lastActivatedAbilityRef === 'dodgeRoll' &&
+                currentTime - movementAbilityStartTime < DODGE_ROLL_IFRAME_MS) {
+                return;
             }
 
-            // 3. Round to one decimal place for clean numbers.
+            // Damage = attacker.attack × (1 − defenderMitigation%)
+            // mitigation scales linearly from 0 to levelCap as defStat goes 0 → 3×base.
+            const mitigation = getMitigation(defender);
+            let effectiveDamage = Math.max(0.1, attacker.attack * (1 - mitigation));
+
+            // Round to one decimal place for clean numbers.
             effectiveDamage = Math.round(effectiveDamage * 10) / 10;
         
             const actualHpReduction = Math.min(effectiveDamage, defender.currentHp);
@@ -1905,6 +2024,10 @@
             if (defender.isPlayer) {
                 playerStats.currentHp -= effectiveDamage;
                 playerStats.currentHp = Math.max(0, Math.round(playerStats.currentHp * 10) / 10);
+                // Reset regen window on any damage taken
+                lastDamageTakenTime = currentTime;
+                activeRegenSessionCount = 0;
+                isActiveRegenHeld = false;
             } else {
                 defender.currentHp -= effectiveDamage;
                 defender.currentHp = Math.max(0, Math.round(defender.currentHp * 10) / 10);
@@ -2071,6 +2194,12 @@
         let lastHungerIncreaseTime = 0;
         const HUNGER_INCREASE_INTERVAL = 5000; // 5 seconds
 
+        // HP regen state
+        let lastDamageTakenTime = -Infinity; // timestamp of last damage taken by player; -Infinity → regen ready immediately
+        let activeRegenSessionCount = 0;     // number of active-regen presses since last damage; drives escalating Hunger cost
+        let isActiveRegenHeld = false;       // true while the regen key is held and conditions are valid
+        let lastRegenTickTime = 0;           // used for dt-based regen calculation
+
         /**
          * Determines which character (player or NPC) has the first strike advantage
          * based on their orientation towards the opponent. Sets their initial attack timers.
@@ -2095,7 +2224,7 @@
                 playerLastAttackTime = currentTime;
                 playerAttackCooldown = 0; // First attack is immediate
                 npcObj.lastAttackTime = currentTime + FIRST_STRIKE_DELAY;
-                npcObj.attackCooldown = 500; // Will be set to 500 after the first delayed attack
+                npcObj.attackCooldown = Math.round(combatDelay * NPC_ATTACK_INTERVAL_MULT); // 700ms
             } else {
                 npcObj.lastAttackTime = currentTime;
                 npcObj.attackCooldown = 0; // First attack is immediate
@@ -2151,12 +2280,52 @@
                     lastHungerIncreaseTime = currentTime;
                 }
 
+                // --- HP Regeneration (passive + active) ---
+                {
+                    const hpCap = playerStats.maxHp * REGEN_HP_CAP;
+                    const timeSinceDamage = currentTime - lastDamageTakenTime;
+                    const passiveReady = timeSinceDamage >= REGEN_NO_DAMAGE_DELAY && playerStats.currentHp < hpCap;
+
+                    if (!passiveReady) {
+                        // Cancel active regen if conditions no longer hold (took damage, HP at cap, etc.)
+                        isActiveRegenHeld = false;
+                    } else {
+                        // dt capped at 50ms to prevent large healing spikes after frame drops
+                        const dt = lastRegenTickTime > 0 ? Math.min(50, currentTime - lastRegenTickTime) / 1000 : 0;
+                        if (dt > 0) {
+                            // Passive heal — no per-frame rounding; floats accumulate and toFixed(1) handles display
+                            const passiveHeal = playerStats.maxHp * REGEN_PASSIVE_RATE * dt;
+                            playerStats.currentHp = Math.min(hpCap, playerStats.currentHp + passiveHeal);
+
+                            // Active heal (held key)
+                            if (isActiveRegenHeld) {
+                                const activeHeal = playerStats.maxHp * REGEN_ACTIVE_RATE * dt;
+                                playerStats.currentHp = Math.min(hpCap, playerStats.currentHp + activeHeal);
+
+                                // Escalating Hunger cost
+                                const hungerCostPerSec = REGEN_ACTIVE_BASE_HUNGER *
+                                    Math.pow(REGEN_ACTIVE_HUNGER_MULT, activeRegenSessionCount - 1);
+                                playerStats.currentHunger = Math.min(playerStats.maxHunger,
+                                    playerStats.currentHunger + hungerCostPerSec * dt);
+
+                                // Auto-stop when HP reaches the cap
+                                if (playerStats.currentHp >= hpCap) {
+                                    isActiveRegenHeld = false;
+                                }
+                            }
+                        }
+                    }
+                    lastRegenTickTime = currentTime;
+                }
+
                 // Update attack animation state
                 if (playerIsAttacking && (currentTime - playerAttackAnimStartTime >= ATTACK_ANIM_DURATION)) {
                     playerIsAttacking = false;
                 }
                 npcs.forEach(npc => {
-                    if (npc.isAttacking && (currentTime - npc.attackAnimStartTime >= ATTACK_ANIM_DURATION)) {
+                    // Only auto-clear for NPC-vs-NPC attacks (no attackPhase).
+                    // Telegraph phases on the combatTarget are cleared by the phase-transition logic.
+                    if (npc.isAttacking && !npc.attackPhase && (currentTime - npc.attackAnimStartTime >= ATTACK_ANIM_DURATION)) {
                         npc.isAttacking = false;
                     }
                 });
@@ -2271,6 +2440,13 @@
                                 targetedNpc = resumeTarget;
                                 isMoving = true;
                             }
+                        } else if (lastActivatedAbilityRef === 'dodgeRoll') {
+                            postMovementImmobilityDuration = 0; // player can move immediately after rolling
+                            const resumeTarget = targetedNpc || preAbilityTarget;
+                            if (resumeTarget && npcs.includes(resumeTarget) && resumeTarget.currentHp > 0) {
+                                targetedNpc = resumeTarget;
+                                isMoving = true;
+                            }
                         }
 
                         preAbilityTarget = null;
@@ -2310,8 +2486,8 @@
                     let spikeHit = false;
                     for (const npc of npcs) {
                         if (checkCircleCollision(spike.x, spike.y, 4, npc.x, npc.y, npc.radius)) {
-                            // 80% of post-defense melee damage: pass an attack value that produces (playerStats.attack - npc.defense) * 0.8 after dealDamage subtracts defense
-                            const spikeAttack = playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT + npc.defense * (1 - SPIKE_LAUNCH_DAMAGE_MULT);
+                            // 80% of melee damage: dealDamage applies mitigation, so scaling attack by 0.8 produces 80% of melee effective damage
+                            const spikeAttack = playerStats.attack * SPIKE_LAUNCH_DAMAGE_MULT;
                             dealDamage({ attack: spikeAttack, isPlayer: true, x: spike.x, y: spike.y, radius: 4 }, npc, currentTime);
                             spikeLaunchProjectiles.splice(i, 1);
                             if (npc.currentHp <= 0) {
@@ -2464,13 +2640,56 @@
                     }
                 });
 
+                // --- Check if player is inside a foliage patch (center-based AABB) ---
+                isInFoliage = foliagePatches.some(p =>
+                    playerX > p.x && playerX < p.x + p.w &&
+                    playerY > p.y && playerY < p.y + p.h
+                );
+
+                // --- Update currentStealthValue (signed %, ~-150 to +100) ---
+                // Positive = stealthy (shrinks detection radius), Negative = noisy (grows detection radius)
+                // effectiveDetectionRadius = STEALTH_BASE_DETECTION × (1 − stealthValue / 100)
+                {
+                    // Clamp stat contribution so detection never hits 0px at rest (cap at 80 → min 40px radius)
+                    let sv = Math.min(80, playerStats.stealth); // base stat contribution (0–80)
+
+                    // Movement noise — proportional to actual speed vs base; skipped during ability movement
+                    // (pounce/dash activation triggers its own burst below instead)
+                    const isAbilityMoving = isPerformingMovementAbility && (lastActivatedAbilityRef === 'pounce' || lastActivatedAbilityRef === 'dash');
+                    if (isMoving && !isAbilityMoving) {
+                        let effectiveSpeed = Math.max(0.1, basePlayerSpeed * (1 + playerStats.speed / 100));
+                        if (isBurrowing) effectiveSpeed *= playerAbilities.burrow >= 2 ? BURROW_LV2_SPEED_MULT : 0.5;
+                        if (isTremorSenseActive) effectiveSpeed *= 0.5;
+                        sv -= (effectiveSpeed / basePlayerSpeed) * STEALTH_NOISE_FACTOR;
+                    }
+
+                    // Ability burst noise (pounce/dash) — fades linearly from peak to 0
+                    if (lastNoiseBurstTime > 0) {
+                        const elapsed = currentTime - lastNoiseBurstTime;
+                        if (elapsed < STEALTH_NOISE_BURST_DURATION) {
+                            sv -= STEALTH_ABILITY_BURST * (1 - elapsed / STEALTH_NOISE_BURST_DURATION);
+                        }
+                    }
+
+                    // Environmental bonuses (additive, independent of state)
+                    if (isBurrowing) sv += STEALTH_BURROW_BONUS;
+                    if (isInFoliage) sv += STEALTH_FOLIAGE_BONUS;
+
+                    currentStealthValue = sv;
+                }
+
                 // --- Level 2 detection scan (runs every frame, independent of movement) ---
                 npcs.forEach(npc => {
                     if (npc.level < 2 || npc.state !== 'patrol') return;
-                    // Detect player (burrowed players are undetectable)
-                    if (!isBurrowing) {
+                    // Detect player — detection radius scaled by stealth + tier-disadvantage bonus
+                    {
+                        // Higher-tier NPCs subtract from the player's effective stealth (they see through it better)
+                        const tierDiff = npc.level - playerStats.playerLevel;
+                        const tierPenalty = tierDiff > 0 ? (1 - Math.pow(STEALTH_TIER_DECAY, tierDiff)) * 100 : 0;
+                        const effectiveStealth = currentStealthValue - tierPenalty;
+                        const effectiveDetectionRadius = Math.max(0, STEALTH_BASE_DETECTION * (1 - effectiveStealth / 100));
                         const pdx = playerX - npc.x, pdy = playerY - npc.y;
-                        if (Math.sqrt(pdx * pdx + pdy * pdy) <= npc.detectionRadius) {
+                        if (Math.sqrt(pdx * pdx + pdy * pdy) <= effectiveDetectionRadius) {
                             enterChase(npc, 'player');
                             return;
                         }
@@ -2500,14 +2719,25 @@
                     // Resolve target position
                     let targetX, targetY, targetRadius;
                     if (npc.aggroTarget === 'player') {
+                        // Burrowing: player is underground — NPC immediately loses interest
+                        if (isBurrowing) {
+                            returnToPatrol(npc);
+                            return;
+                        }
+
                         targetX = playerX; targetY = playerY; targetRadius = playerRadius;
-                        // Level 2: lose interest if player escapes detection range (1.5× buffer)
-                        if (npc.level >= 2) {
-                            const pdx = targetX - npc.x, pdy = targetY - npc.y;
-                            if (Math.sqrt(pdx * pdx + pdy * pdy) > npc.detectionRadius * 1.5) {
-                                returnToPatrol(npc);
-                                return;
-                            }
+
+                        // Re-evaluate stealth-adjusted detection radius each frame.
+                        // If the player has moved beyond 1.5× effective range (foliage, stealth stat, etc.),
+                        // the NPC gives up the chase — applies to all levels.
+                        const tierDiff = npc.level - playerStats.playerLevel;
+                        const tierPenalty = tierDiff > 0 ? (1 - Math.pow(STEALTH_TIER_DECAY, tierDiff)) * 100 : 0;
+                        const effectiveStealth = currentStealthValue - tierPenalty;
+                        const effectiveDetRadius = Math.max(0, STEALTH_BASE_DETECTION * (1 - effectiveStealth / 100));
+                        const pdx = targetX - npc.x, pdy = targetY - npc.y;
+                        if (Math.sqrt(pdx * pdx + pdy * pdy) > effectiveDetRadius * 1.5) {
+                            returnToPatrol(npc);
+                            return;
                         }
                     } else if (npc.aggroTarget && npcs.includes(npc.aggroTarget)) {
                         targetX = npc.aggroTarget.x;
@@ -2556,6 +2786,9 @@
                             }
                         }
                     } else {
+                        // NPC is committed to a telegraph animation — hold position, don't chase
+                        if (npc.attackPhase) return;
+
                         // Chase: move toward target
                         npc.state = 'chasing';
                         const npcSpeed = Math.max(0.1, baseNpcSpeed * (1 + npc.speed / 100));
@@ -2594,14 +2827,22 @@
 
 
                 if (inCombat && combatTarget) {
-                    // Check if player moved away from combat target or used a mobility ability
-                    // Combat only ends if player explicitly moves away or uses certain abilities (burrow, pounce).
-                    const combatShouldContinue = checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) && !isBurrowing && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce'); // Updated from jump
+                    // Combat ends when player leaves melee range, UNLESS the NPC is mid-telegraph
+                    // (the lunge completes and the range check at the end decides if it hits).
+                    // Burrowing and pounce hard-break combat and abort any in-progress telegraph.
+                    const hardBreak = isBurrowing || (isPerformingMovementAbility && lastActivatedAbilityRef === 'pounce');
+                    const combatShouldContinue =
+                        (checkCircleCollision(playerX, playerY, playerRadius, combatTarget.x, combatTarget.y, combatTarget.radius) ||
+                         combatTarget.attackPhase !== null)
+                        && !hardBreak;
 
                     if (!combatShouldContinue) {
                         inCombat = false;
                         if (combatTarget) {
                             combatTarget.inCombat = false;
+                            // Abort any in-progress telegraph (hard break or player ran through lunge)
+                            combatTarget.attackPhase = null;
+                            combatTarget.isAttacking = false;
                             // Keep NPC chasing if it still has interest, otherwise return to patrol
                             if (combatTarget.loseInterestAt > 0 && currentTime < combatTarget.loseInterestAt) {
                                 combatTarget.state = 'chasing';
@@ -2609,10 +2850,11 @@
                                 returnToPatrol(combatTarget);
                             }
                         }
+                        // Clear the red targeting triangle — stale indicator is confusing once combat ends
+                        if (targetedNpc && targetedNpc === combatTarget) targetedNpc = null;
                         combatTarget = null;
                         isMoving = false;
                         showTargetIndicator = false;
-                        // targetedNpc is *not* cleared here, as player might still want to target the NPC without being in combat
                     } else {
 
                     // Player attack logic: Only if targetedNpc is set AND it's the current combatTarget
@@ -2629,19 +2871,47 @@
                         }
                     }
 
-                    // NPC attack logic (always, if in combat and not prevented by player's dash)
-                    if (currentTime - combatTarget.lastAttackTime >= combatTarget.attackCooldown) {
-                        if (!(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) { // Prevent NPC attack if player just dashed through
-                            // Orient NPC towards player before attacking
-                            combatTarget.directionAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
-                            // This is the NEW, SIMPLIFIED code
-                            dealDamage(combatTarget, playerStats, currentTime);
-                            combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration; // Reset chase timer on hit
-                            combatTarget.isAttacking = true;
+                    // NPC attack logic — telegraph system:
+                    // Cooldown expiry (while in melee range) starts the pull-back phase.
+                    // Damage is only dealt at the END of the lunge phase, with a fresh range check.
+                    if (currentTime - combatTarget.lastAttackTime >= combatTarget.attackCooldown && !combatTarget.attackPhase) {
+                        const inMeleeRange = checkCircleCollision(combatTarget.x, combatTarget.y, combatTarget.radius, playerX, playerY, playerRadius);
+                        if (inMeleeRange && !(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash')) {
+                            // Lock the attack angle and begin pull-back
+                            combatTarget.attackLockAngle = Math.atan2(playerY - combatTarget.y, playerX - combatTarget.x);
+                            combatTarget.directionAngle  = combatTarget.attackLockAngle;
+                            combatTarget.attackPhase     = 'pullback';
                             combatTarget.attackAnimStartTime = currentTime;
+                            combatTarget.isAttacking     = true;
+                            combatTarget.loseInterestAt  = currentTime + combatTarget.loseInterestDuration;
                         }
-                        combatTarget.lastAttackTime = currentTime;
-                        combatTarget.attackCooldown = combatDelay; // Subsequent attacks every 0.5 seconds
+                        combatTarget.lastAttackTime   = currentTime;
+                        combatTarget.attackCooldown   = combatDelay * NPC_ATTACK_INTERVAL_MULT;
+                    }
+
+                    // Phase transitions for the active telegraph
+                    if (combatTarget.attackPhase) {
+                        const phaseElapsed = currentTime - combatTarget.attackAnimStartTime;
+                        if (combatTarget.attackPhase === 'pullback' && phaseElapsed >= NPC_TELEGRAPH_PULLBACK_MS) {
+                            combatTarget.attackPhase     = 'pause';
+                            combatTarget.attackAnimStartTime = currentTime;
+                        } else if (combatTarget.attackPhase === 'pause' && phaseElapsed >= NPC_TELEGRAPH_PAUSE_MS) {
+                            combatTarget.attackPhase     = 'lunge';
+                            combatTarget.attackAnimStartTime = currentTime;
+                        } else if (combatTarget.attackPhase === 'lunge' && phaseElapsed >= NPC_TELEGRAPH_LUNGE_MS) {
+                            // Lunge complete — deal damage only if player is still in melee range
+                            const lungeHit = checkCircleCollision(combatTarget.x, combatTarget.y, combatTarget.radius, playerX, playerY, playerRadius) &&
+                                !(isPerformingMovementAbility && lastActivatedAbilityRef === 'dash');
+                            if (lungeHit) {
+                                dealDamage({ ...combatTarget, attack: combatTarget.attack * NPC_ATTACK_DAMAGE_MULT }, playerStats, currentTime);
+                                combatTarget.loseInterestAt = currentTime + combatTarget.loseInterestDuration;
+                            } else {
+                                // NPC missed — clear targeting triangle immediately so it doesn't linger
+                                if (targetedNpc && targetedNpc === combatTarget) targetedNpc = null;
+                            }
+                            combatTarget.attackPhase = null;
+                            combatTarget.isAttacking = false;
+                        }
                     }
 
 
@@ -2925,6 +3195,51 @@
                     }
                 }
             });
+
+            // Dodge roll indicator — always visible, separate from ability slots
+            const dodgeSize = currentHotbarSlotSize;
+            const dodgeSlotX = hotbarX + actualHotbarWidth + HOTBAR_SPACING + 8;
+            const dodgeSlotY = hotbarY;
+            const dodgeCooldownRemaining = Math.max(0, DODGE_ROLL_COOLDOWN_MS - (performance.now() - dodgeRollLastUsed));
+            const dodgeReady = dodgeCooldownRemaining <= 0;
+
+            ctx.fillStyle = 'rgba(30, 30, 30, 0.9)';
+            ctx.fillRect(dodgeSlotX, dodgeSlotY, dodgeSize, dodgeSize);
+            ctx.strokeStyle = dodgeReady ? '#aaa' : '#555';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(dodgeSlotX, dodgeSlotY, dodgeSize, dodgeSize);
+
+            // Keybind label
+            ctx.fillStyle = dodgeReady ? '#FFD700' : 'rgba(255,215,0,0.45)';
+            ctx.font = `bold ${dodgeSize * 0.3}px "Inter", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('⇧', dodgeSlotX + dodgeSize / 2, dodgeSlotY + dodgeSize * 0.08 + 2);
+
+            // Ability name label
+            ctx.fillStyle = 'white';
+            ctx.font = `${dodgeSize * 0.18}px "Inter", sans-serif`;
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('Dodge', dodgeSlotX + dodgeSize / 2, dodgeSlotY + dodgeSize - 4);
+
+            // Cooldown pie overlay
+            if (!dodgeReady) {
+                const cx = dodgeSlotX + dodgeSize / 2;
+                const cy = dodgeSlotY + dodgeSize / 2;
+                const r  = dodgeSize / 2;
+                const fraction = dodgeCooldownRemaining / DODGE_ROLL_COOLDOWN_MS;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction, false);
+                ctx.lineTo(cx, cy);
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${dodgeSize * 0.35}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(Math.ceil(dodgeCooldownRemaining / 1000), cx, cy);
+            }
         }
 
         function drawPlayerInfoPanel() {
@@ -3093,7 +3408,10 @@
             drawStatLine('Attack', playerStats.attack);
             drawStatLine('Defense', playerStats.defense, false);
             drawStatLine('Stamina', playerStats.stamina, true);
-            drawStatLine('Stealth', playerStats.stealth, true);
+            // Stealth is bipolar: positive = hidden, negative = noisy. Show explicit sign so direction is clear.
+            ctx.fillStyle = 'white';
+            ctx.fillText(`Stealth: ${currentStealthValue >= 0 ? '+' : ''}${currentStealthValue.toFixed(1)}%`, panelX + PLAYER_INFO_PANEL_PADDING, currentDrawingY);
+            currentDrawingY += PLAYER_INFO_STAT_LINE_HEIGHT;
             drawStatLine('Speed', playerStats.speed, true);
 
             // --- Draw second separator line ---
@@ -3299,7 +3617,12 @@
 
                 ctx.translate(playerDrawX, playerDrawY);
                 ctx.scale(playerVisualScale, playerVisualScale);
-                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : 1;
+                // Flash semi-transparent during dodge-roll i-frames so the player has clear feedback
+                const isInDodgeIframe = isPerformingMovementAbility && lastActivatedAbilityRef === 'dodgeRoll'
+                    && (currentTime - movementAbilityStartTime) < DODGE_ROLL_IFRAME_MS;
+                ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4)
+                    : isInDodgeIframe ? 0.45
+                    : (isInFoliage ? 0.5 : 1);
                 ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
 
                 const emojiFontSize = playerSize * 1.5;
@@ -3329,7 +3652,7 @@
                     ctx.save();
                     ctx.translate(playerDrawX, playerDrawY); // Use playerDrawX/Y for consistency
                     ctx.scale(playerVisualScale, playerVisualScale);
-                    ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : 1;
+                    ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4) : (isInFoliage ? 0.5 : 1);
                     ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
                 }
                 ctx.restore();
@@ -3352,6 +3675,17 @@
 
                 // Removed the separate showPounceLandingIndicator drawing block.
 
+                // Foliage overlay layer — drawn above the player, below NPCs.
+                // Creates the "hiding under canopy" effect: player is sandwiched under the foliage.
+                ctx.globalAlpha = 1;
+                foliagePatches.forEach(p => {
+                    ctx.fillStyle = 'rgba(38, 110, 40, 0.55)'; // mid-green canopy top, semi-transparent
+                    ctx.fillRect(p.x, p.y, p.w, p.h);
+                    ctx.strokeStyle = 'rgba(15, 60, 15, 0.85)'; // crisp dark border
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(p.x, p.y, p.w, p.h);
+                });
+
                 // Draw NPCs and their hitcircles
                 npcs.forEach(npc => {
                     ctx.save();
@@ -3359,15 +3693,50 @@
                     let npcDrawY = npc.y;
 
                     if (npc.isAttacking) {
-                        const animProgress = (currentTime - npc.attackAnimStartTime) / ATTACK_ANIM_DURATION;
                         let lurchOffset = 0;
-                        if (animProgress < 0.5) {
-                            lurchOffset = lerp(0, ATTACK_LURCH_DISTANCE, animProgress * 2);
+                        const angle = npc.attackPhase ? npc.attackLockAngle : npc.directionAngle;
+                        if (npc.attackPhase === 'pullback') {
+                            // Slow pull-back: ease from 0 to -PULLBACK_DIST
+                            const t = Math.min(1, (currentTime - npc.attackAnimStartTime) / NPC_TELEGRAPH_PULLBACK_MS);
+                            lurchOffset = lerp(0, -NPC_TELEGRAPH_PULLBACK_DIST, t);
+                        } else if (npc.attackPhase === 'pause') {
+                            // Hold fully pulled back
+                            lurchOffset = -NPC_TELEGRAPH_PULLBACK_DIST;
+                        } else if (npc.attackPhase === 'lunge') {
+                            // Fast lunge from fully pulled back to beyond centre
+                            const t = Math.min(1, (currentTime - npc.attackAnimStartTime) / NPC_TELEGRAPH_LUNGE_MS);
+                            lurchOffset = lerp(-NPC_TELEGRAPH_PULLBACK_DIST, NPC_TELEGRAPH_LUNGE_DIST, t);
                         } else {
-                            lurchOffset = lerp(ATTACK_LURCH_DISTANCE, 0, (animProgress - 0.5) * 2);
+                            // NPC-vs-NPC: simple forward lurch, no telegraph
+                            const animProgress = (currentTime - npc.attackAnimStartTime) / ATTACK_ANIM_DURATION;
+                            lurchOffset = animProgress < 0.5
+                                ? lerp(0, ATTACK_LURCH_DISTANCE, animProgress * 2)
+                                : lerp(ATTACK_LURCH_DISTANCE, 0, (animProgress - 0.5) * 2);
                         }
-                        npcDrawX += Math.cos(npc.directionAngle) * lurchOffset;
-                        npcDrawY += Math.sin(npc.directionAngle) * lurchOffset;
+                        npcDrawX += Math.cos(angle) * lurchOffset;
+                        npcDrawY += Math.sin(angle) * lurchOffset;
+                    }
+
+                    // Red cone danger indicator during the pause phase (player's dodge window).
+                    // Drawn at the NPC's real world position (not the lurch-offset draw position).
+                    if (npc.attackPhase === 'pause') {
+                        const elapsed = currentTime - npc.attackAnimStartTime;
+                        const pulse = 0.28 + 0.12 * Math.sin(elapsed * 0.018); // ~3 Hz pulsation
+                        const coneReach = npc.radius + playerRadius + NPC_TELEGRAPH_LUNGE_DIST;
+                        const halfAngle  = Math.PI * 52 / 180; // 104° total arc
+                        ctx.save();
+                        ctx.translate(npc.x, npc.y);
+                        ctx.rotate(npc.attackLockAngle);
+                        ctx.fillStyle = `rgba(220, 40, 40, ${pulse})`;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.arc(0, 0, coneReach, -halfAngle, halfAngle);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.strokeStyle = `rgba(255, 80, 80, ${Math.min(1, pulse + 0.3)})`;
+                        ctx.lineWidth = 1.5 / zoomScale;
+                        ctx.stroke();
+                        ctx.restore();
                     }
 
                     ctx.translate(npcDrawX, npcDrawY);
@@ -3649,6 +4018,9 @@
             cooldowns.dash.lastUsed = 0;
             cooldowns.burrow.lastUsed = 0;
             cooldowns.spikeLaunch.lastUsed = 0;
+            lastNoiseBurstTime = 0;
+            currentStealthValue = 0;
+            isInFoliage = false;
 
             inCombat = false;
             combatTarget = null;
@@ -3756,8 +4128,17 @@
                 if (playerGeneticOrigin.bonusStats.speed) combinedSpeed *= (1 + playerGeneticOrigin.bonusStats.speed);
             }
             
+            // Apply per-level stat caps (Option A) — prevents runaway stacking
+            const caps = PLAYER_STAT_CAPS[level];
+            if (caps) {
+                combinedAttack  = Math.min(caps.attack,  combinedAttack);
+                combinedDefense = Math.min(caps.defense, combinedDefense);
+                combinedStealth = Math.min(caps.stealth, combinedStealth);
+                combinedSpeed   = Math.min(caps.speed,   combinedSpeed);
+            }
+
             const hpGained = combinedMaxHp - oldMaxHp;
-            
+
             // Update playerStats with the final calculated values
             playerStats.maxHp = combinedMaxHp;
             playerStats.attack = combinedAttack;
@@ -4431,6 +4812,49 @@
             const allowAbilityUse = gameState === 'inGame' && adminPanel.style.display !== 'flex' && originSelectionPopup.style.display !== 'flex' && !gameOver;
             if (!allowAbilityUse) return;
 
+            // Active HP regen key (H) — activates one session of fast healing, costs Hunger
+            if (event.key.toLowerCase() === REGEN_KEY) {
+                const now = performance.now();
+                const hpCap = playerStats.maxHp * REGEN_HP_CAP;
+                const passiveReady = (now - lastDamageTakenTime) >= REGEN_NO_DAMAGE_DELAY && playerStats.currentHp < hpCap;
+                if (passiveReady && !isActiveRegenHeld) {
+                    isActiveRegenHeld = true;
+                    activeRegenSessionCount++;
+                }
+                return;
+            }
+
+            // Universal dodge roll — Shift key, no hotbar slot required
+            if (event.key === 'Shift') {
+                event.preventDefault();
+                const now = performance.now();
+                if (!isPerformingMovementAbility && !isBurrowing &&
+                    now - dodgeRollLastUsed >= DODGE_ROLL_COOLDOWN_MS) {
+                    const mouseWorldX = lastMouseCanvasX / zoomScale + cameraX;
+                    const mouseWorldY = lastMouseCanvasY / zoomScale + cameraY;
+                    const dx = mouseWorldX - playerX;
+                    const dy = mouseWorldY - playerY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const rollAngle = dist > 0 ? Math.atan2(dy, dx) : playerDirectionAngle;
+                    movementAbilityStartX = playerX;
+                    movementAbilityStartY = playerY;
+                    movementAbilityEndX = Math.max(playerSize / 2, Math.min(
+                        playerX + Math.cos(rollAngle) * DODGE_ROLL_DISTANCE, worldWidth - playerSize / 2));
+                    movementAbilityEndY = Math.max(playerSize / 2, Math.min(
+                        playerY + Math.sin(rollAngle) * DODGE_ROLL_DISTANCE, worldHeight - playerSize / 2));
+                    currentMovementAbilityDuration = DODGE_ROLL_DURATION_MS;
+                    movementAbilityStartTime = now;
+                    isPerformingMovementAbility = true;
+                    lastActivatedAbilityRef = 'dodgeRoll';
+                    canMoveFreeLy = false;
+                    isMoving = false;
+                    playerDirectionAngle = rollAngle;
+                    preAbilityTarget = targetedNpc;
+                    dodgeRollLastUsed = now;
+                }
+                return;
+            }
+
             const keybind = event.key.toLowerCase();
             const slotIndex = hotbarSlots.findIndex(slot => slot.keybind.toLowerCase() === keybind);
 
@@ -4514,6 +4938,7 @@
                 preAbilityTarget = targetedNpc; // Save target so it can be restored after ability
                 startCooldown(abilityKey);
                 lastActivatedAbilityRef = abilityKey;
+                lastNoiseBurstTime = performance.now(); // Trigger noise burst — stealth drops for 2s
 
                 let actualTravelDistance = 0;
                 let dx = 0;
@@ -4576,6 +5001,9 @@
 
         window.addEventListener('keyup', (event) => {
             keysPressed[event.key.toLowerCase()] = false;
+            if (event.key.toLowerCase() === REGEN_KEY) {
+                isActiveRegenHeld = false;
+            }
         });
 
         closeAdminPanelBtn.addEventListener('click', hideAllPanels);

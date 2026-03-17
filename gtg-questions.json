@@ -1,0 +1,87 @@
+[
+    { "question": "What is a baby goat commonly called?", "correctAnswer": "Kid", "incorrectAnswers": ["Calf", "Lamb", "Chick"], "difficulty": 1, "boardCategory": "Animals", "categories": ["Animals"] },
+    { "question": "How many legs does a crab have?", "correctAnswer": "10", "incorrectAnswers": ["6", "8", "12"], "difficulty": 1, "boardCategory": "Animals", "categories": ["Animals"] },
+    { "question": "What is a group of lions collectively known as?", "correctAnswer": "Pride", "incorrectAnswers": ["Herd", "Pack", "Flock"], "difficulty": 2, "boardCategory": "Animals", "categories": ["Animals"] },
+    { "question": "Which animal is most famous for its ability to change color?", "correctAnswer": "Chameleon", "incorrectAnswers": ["Lizard", "Gecko", "Snake"], "difficulty": 3, "boardCategory": "Animals", "categories": ["Animals"] },
+    { "question": "What is the fastest land animal?", "correctAnswer": "Cheetah", "incorrectAnswers": ["Lion", "Gazelle", "Horse"], "difficulty": 3, "boardCategory": "Animals", "categories": ["Biology", "Animals"] },
+    { "question": "What is the only mammal capable of true sustained flight?", "correctAnswer": "Bat", "incorrectAnswers": ["Flying Squirrel", "Sugar Glider", "Bird"], "difficulty": 4, "boardCategory": "Animals", "categories": ["Animals", "Biology"] },
+    { "question": "Which marine animal has the largest brain?", "correctAnswer": "Sperm Whale", "incorrectAnswers": ["Dolphin", "Orca", "Great White Shark"], "difficulty": 5, "boardCategory": "Animals", "categories": ["Animals", "Biology"] },
+
+    { "question": "What is the capital of France?", "correctAnswer": "Paris", "incorrectAnswers": ["London", "Rome", "Berlin"], "difficulty": 1, "boardCategory": "Geography", "categories": ["Geography", "World Capitals"] },
+    { "question": "What is the largest continent?", "correctAnswer": "Asia", "incorrectAnswers": ["Africa", "Europe", "America"], "difficulty": 1, "boardCategory": "Geography", "categories": ["Geography"] },
+    { "question": "What is the capital of Spain?", "correctAnswer": "Madrid", "incorrectAnswers": ["Barcelona", "Lisbon", "Rome"], "difficulty": 1, "boardCategory": "Geography", "categories": ["Geography", "World Capitals"] },
+    { "question": "What is the capital of Germany?", "correctAnswer": "Berlin", "incorrectAnswers": ["Munich", "Hamburg", "Frankfurt"], "difficulty": 1, "boardCategory": "Geography", "categories": ["Geography", "World Capitals"] },
+    { "question": "What city is Big Ben in?", "correctAnswer": "London", "incorrectAnswers": ["Paris", "Rome", "Berlin"], "difficulty": 1, "boardCategory": "Geography", "categories": ["Geography", "Landmarks"] },
+    { "question": "What is the capital of Japan?", "correctAnswer": "Tokyo", "incorrectAnswers": ["Kyoto", "Osaka", "Seoul"], "difficulty": 2, "boardCategory": "Geography", "categories": ["Geography", "World Capitals"] },
+    { "question": "What is the world's largest island?", "correctAnswer": "Greenland", "incorrectAnswers": ["Australia", "Borneo", "Madagascar"], "difficulty": 2, "boardCategory": "Geography", "categories": ["Geography"] },
+    { "question": "What is the smallest country in the world by land area?", "correctAnswer": "Vatican City", "incorrectAnswers": ["Monaco", "Nauru", "San Marino"], "difficulty": 5, "boardCategory": "Geography", "categories": ["Geography", "World Facts"] },
+
+    { "question": "Who was the first Roman Emperor?", "correctAnswer": "Augustus", "incorrectAnswers": ["Julius Caesar", "Nero", "Caligula"], "difficulty": 2, "boardCategory": "History", "categories": ["History", "Rome"] },
+    { "question": "In what year did World War II begin?", "correctAnswer": "1939", "incorrectAnswers": ["1914", "1941", "1945"], "difficulty": 3, "boardCategory": "History", "categories": ["History", "World Wars"] },
+    { "question": "What famous document was drafted to limit the power of the king?", "correctAnswer": "Magna Carta", "incorrectAnswers": ["Bill of Rights", "Declaration of Independence", "Treaty of Versailles"], "difficulty": 4, "boardCategory": "History", "categories": ["History", "Law"] },
+    { "question": "Who was the last Pharaoh of ancient Egypt?", "correctAnswer": "Cleopatra VII", "incorrectAnswers": ["Nefertiti", "Hatshepsut", "Tutankhamun"], "difficulty": 5, "boardCategory": "History", "categories": ["History", "Ancient Civilizations"] },
+
+    { "question": "What is the chemical formula of the gas plants absorb from the atmosphere?", "correctAnswer": "CO2", "incorrectAnswers": ["O2", "N2", "H2O"], "difficulty": 1, "boardCategory": "Science", "categories": ["Science", "Biology"] },
+    { "question": "What is the chemical symbol for water?", "correctAnswer": "H2O", "incorrectAnswers": ["O2", "CO2", "NaCl"], "difficulty": 2, "boardCategory": "Science", "categories": ["Science", "Chemistry"] },
+    { "question": "What color is created by mixing red and green light?", "correctAnswer": "Yellow", "incorrectAnswers": ["Cyan", "Magenta", "White"], "difficulty": 2, "boardCategory": "Science", "categories": ["Science", "Physics"] },
+    { "question": "What is the hardest mineral?", "correctAnswer": "Diamond", "incorrectAnswers": ["Gold", "Iron", "Quartz"], "difficulty": 3, "boardCategory": "Science", "categories": ["Science", "Materials"] },
+    { "question": "What is the scientific study of life called?", "correctAnswer": "Biology", "incorrectAnswers": ["Physics", "Geology", "Chemistry"], "difficulty": 3, "boardCategory": "Science", "categories": ["Science"] },
+    { "question": "What is the largest organ in the human body?", "correctAnswer": "Skin", "incorrectAnswers": ["Liver", "Heart", "Brain"], "difficulty": 4, "boardCategory": "Science", "categories": ["Biology", "Human Body"] },
+    { "question": "What is the process by which plants convert light energy into chemical energy?", "correctAnswer": "Photosynthesis", "incorrectAnswers": ["Respiration", "Transpiration", "Fermentation"], "difficulty": 4, "boardCategory": "Science", "categories": ["Science", "Biology"] },
+    { "question": "What is the name for the highly compressed, super-dense core of a collapsed massive star?", "correctAnswer": "Neutron Star", "incorrectAnswers": ["White Dwarf", "Red Giant", "Pulsar"], "difficulty": 5, "boardCategory": "Science", "categories": ["Science", "Astronomy"] },
+
+    { "question": "Which planet is Red?", "correctAnswer": "Mars", "incorrectAnswers": ["Jupiter", "Venus", "Saturn"], "difficulty": 1, "boardCategory": "Space", "categories": ["Space", "Planets"] },
+    { "question": "What is the primary source of energy for Earth?", "correctAnswer": "Sun", "incorrectAnswers": ["Moon", "Wind", "Water"], "difficulty": 1, "boardCategory": "Space", "categories": ["Science", "Space"] },
+    { "question": "What is the name of our galaxy?", "correctAnswer": "Milky Way", "incorrectAnswers": ["Andromeda", "Triangulum", "Sombrero"], "difficulty": 2, "boardCategory": "Space", "categories": ["Space", "Galaxies"] },
+    { "question": "Approximately how many years apart is Halley's Comet visible from Earth?", "correctAnswer": "76", "incorrectAnswers": ["50", "100", "33"], "difficulty": 3, "boardCategory": "Space", "categories": ["Space", "Comets"] },
+    { "question": "What is the theoretical boundary around a black hole beyond which nothing can escape?", "correctAnswer": "Event Horizon", "incorrectAnswers": ["Singularity", "Accretion Disk", "Wormhole"], "difficulty": 5, "boardCategory": "Space", "categories": ["Space", "Black Holes"] },
+
+    { "question": "What company makes the PlayStation console?", "correctAnswer": "Sony", "incorrectAnswers": ["Microsoft", "Nintendo", "Sega"], "difficulty": 1, "boardCategory": "Technology", "categories": ["Technology", "Gaming"] },
+    { "question": "Which computer component is responsible for executing instructions and processing data?", "correctAnswer": "CPU", "incorrectAnswers": ["RAM", "GPU", "SSD"], "difficulty": 2, "boardCategory": "Technology", "categories": ["Technology", "Computing"] },
+    { "question": "Which common internet protocol is used to send and receive email?", "correctAnswer": "SMTP", "incorrectAnswers": ["HTTP", "FTP", "TCP/IP"], "difficulty": 3, "boardCategory": "Technology", "categories": ["Technology", "Internet"] },
+    { "question": "What is the name of the first programming language for electronic computers, developed by John Backus at IBM?", "correctAnswer": "FORTRAN", "incorrectAnswers": ["COBOL", "BASIC", "Assembly"], "difficulty": 5, "boardCategory": "Technology", "categories": ["Technology", "Programming"] },
+
+    { "question": "What ancient wonder was located in the city of Babylon?", "correctAnswer": "Hanging Gardens", "incorrectAnswers": ["Colossus", "Great Lighthouse", "Temple of Artemis"], "difficulty": 3, "boardCategory": "History", "categories": ["History", "Ancient Civilizations"] },
+    { "question": "Which empire was ruled by Genghis Khan?", "correctAnswer": "Mongol", "incorrectAnswers": ["Ottoman", "Persian", "Roman"], "difficulty": 1, "boardCategory": "History", "categories": ["History", "Ancient Civilizations"] },
+    { "question": "In what year did the Berlin Wall fall?", "correctAnswer": "1989", "incorrectAnswers": ["1991", "1985", "1979"], "difficulty": 3, "boardCategory": "History", "categories": ["History", "World Events"] },
+    { "question": "Which country was the first to grant women the right to vote?", "correctAnswer": "New Zealand", "incorrectAnswers": ["Finland", "United States", "United Kingdom"], "difficulty": 4, "boardCategory": "History", "categories": ["History", "Law"] },
+
+    { "question": "What is the largest moon in our solar system?", "correctAnswer": "Ganymede", "incorrectAnswers": ["Titan", "Europa", "Callisto"], "difficulty": 3, "boardCategory": "Space", "categories": ["Space", "Planets"] },
+    { "question": "Which planet rotates on its side?", "correctAnswer": "Uranus", "incorrectAnswers": ["Neptune", "Venus", "Saturn"], "difficulty": 3, "boardCategory": "Space", "categories": ["Space", "Planets"] },
+    { "question": "What is the name of the first animal (a dog) that was sent into orbit around Earth?", "correctAnswer": "Laika", "incorrectAnswers": ["Ham", "Felix", "Luna"], "difficulty": 2, "boardCategory": "Space", "categories": ["Space", "History"] },
+
+    { "question": "What year was the first iPhone released?", "correctAnswer": "2007", "incorrectAnswers": ["2005", "2009", "2010"], "difficulty": 2, "boardCategory": "Technology", "categories": ["Technology", "Computing"] },
+    { "question": "What does \"www\" stand for in a website address?", "correctAnswer": "World Wide Web", "incorrectAnswers": ["Wide World Web", "Web World Wide", "World Wire Web"], "difficulty": 1, "boardCategory": "Technology", "categories": ["Technology", "Internet"] },
+    { "question": "In what decade was the first email sent?", "correctAnswer": "1970s", "incorrectAnswers": ["1980s", "1960s", "1990s"], "difficulty": 4, "boardCategory": "Technology", "categories": ["Technology", "Internet"] },
+    { "question": "What programming language shares its name with a gemstone?", "correctAnswer": "Ruby", "incorrectAnswers": ["Pearl", "Jade", "Onyx"], "difficulty": 4, "boardCategory": "Technology", "categories": ["Technology", "Programming"] },
+
+    { "question": "What is the most abundant gas in Earth's atmosphere?", "correctAnswer": "Nitrogen", "incorrectAnswers": ["Oxygen", "Carbon Dioxide", "Argon"], "difficulty": 2, "boardCategory": "Science", "categories": ["Science", "Chemistry"] },
+    { "question": "What particle in an atom has no electric charge?", "correctAnswer": "Neutron", "incorrectAnswers": ["Proton", "Electron", "Photon"], "difficulty": 2, "boardCategory": "Science", "categories": ["Science", "Physics"] },
+    { "question": "What is the abbreviation for Gold on the Periodic Table?", "correctAnswer": "Au", "incorrectAnswers": ["Ag", "Gd", "Gu"], "difficulty": 4, "boardCategory": "Science", "categories": ["Science", "Chemistry"] },
+    { "question": "In E=mc², which value represents the speed of light?", "correctAnswer": "c", "incorrectAnswers": ["E", "m", "2"], "difficulty": 3, "boardCategory": "Science", "categories": ["Science", "Physics"] },
+    { "question": "What organ in the human body produces insulin?", "correctAnswer": "Pancreas", "incorrectAnswers": ["Liver", "Kidney", "Spleen"], "difficulty": 3, "boardCategory": "Science", "categories": ["Science", "Human Body"] },
+
+    { "question": "How many hearts does an octopus have?", "correctAnswer": "Three", "incorrectAnswers": ["Two", "One", "Five"], "difficulty": 3, "boardCategory": "Animals", "categories": ["Animals", "Biology"] },
+    { "question": "What is a group of crows called?", "correctAnswer": "Murder", "incorrectAnswers": ["Flock", "Parliament", "Colony"], "difficulty": 4, "boardCategory": "Animals", "categories": ["Animals", "Biology"] },
+
+    { "question": "Which desert is the largest in the world?", "correctAnswer": "Sahara", "incorrectAnswers": ["Arabian", "Gobi", "Kalahari"], "difficulty": 2, "boardCategory": "Geography", "categories": ["Geography", "Landmarks"] },
+    { "question": "What is the longest river in Africa?", "correctAnswer": "Nile", "incorrectAnswers": ["Congo", "Niger", "Zambezi"], "difficulty": 2, "boardCategory": "Geography", "categories": ["Geography", "World Facts"] },
+    { "question": "Which trench is the deepest point in the ocean?", "correctAnswer": "Mariana", "incorrectAnswers": ["Tonga", "Java", "Puerto Rico"], "difficulty": 3, "boardCategory": "Geography", "categories": ["Geography", "Landmarks"] },
+
+    { "question": "How many keys are on a standard piano?", "correctAnswer": "88", "incorrectAnswers": ["76", "92", "64"], "difficulty": 2, "boardCategory": "Music", "categories": ["Music", "Instruments"] },
+    { "question": "What musical term means to gradually get louder?", "correctAnswer": "Crescendo", "incorrectAnswers": ["Fortissimo", "Allegro", "Staccato"], "difficulty": 3, "boardCategory": "Music", "categories": ["Music", "Theory"] },
+    { "question": "Which rock band released the album \"The Dark Side of the Moon\"?", "correctAnswer": "Pink Floyd", "incorrectAnswers": ["Led Zeppelin", "The Rolling Stones", "The Who"], "difficulty": 2, "boardCategory": "Music", "categories": ["Music", "Artists"] },
+    { "question": "What instrument has the most strings in a standard orchestra?", "correctAnswer": "Harp", "incorrectAnswers": ["Cello", "Piano", "Guitar"], "difficulty": 4, "boardCategory": "Music", "categories": ["Music", "Instruments"] },
+    { "question": "In music, how many beats does a whole note get in 4/4 time?", "correctAnswer": "4", "incorrectAnswers": ["2", "8", "1"], "difficulty": 1, "boardCategory": "Music", "categories": ["Music", "Theory"] },
+    { "question": "What country does the musical genre \"Reggae\" originate from?", "correctAnswer": "Jamaica", "incorrectAnswers": ["Cuba", "Brazil", "Trinidad"], "difficulty": 1, "boardCategory": "Music", "categories": ["Music", "History"] },
+    { "question": "What is the lowest male singing voice type?", "correctAnswer": "Bass", "incorrectAnswers": ["Baritone", "Tenor", "Alto"], "difficulty": 3, "boardCategory": "Music", "categories": ["Music", "Theory"] },
+
+    { "question": "What was the first feature-length fully CGI animated film?", "correctAnswer": "Toy Story", "incorrectAnswers": ["Shrek", "A Bug's Life", "Finding Nemo"], "difficulty": 2, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Film History"] },
+    { "question": "What was the first film to gross over $1 billion worldwide?", "correctAnswer": "Titanic", "incorrectAnswers": ["Jurassic Park", "Star Wars", "Avatar"], "difficulty": 4, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Film History"] },
+    { "question": "In \"The Matrix,\" what color pill does Neo take?", "correctAnswer": "Red", "incorrectAnswers": ["Blue", "Green", "White"], "difficulty": 1, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Sci-Fi"] },
+    { "question": "What fictional metal is Captain America's shield made of?", "correctAnswer": "Vibranium", "incorrectAnswers": ["Adamantium", "Uru", "Carbonadium"], "difficulty": 3, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Sci-Fi"] },
+    { "question": "Who directed \"Jurassic Park\" (last name only)?", "correctAnswer": "Spielberg", "incorrectAnswers": ["Cameron", "Scott", "Lucas"], "difficulty": 2, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Film History"] },
+    { "question": "What TV show takes place in the fictional town of Hawkins, Indiana?", "correctAnswer": "Stranger Things", "incorrectAnswers": ["Twin Peaks", "Riverdale", "Smallville"], "difficulty": 1, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Sci-Fi"] },
+    { "question": "What is the name of the planet in \"Avatar\" (2009)?", "correctAnswer": "Pandora", "incorrectAnswers": ["Polyphemus", "Centauri", "Eywa"], "difficulty": 3, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Sci-Fi"] },
+    { "question": "What fictional city is the setting of \"The Dark Knight\" trilogy?", "correctAnswer": "Gotham", "incorrectAnswers": ["Metropolis", "Star City", "Central City"], "difficulty": 1, "boardCategory": "Movies/TV", "categories": ["Movies/TV", "Sci-Fi"] }
+]

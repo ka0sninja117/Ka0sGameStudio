@@ -133,6 +133,16 @@
 
         .game-card:hover .play-btn::after { transform: translateX(4px); }
 
+        .game-version {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            font-size: 0.6rem;
+            font-family: 'Press Start 2P', cursive;
+            opacity: 0.45;
+            letter-spacing: 0.5px;
+        }
+
         footer {
             margin-top: 80px;
             color: #444;
@@ -149,6 +159,7 @@
 
     <div class="games-grid">
         <a class="game-card card-mutagen" href="Mutagen.html">
+            <div class="game-version">v1.23</div>
             <div class="game-icon">🧬</div>
             <div class="game-title">Mutagen</div>
             <div class="game-desc">A dark, fast-paced game of mutations and survival. How long can you hold out?</div>
@@ -156,6 +167,7 @@
         </a>
 
         <a class="game-card card-gtg" href="Game the Game.html">
+            <div class="game-version">v1.2</div>
             <div class="game-icon">🎮</div>
             <div class="game-title">Game the Game</div>
             <div class="game-desc">A colorful retro adventure. Earn points, beat the odds, and game the system.</div>
@@ -170,6 +182,9 @@
         </a>
     </div>
 
-    <footer>Ka0s Game Studio &mdash; All games made with HTML &amp; JavaScript</footer>
+    <footer>
+        Ka0s Game Studio &mdash; All games made with HTML &amp; JavaScript
+        <br><a href="gtg-editor.html" style="color:#444;font-size:0.65rem;text-decoration:none;margin-top:6px;display:inline-block;">Question Editor</a>
+    </footer>
 </body>
 </html>
