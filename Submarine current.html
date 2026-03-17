@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Submarine Bridge Simulator</title>
+    <title>SSN Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
     <style>
@@ -532,7 +532,24 @@
 <body>
     <div id="startScreen">
         <div class="start-content">
-            <h1 class="start-title">SSN - Submarine Warfare</h1>
+            <div style="font-size: 3rem; margin-bottom: 0.25rem; filter: drop-shadow(0 0 10px rgba(255,100,50,0.6));">
+                <svg width="120" height="40" viewBox="0 0 120 40" style="display:inline-block;vertical-align:middle;">
+                    <!-- Torpedo body -->
+                    <ellipse cx="55" cy="20" rx="50" ry="8" fill="#4a5568" stroke="#718096" stroke-width="1"/>
+                    <!-- Warhead -->
+                    <ellipse cx="102" cy="20" rx="8" ry="6" fill="#c53030"/>
+                    <!-- Propeller -->
+                    <rect x="2" y="14" width="6" height="12" rx="1" fill="#2d3748"/>
+                    <line x1="5" y1="10" x2="5" y2="14" stroke="#a0aec0" stroke-width="1.5"/>
+                    <line x1="5" y1="26" x2="5" y2="30" stroke="#a0aec0" stroke-width="1.5"/>
+                    <!-- Fins -->
+                    <polygon points="15,12 25,12 20,6" fill="#2d3748"/>
+                    <polygon points="15,28 25,28 20,34" fill="#2d3748"/>
+                    <!-- Guidance section band -->
+                    <rect x="78" y="13" width="4" height="14" rx="1" fill="#ecc94b" opacity="0.8"/>
+                </svg>
+            </div>
+            <h1 class="start-title">SSN Simulator</h1>
             <div class="instructions">
                 <h2>Objective</h2>
                 <p>Defeat all enemies on the map without dying!</p>
@@ -1931,7 +1948,7 @@
                 gameOverScreen.classList.remove('show'); // Hide Game Over screen
                 isGameOver = false; // Reset game over flag
             
-                currentLevel = 1; // Reset to level 1 on death
+                if (currentLevel !== 0) currentLevel = 1; // Reset to level 1 on death (level 0 stays as test arena)
                 submarine.worldX = WORLD_WIDTH / 2; // Reset player to start position
                 submarine.worldY = WORLD_HEIGHT - 200;
                 
@@ -1983,8 +2000,10 @@
              * Advances the player to the next level.
              */
             function advanceToNextLevel() {
-                currentLevel++;
-                setupNewLevel(); // This already handles healing, reloading, and new map generation.
+                if (currentLevel !== 0) currentLevel++; // Level 0 (test arena) resets to itself
+                submarine.worldX = WORLD_WIDTH / 2;
+                submarine.worldY = WORLD_HEIGHT - 200;
+                setupNewLevel();
             }
 
             // --- Admin Panel ---
@@ -2605,10 +2624,22 @@
             
                 // --- State Transition & AI Logic ---
                 const canSeePlayer = (submarine.depth <= FADE_START_DEPTH && Math.sqrt((enemySub.worldX - submarine.worldX)**2 + (enemySub.worldY - submarine.worldY)**2) < ENEMY_SUB_DETECTION_RANGE);
-                let playerTorpedoIsTracking = torpedoes.some(t => t.type === 'player-torpedo' && t.masterIdToTrack === enemySub.assignedMasterId);
-            
-                // High-priority transitions
-                if (canSeePlayer && enemySub.aiState !== 'FLEEING') {
+                // Detect any player torpedo actively homing on this sub by masterId,
+                // OR any player torpedo within close proximity (catches untargeted torpedoes)
+                let playerTorpedoIsTracking = torpedoes.some(t => {
+                    if (t.type !== 'player-torpedo') return false;
+                    if (enemySub.assignedMasterId !== null && t.masterIdToTrack === enemySub.assignedMasterId) return true;
+                    const distSq = (t.worldX - enemySub.worldX)**2 + (t.worldY - enemySub.worldY)**2;
+                    return distSq < 400 * 400;
+                });
+
+                // High-priority transitions — torpedo evasion is HIGHEST priority
+                if (playerTorpedoIsTracking && enemySub.aiState !== 'FLEEING') {
+                    enemySub.aiState = 'FLEEING';
+                    enemySub.isFleeingToResupply = false;
+                    enemySub.fleeingFromThreat = true;
+                    enemySub.lastHuntTriggerTime = currentTime;
+                } else if (canSeePlayer && enemySub.aiState !== 'FLEEING') {
                     if (enemySub.aiState !== 'COMBAT') {
                         enemySub.torpedoesFiredInVolley = 0;
                         enemySub.strafeDirection = (Math.random() < 0.5) ? 1 : -1;
@@ -2616,10 +2647,6 @@
                     enemySub.aiState = 'COMBAT';
                     enemySub.lastCombatTriggerTime = currentTime;
                     enemySub.huntLocation = { x: submarine.worldX, y: submarine.worldY };
-                } else if (enemySub.aiState === 'COMBAT' && playerTorpedoIsTracking) {
-                    enemySub.aiState = 'FLEEING';
-                    enemySub.fleeingFromThreat = true;
-                    enemySub.lastHuntTriggerTime = currentTime;
                 } else if (enemySub.aiState !== 'AVOIDING' && enemySub.aiState !== 'FLEEING' && enemySub.aiState !== 'COMBAT') {
                     let huntTriggered = false;
                     let disturbanceLocation = null;
