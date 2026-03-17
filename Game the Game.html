@@ -2550,10 +2550,11 @@
         let db;
         let auth;
         let userId = 'loading...'; // Default until authenticated
+        let firebaseReady = false; // True once auth is resolved
 
         /**
          * Initializes Firebase application and authentication.
-         * Sets up an authentication state listener to get the user ID.
+         * Returns a promise that resolves once the user is authenticated.
          */
         async function initializeFirebase() {
             try {
@@ -2561,20 +2562,33 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Listen for authentication state changes to get the current user's UID.
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        // console.log("Firebase user authenticated. UID:", userId); // For debugging
-                    } else {
-                        // If no user is logged in, try to sign in anonymously.
-                        // This is crucial for environments where __initial_auth_token might not be present.
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
+                // Wait for initial auth state to resolve
+                await new Promise((resolve, reject) => {
+                    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                        try {
+                            if (user) {
+                                userId = user.uid;
+                                firebaseReady = true;
+                                unsubscribe();
+                                resolve();
+                            } else {
+                                // Sign in anonymously if no custom token
+                                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                    await signInWithCustomToken(auth, __initial_auth_token);
+                                } else {
+                                    await signInAnonymously(auth);
+                                }
+                                // onAuthStateChanged will fire again with the new user
+                            }
+                        } catch (err) {
+                            console.error("Auth error:", err);
+                            if (err.code === 'auth/operation-not-allowed') {
+                                console.error("Anonymous auth is not enabled in Firebase Console. Go to Authentication > Sign-in method > Anonymous and enable it.");
+                            }
+                            unsubscribe();
+                            reject(err);
                         }
-                    }
+                    });
                 });
 
             } catch (error) {
@@ -2594,7 +2608,7 @@
 
         /** Create an online party game as host */
         async function createOnlineGame() {
-            if (!db || !userId || userId === 'loading...') {
+            if (!firebaseReady || !db) {
                 tempAlert("Firebase not ready yet. Please try again.");
                 return;
             }
@@ -2644,7 +2658,7 @@
 
         /** Join an existing online game */
         async function joinOnlineGame(code, displayName) {
-            if (!db || !userId || userId === 'loading...') {
+            if (!firebaseReady || !db) {
                 tempAlert("Firebase not ready yet. Please try again.");
                 return;
             }
@@ -5096,7 +5110,15 @@
          * Sets up initial screen, game state, and all event listeners.
          */
         window.onload = async function() {
-            initializeFirebase();
+            // Initialize Firebase but don't block page load if it fails
+            try {
+                await Promise.race([
+                    initializeFirebase(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase auth timeout')), 10000))
+                ]);
+            } catch (err) {
+                console.warn("Firebase init incomplete (online features may not work):", err.message);
+            }
             showScreen('title-screen');
             resetGameState();
             await loadQuestions();
