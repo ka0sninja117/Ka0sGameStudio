@@ -2291,17 +2291,18 @@
                     osc.stop(now + offset + 0.35);
                 });
             } else if (type === 'wrong') {
-                // Soft low descending tone
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(330, now);
-                osc.frequency.exponentialRampToValueAtTime(220, now + 0.25);
-                gain.gain.setValueAtTime(0.12, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-                osc.connect(gain).connect(ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.35);
+                // Low descending two-tone buzz — more noticeable
+                [0, 0.15].forEach((offset, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = i === 0 ? 330 : 220;
+                    gain.gain.setValueAtTime(0.18, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.25);
+                    osc.connect(gain).connect(ctx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.3);
+                });
             } else if (type === 'tick') {
                 // Subtle tick for last 3 seconds
                 const osc = ctx.createOscillator();
