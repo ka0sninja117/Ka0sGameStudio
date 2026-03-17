@@ -918,7 +918,24 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.23';
+        const GAME_VERSION = 'v1.24';
+
+        // --- Grub sprite sheet (8 directional frames) ---
+        const GRUB_DIRS = ['east','south-east','south','south-west','west','north-west','north','north-east'];
+        const grubSprites = {};
+        GRUB_DIRS.forEach(dir => {
+            const img = new Image();
+            img.src = `Grub/rotations/${dir}.png`;
+            grubSprites[dir] = img;
+        });
+
+        // Returns the correct directional sprite for a given world-space angle (radians).
+        // Angle 0 = east, increases clockwise (canvas Y-down convention).
+        function getGrubSprite(angle) {
+            const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+            const idx = Math.round(a / (Math.PI / 4)) % 8;
+            return grubSprites[GRUB_DIRS[idx]];
+        }
         document.getElementById('startScreenVersion').textContent = GAME_VERSION;
         document.getElementById('adminPanelVersion').textContent = GAME_VERSION;
 
@@ -3623,15 +3640,9 @@
                 ctx.globalAlpha = isBurrowing ? (playerAbilities.burrow >= 2 ? BURROW_LV2_ALPHA : 0.4)
                     : isInDodgeIframe ? 0.45
                     : (isInFoliage ? 0.5 : 1);
-                ctx.rotate(playerDirectionAngle - Math.PI / 2 + (playerGeneticOrigin ? playerGeneticOrigin.rotation : 0));
-
-                const emojiFontSize = playerSize * 1.5;
-                ctx.font = `${emojiFontSize}px serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = 'white';
-                const emojiVisualOffsetY = playerSize * 0.2;
-                ctx.fillText(playerGeneticOrigin ? playerGeneticOrigin.emoji : '🦂', 0, emojiVisualOffsetY);
+                // Sprite direction is baked into the image — no canvas rotation needed.
+                const grubSprite = getGrubSprite(playerDirectionAngle);
+                ctx.drawImage(grubSprite, -playerSize, -playerSize, playerSize * 2, playerSize * 2);
 
                 // Draw player hitcircle (wireframe)
                 if (showHitCircles) {
