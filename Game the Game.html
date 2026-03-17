@@ -1867,6 +1867,146 @@
             transform: translateY(0);
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
+
+        /* --- Online Multiplayer Styles --- */
+        .join-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80%;
+            max-width: 300px;
+            gap: 4px;
+        }
+        .join-form label {
+            font-family: 'Comic Neue', cursive;
+            font-weight: bold;
+            font-size: 0.8em;
+            align-self: flex-start;
+        }
+        .styled-input {
+            font-family: 'Comic Neue', cursive;
+            font-size: 1em;
+            padding: 10px 14px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .styled-input:focus {
+            border-color: #2196F3;
+        }
+        .join-code-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .join-code-label {
+            font-family: 'Comic Neue', cursive;
+            font-size: 0.75em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .join-code-value {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 2em;
+            letter-spacing: 8px;
+            color: #1565C0;
+            background: rgba(33, 150, 243, 0.1);
+            padding: 8px 20px;
+            border-radius: 10px;
+            border: 2px dashed #2196F3;
+        }
+        .party-start-buttons {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 400px;
+            justify-content: center;
+        }
+        .party-start-buttons .nav-button {
+            flex: 1;
+        }
+        #lobby-teams-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 500px;
+        }
+        .lobby-team-col {
+            flex: 1;
+            min-width: 100px;
+            max-width: 150px;
+            border-radius: 10px;
+            padding: 8px;
+            text-align: center;
+        }
+        .lobby-team-col h4 {
+            font-family: 'Comic Neue', cursive;
+            font-size: 0.8em;
+            margin: 0 0 6px 0;
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .lobby-team-col .lobby-player-name {
+            font-family: 'Comic Neue', cursive;
+            font-size: 0.75em;
+            background: rgba(255,255,255,0.7);
+            border-radius: 6px;
+            padding: 3px 6px;
+            margin: 3px 0;
+        }
+        #lobby-team-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .lobby-team-pick-btn {
+            font-family: 'Comic Neue', cursive;
+            font-weight: bold;
+            font-size: 0.8em;
+            padding: 8px 16px;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .lobby-team-pick-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        /* Waiting overlay for non-active teams on board screen */
+        #online-waiting-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.85);
+            z-index: 50;
+            border-radius: 20px;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        #online-waiting-overlay .waiting-text {
+            font-family: 'Comic Neue', cursive;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+        }
+        #online-waiting-overlay .waiting-subtext {
+            font-family: 'Comic Neue', cursive;
+            font-size: 0.8em;
+            color: #888;
+        }
     </style>
 </head>
 <body>
@@ -1885,10 +2025,11 @@
             </div>
             <div class="main-menu-buttons">
                 <button id="party-game-button" class="challenge-button">Party</button>
-                <div class="solo-versus-row"> <!-- Renamed from solo-challenge-row -->
+                <div class="solo-versus-row">
                     <button id="solo-game-button" class="start-button">Solo</button>
-                    <button id="versus-mode-button" class="challenge-button">Versus</button> <!-- Updated ID and text -->
+                    <button id="versus-mode-button" class="challenge-button">Versus</button>
                 </div>
+                <button id="join-game-button" class="challenge-button" style="margin-top: 8px;">Join Online Game</button>
             </div>
             <span id="gtg-version" class="gtg-version-display"></span>
         </div>
@@ -1980,8 +2121,52 @@
                 <!-- Team name input fields will be dynamically added here -->
             </div>
 
-            <button id="start-party-game-button" class="nav-button next">Start Party Game</button>
+            <div class="party-start-buttons">
+                <button id="start-party-game-button" class="nav-button next">Play Locally</button>
+                <button id="start-online-party-button" class="nav-button next" style="background: linear-gradient(135deg, #2196F3 0%, #1565C0 100%); border-color: #1565C0;">Play Online</button>
+            </div>
             <button id="back-to-menu-party-setup" class="nav-button">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- Join Online Game Screen -->
+    <div id="join-screen" style="display: none;">
+        <div class="screen-container">
+            <h2>Join Online Game</h2>
+            <p>Enter the game code shown on the host's screen</p>
+            <div class="join-form">
+                <label for="join-display-name">Your Name</label>
+                <input type="text" id="join-display-name" class="styled-input" placeholder="Enter your name" maxlength="20" autocomplete="off">
+                <label for="join-code-input" style="margin-top: 10px;">Game Code</label>
+                <input type="text" id="join-code-input" class="styled-input" placeholder="e.g. ABCD" maxlength="4" style="text-transform: uppercase; letter-spacing: 6px; text-align: center; font-size: 1.4em;" autocomplete="off">
+                <p id="join-error" style="color: #F44336; font-size: 0.7em; display: none;"></p>
+                <button id="join-submit-button" class="nav-button next" style="margin-top: 10px;">Join Game</button>
+            </div>
+            <button id="back-to-menu-join" class="nav-button">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- Online Lobby Screen (host & players) -->
+    <div id="online-lobby-screen" style="display: none;">
+        <div class="screen-container">
+            <h2 id="lobby-title">Online Lobby</h2>
+            <div class="join-code-display">
+                <span class="join-code-label">Game Code</span>
+                <span id="lobby-join-code" class="join-code-value">----</span>
+            </div>
+            <div id="lobby-teams-container">
+                <!-- Team columns with player names rendered here -->
+            </div>
+            <p id="lobby-player-count" style="font-family: 'Comic Neue', cursive; font-size: 0.85em; color: #666;"></p>
+            <div id="lobby-team-picker" style="display: none;">
+                <p style="font-family: 'Comic Neue', cursive; font-weight: bold; margin-bottom: 5px;">Pick your team:</p>
+                <div id="lobby-team-buttons">
+                    <!-- Team pick buttons rendered here -->
+                </div>
+            </div>
+            <button id="lobby-start-button" class="nav-button next" style="display: none;">Start Game</button>
+            <p id="lobby-waiting-msg" style="font-family: 'Comic Neue', cursive; font-size: 0.8em; color: #999; display: none;">Waiting for host to start...</p>
+            <button id="lobby-leave-button" class="nav-button">Leave Lobby</button>
         </div>
     </div>
 
@@ -1997,6 +2182,10 @@
                 <!-- Jeopardy board will be dynamically generated here -->
             </div>
             <button id="back-to-menu-party-board" class="nav-button">End Party Game</button>
+            <div id="online-waiting-overlay">
+                <span class="waiting-text" id="waiting-team-text">Waiting for Team...</span>
+                <span class="waiting-subtext">Watch the board for their pick!</span>
+            </div>
         </div>
     </div>
 
@@ -2257,10 +2446,10 @@
         // Firebase imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Game Version
-        const GAME_VERSION = 'v1.3';
+        const GAME_VERSION = 'v1.4';
 
         // ─── Sound Engine (Web Audio API) ───
         let sfxEnabled = true;
@@ -2344,7 +2533,17 @@
 
         // Firebase Initialization (DO NOT MODIFY __app_id, __firebase_config, __initial_auth_token)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        // Use injected config (Canvas) if available, otherwise fall back to hosted project config
+        const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
+            ? JSON.parse(__firebase_config)
+            : {
+                apiKey: "AIzaSyD-Dc71ULo1l3XhkdG7nonSi7xoNqfppJU",
+                authDomain: "game-the-game-dd604.firebaseapp.com",
+                projectId: "game-the-game-dd604",
+                storageBucket: "game-the-game-dd604.firebasestorage.app",
+                messagingSenderId: "524732431791",
+                appId: "1:524732431791:web:96a4956e7d8956a5c0c35a"
+            };
 
         // Initialize Firebase services
         let app;
@@ -2381,6 +2580,485 @@
             } catch (error) {
                 console.error("Error initializing Firebase:", error);
             }
+        }
+
+        // ─── Online Multiplayer Functions ───
+
+        /** Generate a 4-char join code (no confusing chars) */
+        function generateJoinCode() {
+            const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
+            let code = '';
+            for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+            return code;
+        }
+
+        /** Create an online party game as host */
+        async function createOnlineGame() {
+            if (!db || !userId || userId === 'loading...') {
+                tempAlert("Firebase not ready yet. Please try again.");
+                return;
+            }
+            const code = generateJoinCode();
+            onlineGameCode = code;
+            isHost = true;
+            isOnlineParty = true;
+
+            // Build team names from the setup form
+            const teamNames = [];
+            for (let i = 1; i <= numTeams; i++) {
+                const nameInput = document.getElementById(`team-name-${i}`);
+                teamNames.push(nameInput ? nameInput.value.trim() || `Team ${i}` : `Team ${i}`);
+            }
+            myDisplayName = teamNames[0] + ' (Host)';
+            myTeamIndex = 0;
+
+            const gameData = {
+                hostId: userId,
+                status: 'lobby',
+                createdAt: serverTimestamp(),
+                teamCount: numTeams,
+                teamNames: teamNames,
+                teamColors: teamColors.slice(0, numTeams),
+                teamLabelColors: teamLabelColors.slice(0, numTeams),
+                players: {
+                    [userId]: { name: myDisplayName, teamIndex: 0 }
+                }
+            };
+
+            onlineGameDocRef = doc(db, 'games', code);
+            try {
+                await setDoc(onlineGameDocRef, gameData);
+                listenToGameDoc();
+                showScreen('online-lobby-screen');
+                document.getElementById('lobby-join-code').textContent = code;
+                document.getElementById('lobby-start-button').style.display = 'inline-block';
+                document.getElementById('lobby-waiting-msg').style.display = 'none';
+                document.getElementById('lobby-team-picker').style.display = 'none';
+            } catch (err) {
+                console.error("Error creating game:", err);
+                tempAlert("Failed to create game. Check your connection.");
+                isOnlineParty = false;
+                isHost = false;
+            }
+        }
+
+        /** Join an existing online game */
+        async function joinOnlineGame(code, displayName) {
+            if (!db || !userId || userId === 'loading...') {
+                tempAlert("Firebase not ready yet. Please try again.");
+                return;
+            }
+            code = code.toUpperCase().trim();
+            onlineGameCode = code;
+            onlineGameDocRef = doc(db, 'games', code);
+
+            try {
+                const snap = await getDoc(onlineGameDocRef);
+                if (!snap.exists()) {
+                    document.getElementById('join-error').textContent = 'Game not found. Check the code.';
+                    document.getElementById('join-error').style.display = 'block';
+                    return;
+                }
+                const data = snap.data();
+                if (data.status !== 'lobby') {
+                    document.getElementById('join-error').textContent = 'Game already in progress.';
+                    document.getElementById('join-error').style.display = 'block';
+                    return;
+                }
+
+                isOnlineParty = true;
+                isHost = false;
+                myDisplayName = displayName;
+                myTeamIndex = -1; // Not yet picked
+
+                // Add self to players list
+                await updateDoc(onlineGameDocRef, {
+                    [`players.${userId}`]: { name: displayName, teamIndex: -1 }
+                });
+
+                listenToGameDoc();
+                showScreen('online-lobby-screen');
+                document.getElementById('lobby-join-code').textContent = code;
+                document.getElementById('lobby-start-button').style.display = 'none';
+                document.getElementById('lobby-waiting-msg').style.display = 'block';
+            } catch (err) {
+                console.error("Error joining game:", err);
+                document.getElementById('join-error').textContent = 'Connection error. Try again.';
+                document.getElementById('join-error').style.display = 'block';
+            }
+        }
+
+        /** Pick a team in the lobby */
+        async function pickTeam(teamIdx) {
+            myTeamIndex = teamIdx;
+            try {
+                await updateDoc(onlineGameDocRef, {
+                    [`players.${userId}`]: { name: myDisplayName, teamIndex: teamIdx }
+                });
+            } catch (err) {
+                console.error("Error picking team:", err);
+            }
+        }
+
+        /** Leave the lobby / clean up */
+        async function leaveOnlineGame() {
+            if (onlineGameUnsubscribe) {
+                onlineGameUnsubscribe();
+                onlineGameUnsubscribe = null;
+            }
+            if (onlineGameDocRef && isOnlineParty) {
+                try {
+                    if (isHost) {
+                        await deleteDoc(onlineGameDocRef);
+                    } else {
+                        // Remove self from players
+                        const snap = await getDoc(onlineGameDocRef);
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            const updatedPlayers = { ...data.players };
+                            delete updatedPlayers[userId];
+                            await updateDoc(onlineGameDocRef, { players: updatedPlayers });
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error leaving game:", err);
+                }
+            }
+            isOnlineParty = false;
+            isHost = false;
+            onlineGameCode = '';
+            onlineGameDocRef = null;
+            myTeamIndex = -1;
+            lastSyncedPhase = '';
+        }
+
+        /** Listen to game document changes */
+        function listenToGameDoc() {
+            if (onlineGameUnsubscribe) onlineGameUnsubscribe();
+            onlineGameUnsubscribe = onSnapshot(onlineGameDocRef, (snap) => {
+                if (!snap.exists()) {
+                    // Game was deleted (host left)
+                    tempAlert("The host ended the game.");
+                    isOnlineParty = false;
+                    isHost = false;
+                    showScreen('title-screen');
+                    return;
+                }
+                const data = snap.data();
+                handleGameDocUpdate(data);
+            });
+        }
+
+        /** Render lobby UI from game doc data */
+        function renderLobby(data) {
+            const container = document.getElementById('lobby-teams-container');
+            container.innerHTML = '';
+            const teamButtons = document.getElementById('lobby-team-buttons');
+            teamButtons.innerHTML = '';
+
+            // Show team columns with players
+            for (let t = 0; t < data.teamCount; t++) {
+                const col = document.createElement('div');
+                col.className = 'lobby-team-col';
+                col.style.background = data.teamLabelColors[t];
+                const h4 = document.createElement('h4');
+                h4.textContent = data.teamNames[t];
+                col.appendChild(h4);
+
+                // Add players in this team
+                if (data.players) {
+                    Object.values(data.players).forEach(p => {
+                        if (p.teamIndex === t) {
+                            const div = document.createElement('div');
+                            div.className = 'lobby-player-name';
+                            div.textContent = p.name;
+                            col.appendChild(div);
+                        }
+                    });
+                }
+                container.appendChild(col);
+
+                // Team pick button (for joiners who haven't picked yet)
+                const btn = document.createElement('button');
+                btn.className = 'lobby-team-pick-btn';
+                btn.style.background = data.teamLabelColors[t];
+                btn.textContent = data.teamNames[t];
+                btn.addEventListener('click', () => pickTeam(t));
+                teamButtons.appendChild(btn);
+            }
+
+            // Show team picker for joiners who haven't picked
+            if (!isHost && myTeamIndex === -1) {
+                document.getElementById('lobby-team-picker').style.display = 'block';
+            } else {
+                document.getElementById('lobby-team-picker').style.display = 'none';
+            }
+
+            // Player count
+            const playerCount = data.players ? Object.keys(data.players).length : 0;
+            document.getElementById('lobby-player-count').textContent = `${playerCount} player${playerCount !== 1 ? 's' : ''} connected`;
+        }
+
+        /** Handle real-time game document updates */
+        function handleGameDocUpdate(data) {
+            if (data.status === 'lobby') {
+                renderLobby(data);
+                return;
+            }
+
+            if (data.status === 'finished') {
+                // Game over — show final results if not already there
+                return;
+            }
+
+            // status === 'playing' — sync game state
+
+            // Non-host players: initialize local game state on first playing update
+            if (!isHost && partyTeams.length === 0 && data.boardSetup) {
+                gameMode = 'party';
+                numTeams = data.teamCount;
+                partyTeams = Array.from({ length: numTeams }, (_, i) => ({
+                    name: data.teamNames[i],
+                    score: data.scores ? data.scores[i] : 0,
+                    color: teamColors[i % teamColors.length],
+                    labelColor: teamLabelColors[i % teamLabelColors.length],
+                    maxPositiveGain: 0,
+                    maxNegativeLoss: 0
+                }));
+                playerAnswersLog = [];
+                gameStats = {
+                    freeText: { correct: 0, incorrect: 0 },
+                    multipleChoice: { correct: 0, incorrect: 0 },
+                    trueFalse: { correct: 0, incorrect: 0 },
+                    easyQuestionsAnswered: 0,
+                    hardQuestionsAnswered: 0,
+                    answeredQuestionsLog: []
+                };
+
+                // Rebuild jeopardyBoard from boardSetup
+                jeopardyBoard = {};
+                const categories = data.boardSetup.categories;
+                categories.forEach(cat => {
+                    jeopardyBoard[cat] = {};
+                    JEOPARDY_POINT_VALUES.forEach(pts => {
+                        const key = `${cat}|${pts}`;
+                        const qIdx = data.boardSetup.questionIndices[key] ?? -1;
+                        jeopardyBoard[cat][pts] = {
+                            questionIndex: qIdx,
+                            answered: false,
+                            isCorrect: null,
+                            teamIndex: null,
+                            pointsValue: pts
+                        };
+                    });
+                });
+            }
+
+            const phase = data.phase;
+            const isMyTurn = (data.currentTeamIndex === myTeamIndex);
+
+            // Update local scores from Firestore
+            if (data.scores && partyTeams.length > 0) {
+                data.scores.forEach((s, i) => {
+                    if (partyTeams[i]) partyTeams[i].score = s;
+                });
+            }
+
+            // Update board state from Firestore
+            if (data.boardCells) {
+                Object.entries(data.boardCells).forEach(([key, cell]) => {
+                    const [cat, pts] = key.split('|');
+                    if (jeopardyBoard[cat] && jeopardyBoard[cat][Number(pts)]) {
+                        jeopardyBoard[cat][Number(pts)].answered = cell.answered;
+                        jeopardyBoard[cat][Number(pts)].isCorrect = cell.isCorrect;
+                        jeopardyBoard[cat][Number(pts)].teamIndex = cell.teamIndex;
+                    }
+                });
+            }
+
+            currentTeamIndex = data.currentTeamIndex;
+
+            if (phase === 'board') {
+                showScreen('party-board-screen');
+                renderJeopardyBoard();
+                updateAllTeamsScoreSummary();
+
+                // Show waiting overlay for non-active teams
+                if (!isMyTurn) {
+                    const overlay = document.getElementById('online-waiting-overlay');
+                    const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
+                    document.getElementById('waiting-team-text').textContent = `${teamName}'s turn`;
+                    overlay.style.display = 'flex';
+                } else {
+                    document.getElementById('online-waiting-overlay').style.display = 'none';
+                }
+            } else if (phase === 'selectType' && !isMyTurn) {
+                // Non-active player sees waiting screen with category info
+                showScreen('party-board-screen');
+                renderJeopardyBoard();
+                const overlay = document.getElementById('online-waiting-overlay');
+                const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
+                document.getElementById('waiting-team-text').textContent = `${teamName} is choosing...`;
+                overlay.style.display = 'flex';
+            } else if (phase === 'answering' && !isMyTurn) {
+                // Non-active players see the question but can't interact
+                showScreen('game-screen');
+                document.getElementById('question-display').textContent = data.questionText || '';
+                document.getElementById('response-selection-area').style.display = 'none';
+                document.getElementById('response-input-area').innerHTML = '<p style="font-family: Comic Neue, cursive; color: #888; margin-top: 20px;">Waiting for answer...</p>';
+                document.getElementById('response-input-area').style.display = 'flex';
+                document.getElementById('countdown-timer').style.display = 'none';
+            } else if (phase === 'result') {
+                // Everyone sees the result
+                if (data.lastResult && lastSyncedPhase !== 'result_' + data.lastResult.questionText) {
+                    lastSyncedPhase = 'result_' + data.lastResult.questionText;
+                    const r = data.lastResult;
+
+                    // Sync answer type for proper result rendering
+                    if (data.selectedAnswerType) selectedAnswerType = data.selectedAnswerType;
+                    if (r.answerLogEntry && r.answerLogEntry.trueFalseStatement) {
+                        currentTrueFalseStatement = r.answerLogEntry.trueFalseStatement;
+                    }
+
+                    // Update local answer log
+                    if (r.answerLogEntry) {
+                        playerAnswersLog.push(r.answerLogEntry);
+                    }
+
+                    // Play sound effect for result
+                    playSfx(r.isCorrect ? 'correct' : 'wrong');
+
+                    showResultScreen(
+                        r.questionText, r.playerAnswer, r.correctAnswer,
+                        r.isCorrect, r.pointsEarned, r.basePoints, r.multiplier
+                    );
+
+                    // Only active team can advance
+                    if (!isMyTurn) {
+                        document.getElementById('next-question-button').style.display = 'none';
+                        document.getElementById('end-game-button').style.display = 'none';
+                    }
+                }
+            } else if (phase === 'gameOver') {
+                showPartyResultsScreen();
+            }
+        }
+
+        /** Push current game state to Firestore (called by active player) */
+        async function pushOnlineState(phase, extras = {}) {
+            if (!isOnlineParty || !onlineGameDocRef) return;
+
+            const scores = partyTeams.map(t => t.score);
+
+            // Flatten board state
+            const boardCells = {};
+            Object.entries(jeopardyBoard).forEach(([cat, points]) => {
+                Object.entries(points).forEach(([pts, cell]) => {
+                    boardCells[`${cat}|${pts}`] = {
+                        answered: cell.answered,
+                        isCorrect: cell.isCorrect,
+                        teamIndex: cell.teamIndex
+                    };
+                });
+            });
+
+            const update = {
+                phase: phase,
+                currentTeamIndex: currentTeamIndex,
+                scores: scores,
+                boardCells: boardCells,
+                ...extras
+            };
+
+            try {
+                await updateDoc(onlineGameDocRef, update);
+            } catch (err) {
+                console.error("Error pushing state:", err);
+            }
+        }
+
+        /** Host starts the online game */
+        async function hostStartOnlineGame() {
+            if (!isHost) return;
+
+            // Build partyTeams from the game doc data
+            const snap = await getDoc(onlineGameDocRef);
+            if (!snap.exists()) return;
+            const data = snap.data();
+
+            // Validate all players have picked teams
+            if (data.players) {
+                const unassigned = Object.values(data.players).filter(p => p.teamIndex === -1);
+                if (unassigned.length > 0) {
+                    tempAlert("Some players haven't picked a team yet!");
+                    return;
+                }
+            }
+
+            numTeams = data.teamCount;
+            gameMode = 'party';
+
+            partyTeams = Array.from({ length: numTeams }, (_, i) => ({
+                name: data.teamNames[i],
+                score: 0,
+                color: teamColors[i % teamColors.length],
+                labelColor: teamLabelColors[i % teamLabelColors.length],
+                maxPositiveGain: 0,
+                maxNegativeLoss: 0
+            }));
+
+            currentTeamIndex = 0;
+            currentQuestionIndex = 0;
+            totalPoints = 0;
+            hasGameBeenPlayed = false;
+            playerAnswersLog = [];
+            gameStats = {
+                freeText: { correct: 0, incorrect: 0 },
+                multipleChoice: { correct: 0, incorrect: 0 },
+                trueFalse: { correct: 0, incorrect: 0 },
+                easyQuestionsAnswered: 0,
+                hardQuestionsAnswered: 0,
+                answeredQuestionsLog: []
+            };
+
+            setupJeopardyBoard();
+
+            // Push initial state
+            await updateDoc(onlineGameDocRef, {
+                status: 'playing',
+                phase: 'board',
+                currentTeamIndex: 0,
+                scores: partyTeams.map(() => 0),
+                boardCells: (() => {
+                    const cells = {};
+                    Object.entries(jeopardyBoard).forEach(([cat, points]) => {
+                        Object.entries(points).forEach(([pts, cell]) => {
+                            cells[`${cat}|${pts}`] = {
+                                answered: cell.answered,
+                                isCorrect: cell.isCorrect,
+                                teamIndex: cell.teamIndex
+                            };
+                        });
+                    });
+                    return cells;
+                })(),
+                // Send question indices so joiners can build the board
+                boardSetup: (() => {
+                    const setup = { categories: Object.keys(jeopardyBoard) };
+                    const indices = {};
+                    Object.entries(jeopardyBoard).forEach(([cat, points]) => {
+                        Object.entries(points).forEach(([pts, cell]) => {
+                            indices[`${cat}|${pts}`] = cell.questionIndex;
+                        });
+                    });
+                    setup.questionIndices = indices;
+                    return setup;
+                })()
+            });
+
+            showScreen('party-board-screen');
+            renderJeopardyBoard();
+            updateAllTeamsScoreSummary();
         }
 
         // --- Trivia Questions (loaded from external JSON) ---
@@ -2470,6 +3148,16 @@
         const NUM_JEOPARDY_CATEGORIES = 5; // Total categories on the board (incl. Random)
         let currentJeopardyPoints = 0; // Points value of the currently selected Jeopardy question
 
+        // ─── Online Party State ───
+        let isOnlineParty = false;        // True when playing online (vs local pass-the-device)
+        let isHost = false;               // True if this client created the game
+        let onlineGameCode = '';          // 4-char join code
+        let onlineGameDocRef = null;      // Firestore document reference
+        let onlineGameUnsubscribe = null; // onSnapshot unsubscribe function
+        let myTeamIndex = -1;             // Which team the local player is on
+        let myDisplayName = '';           // Player's display name
+        let lastSyncedPhase = '';         // Prevent re-processing same phase
+
         const TIMER_DURATION_SELECTION = 5; // Seconds for response type selection
 
         // Variables to store current question data and player's answer for results screen
@@ -2510,6 +3198,9 @@
             document.getElementById('party-info-screen').style.display = 'none';
             document.getElementById('party-setup-screen').style.display = 'none';
             document.getElementById('party-board-screen').style.display = 'none';
+            document.getElementById('join-screen').style.display = 'none';
+            document.getElementById('online-lobby-screen').style.display = 'none';
+            document.getElementById('online-waiting-overlay').style.display = 'none';
             
             // Hide global points display by default and for party mode specifically
             document.getElementById('points-total').style.display = 'none';
@@ -2737,6 +3428,9 @@
          * @param {string} type - The selected answer type ('freeText', 'multipleChoice', 'trueFalse').
          */
         function selectAnswerType(type) {
+            // Online mode: only active team can select answer type
+            if (isOnlineParty && currentTeamIndex !== myTeamIndex) return;
+
             playSfx('click');
             // Remove the party-selection-mode class from game-screen when an answer type is selected
             document.getElementById('game-screen').classList.remove('party-selection-mode');
@@ -2762,6 +3456,14 @@
             }
 
             renderResponseInput(type); // Render the dynamic input elements
+
+            // Push online state: question is now visible
+            if (isOnlineParty) {
+                pushOnlineState('answering', {
+                    selectedAnswerType: type,
+                    questionText: currentQuestionData.question
+                });
+            }
         }
 
         /**
@@ -3004,6 +3706,22 @@
                 multiplier
             );
             updatePointsDisplay(); // Update the global score display
+
+            // Push online result state
+            if (isOnlineParty) {
+                pushOnlineState('result', {
+                    lastResult: {
+                        questionText: currentQuestionData.question,
+                        playerAnswer: playerSelectedAnswer,
+                        correctAnswer: currentQuestionData.correctAnswer,
+                        isCorrect: isCorrect,
+                        pointsEarned: pointsEarned,
+                        basePoints: basePoints,
+                        multiplier: multiplier,
+                        answerLogEntry: playerAnswersLog.length > 0 ? playerAnswersLog[playerAnswersLog.length - 1] : null
+                    }
+                });
+            }
         }
 
         /**
@@ -3107,6 +3825,7 @@
             if (gameMode === 'party') {
                 // In party mode, check if all questions on the board are answered
                 if (allJeopardyQuestionsAnswered()) {
+                    if (isOnlineParty) pushOnlineState('gameOver');
                     showPartyResultsScreen(); // End game if board is clear
                     return;
                 }
@@ -3115,6 +3834,11 @@
                 showScreen('party-board-screen'); // Return to the Jeopardy board
                 renderJeopardyBoard(); // Re-render the board to reflect answered cells
                 updateAllTeamsScoreSummary(); // Update summary panel
+
+                // Push online state: back to board, next team's turn
+                if (isOnlineParty) {
+                    pushOnlineState('board', { currentCell: null, lastResult: null });
+                }
             } else if (gameMode === 'challenge' && currentQuestionIndex + 1 >= player1ChallengeData.answersLog.length) {
                 showChallengeResultsScreen(); // End challenge if all questions are played
             } else if (gameMode === 'normal' && currentQuestionIndex + 1 >= challengeQuestionsOrder.length) {
@@ -3828,6 +4552,11 @@
          * @param {number} points - The point value of the clicked cell.
          */
         function handleJeopardyCellClick(category, points) {
+            // Online mode: only active team can pick cells
+            if (isOnlineParty && currentTeamIndex !== myTeamIndex) {
+                return;
+            }
+
             const questionInfo = jeopardyBoard[category][points];
 
             // Prevent interaction if cell is already answered or has no question
@@ -3857,6 +4586,15 @@
             // The initial state of the game screen (category:points, no timer, choose type)
             // is set up directly by this function. The actual question and answer timer
             // will be handled by selectAnswerType().
+
+            // Push online state: cell selected, choosing answer type
+            if (isOnlineParty) {
+                pushOnlineState('selectType', {
+                    currentCell: { category, points },
+                    questionText: null,
+                    lastResult: null
+                });
+            }
         }
 
         /**
@@ -4205,6 +4943,11 @@
             };
             updatePointsDisplay();
             document.getElementById('points-total').style.display = 'none';
+
+            // Clean up online party state
+            if (isOnlineParty) {
+                leaveOnlineGame();
+            }
         }
 
         /**
@@ -4372,10 +5115,65 @@
             document.getElementById('party-game-button').addEventListener('click', () => {
                 showScreen('party-info-screen');
             });
-            document.getElementById('versus-mode-button').addEventListener('click', () => { // Updated ID
+            document.getElementById('versus-mode-button').addEventListener('click', () => {
                 document.getElementById('challenge-code-input').value = '';
                 document.getElementById('challenge-feedback').style.display = 'none';
                 showScreen('challenge-screen');
+            });
+
+            // Join online game button (main menu)
+            document.getElementById('join-game-button').addEventListener('click', () => {
+                document.getElementById('join-code-input').value = '';
+                document.getElementById('join-display-name').value = '';
+                document.getElementById('join-error').style.display = 'none';
+                showScreen('join-screen');
+            });
+
+            // Join screen submit
+            document.getElementById('join-submit-button').addEventListener('click', () => {
+                const code = document.getElementById('join-code-input').value.trim();
+                const name = document.getElementById('join-display-name').value.trim();
+                if (!name) {
+                    document.getElementById('join-error').textContent = 'Please enter your name.';
+                    document.getElementById('join-error').style.display = 'block';
+                    return;
+                }
+                if (code.length !== 4) {
+                    document.getElementById('join-error').textContent = 'Code must be 4 characters.';
+                    document.getElementById('join-error').style.display = 'block';
+                    return;
+                }
+                document.getElementById('join-error').style.display = 'none';
+                joinOnlineGame(code, name);
+            });
+
+            // Join screen back
+            document.getElementById('back-to-menu-join').addEventListener('click', () => {
+                returnToMenu();
+            });
+
+            // Online party setup button
+            document.getElementById('start-online-party-button').addEventListener('click', () => {
+                // Validate team names
+                for (let i = 1; i <= numTeams; i++) {
+                    const teamNameInput = document.getElementById(`team-name-${i}`);
+                    if (!teamNameInput.value.trim()) {
+                        tempAlert(`Please enter a name for Team ${i}.`);
+                        return;
+                    }
+                }
+                createOnlineGame();
+            });
+
+            // Lobby start button (host only)
+            document.getElementById('lobby-start-button').addEventListener('click', () => {
+                hostStartOnlineGame();
+            });
+
+            // Lobby leave button
+            document.getElementById('lobby-leave-button').addEventListener('click', async () => {
+                await leaveOnlineGame();
+                returnToMenu();
             });
 
             // Info screen (solo)
