@@ -627,6 +627,37 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
+        .tf-statement-box {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #e2b714;
+            border-radius: 10px;
+            padding: 12px 18px;
+            margin: 0 0 12px 0;
+            width: 90%;
+            box-sizing: border-box;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .tf-statement-label {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.55em;
+            color: #e2b714;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .tf-statement-text {
+            font-family: 'Comic Neue', cursive;
+            font-size: 1.05em;
+            font-weight: bold;
+            color: #fff;
+            line-height: 1.4;
+            text-align: center;
+            margin: 0;
+        }
+
         .mc-tf-option-button {
             background: linear-gradient(135deg, #4CAF50 0%, #2E8B57 100%);
             color: #fff;
@@ -2707,12 +2738,17 @@
                 const tfStatementOptions = [currentQuestionData.correctAnswer, ...currentQuestionData.incorrectAnswers];
                 currentTrueFalseStatement = tfStatementOptions[Math.floor(Math.random() * tfStatementOptions.length)];
 
-                const statementP = document.createElement('p');
-                statementP.textContent = `Statement: "${currentTrueFalseStatement}"`;
-                statementP.style.fontFamily = "'Comic Neue', cursive";
-                statementP.style.fontSize = '0.9em';
-                statementP.style.margin = '0 0 10px 0';
-                inputArea.appendChild(statementP);
+                const statementBox = document.createElement('div');
+                statementBox.className = 'tf-statement-box';
+                const statementLabel = document.createElement('span');
+                statementLabel.className = 'tf-statement-label';
+                statementLabel.textContent = 'Answer';
+                statementBox.appendChild(statementLabel);
+                const statementText = document.createElement('p');
+                statementText.className = 'tf-statement-text';
+                statementText.textContent = currentTrueFalseStatement;
+                statementBox.appendChild(statementText);
+                inputArea.appendChild(statementBox);
 
                 // True button
                 const trueWrapperDiv = document.createElement('div');
