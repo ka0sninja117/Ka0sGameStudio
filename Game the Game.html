@@ -2558,9 +2558,11 @@
          */
         async function initializeFirebase() {
             try {
+                console.log("[Firebase] Initializing with config:", firebaseConfig.projectId);
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
+                console.log("[Firebase] App + Firestore + Auth created");
 
                 // Wait for initial auth state to resolve
                 await new Promise((resolve, reject) => {
@@ -2569,10 +2571,11 @@
                             if (user) {
                                 userId = user.uid;
                                 firebaseReady = true;
+                                console.log("[Firebase] Authenticated:", userId);
                                 unsubscribe();
                                 resolve();
                             } else {
-                                // Sign in anonymously if no custom token
+                                console.log("[Firebase] No user, signing in anonymously...");
                                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                                     await signInWithCustomToken(auth, __initial_auth_token);
                                 } else {
@@ -2581,10 +2584,7 @@
                                 // onAuthStateChanged will fire again with the new user
                             }
                         } catch (err) {
-                            console.error("Auth error:", err);
-                            if (err.code === 'auth/operation-not-allowed') {
-                                console.error("Anonymous auth is not enabled in Firebase Console. Go to Authentication > Sign-in method > Anonymous and enable it.");
-                            }
+                            console.error("[Firebase] Auth error:", err.code, err.message);
                             unsubscribe();
                             reject(err);
                         }
@@ -2592,8 +2592,41 @@
                 });
 
             } catch (error) {
-                console.error("Error initializing Firebase:", error);
+                console.error("[Firebase] Init error:", error);
             }
+        }
+
+        /** Ensure Firebase is ready; attempt sign-in if needed. Returns true if ready. */
+        async function ensureFirebaseReady() {
+            if (firebaseReady && db && userId !== 'loading...') return true;
+            // If app exists but auth isn't done, try signing in
+            if (auth && !firebaseReady) {
+                try {
+                    console.log("[Firebase] Retrying anonymous sign-in...");
+                    const cred = await signInAnonymously(auth);
+                    userId = cred.user.uid;
+                    firebaseReady = true;
+                    console.log("[Firebase] Retry succeeded:", userId);
+                    return true;
+                } catch (err) {
+                    console.error("[Firebase] Retry failed:", err.code, err.message);
+                    tempAlert("Firebase auth failed: " + (err.message || 'Unknown error'));
+                    return false;
+                }
+            }
+            // If app doesn't exist yet, try full init
+            if (!app) {
+                try {
+                    await initializeFirebase();
+                    return firebaseReady;
+                } catch (err) {
+                    console.error("[Firebase] Full init retry failed:", err);
+                    tempAlert("Firebase init failed: " + (err.message || 'Unknown error'));
+                    return false;
+                }
+            }
+            tempAlert("Firebase not available. Check console for errors.");
+            return false;
         }
 
         // ─── Online Multiplayer Functions ───
@@ -2608,10 +2641,7 @@
 
         /** Create an online party game as host */
         async function createOnlineGame() {
-            if (!firebaseReady || !db) {
-                tempAlert("Firebase not ready yet. Please try again.");
-                return;
-            }
+            if (!(await ensureFirebaseReady())) return;
             const code = generateJoinCode();
             onlineGameCode = code;
             isHost = true;
@@ -2658,10 +2688,7 @@
 
         /** Join an existing online game */
         async function joinOnlineGame(code, displayName) {
-            if (!firebaseReady || !db) {
-                tempAlert("Firebase not ready yet. Please try again.");
-                return;
-            }
+            if (!(await ensureFirebaseReady())) return;
             code = code.toUpperCase().trim();
             onlineGameCode = code;
             onlineGameDocRef = doc(db, 'games', code);
