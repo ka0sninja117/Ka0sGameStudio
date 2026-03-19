@@ -2924,31 +2924,136 @@
                 renderJeopardyBoard();
                 updateAllTeamsScoreSummary();
 
-                // Show waiting overlay for non-active teams
+                // Show waiting overlay for non-active teams on the board
                 if (!isMyTurn) {
                     const overlay = document.getElementById('online-waiting-overlay');
                     const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
-                    document.getElementById('waiting-team-text').textContent = `${teamName}'s turn`;
+                    document.getElementById('waiting-team-text').textContent = `${teamName}'s turn to pick`;
                     overlay.style.display = 'flex';
                 } else {
                     document.getElementById('online-waiting-overlay').style.display = 'none';
                 }
-            } else if (phase === 'selectType' && !isMyTurn) {
-                // Non-active player sees waiting screen with category info
-                showScreen('party-board-screen');
-                renderJeopardyBoard();
-                const overlay = document.getElementById('online-waiting-overlay');
+            } else if (phase === 'selectType') {
+                // Everyone sees the category/points and answer type buttons
+                const cell = data.currentCell;
                 const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
-                document.getElementById('waiting-team-text').textContent = `${teamName} is choosing...`;
-                overlay.style.display = 'flex';
-            } else if (phase === 'answering' && !isMyTurn) {
-                // Non-active players see the question but can't interact
                 showScreen('game-screen');
+                document.getElementById('game-screen').classList.add('party-selection-mode');
+                document.getElementById('question-display').textContent = cell ? `${cell.category}: ${cell.points}` : '';
+                document.getElementById('countdown-timer').style.display = 'none';
+                document.getElementById('response-input-area').innerHTML = '';
+                document.getElementById('response-input-area').style.display = 'none';
+                document.getElementById('response-selection-area').style.display = 'flex';
+
+                if (!isMyTurn) {
+                    // Disable answer type buttons for non-active players
+                    document.querySelectorAll('.response-type-button').forEach(btn => {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                    });
+                    // Show whose turn label
+                    let turnLabel = document.getElementById('online-turn-label');
+                    if (!turnLabel) {
+                        turnLabel = document.createElement('p');
+                        turnLabel.id = 'online-turn-label';
+                        turnLabel.style.cssText = 'font-family: Comic Neue, cursive; font-weight: bold; color: ' + (partyTeams[data.currentTeamIndex]?.labelColor || '#333') + '; text-align: center; margin-bottom: 5px;';
+                        document.getElementById('response-selection-area').prepend(turnLabel);
+                    }
+                    turnLabel.textContent = `${teamName}'s turn`;
+                    turnLabel.style.color = partyTeams[data.currentTeamIndex]?.labelColor || '#333';
+                } else {
+                    // Re-enable for active player
+                    document.querySelectorAll('.response-type-button').forEach(btn => {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.style.cursor = 'pointer';
+                    });
+                    const turnLabel = document.getElementById('online-turn-label');
+                    if (turnLabel) turnLabel.remove();
+                }
+            } else if (phase === 'answering') {
+                // Everyone sees the question and answer options
+                const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
+                showScreen('game-screen');
+                document.getElementById('game-screen').classList.remove('party-selection-mode');
                 document.getElementById('question-display').textContent = data.questionText || '';
                 document.getElementById('response-selection-area').style.display = 'none';
-                document.getElementById('response-input-area').innerHTML = '<p style="font-family: Comic Neue, cursive; color: #888; margin-top: 20px;">Waiting for answer...</p>';
-                document.getElementById('response-input-area').style.display = 'flex';
                 document.getElementById('countdown-timer').style.display = 'none';
+
+                const inputArea = document.getElementById('response-input-area');
+                inputArea.innerHTML = '';
+                inputArea.style.display = 'flex';
+
+                if (isMyTurn) {
+                    // Active player: use normal renderResponseInput (already rendered locally)
+                    // Don't re-render — the active player already called selectAnswerType locally
+                } else {
+                    // Non-active players: render read-only answer options
+                    const opts = data.answerOptions;
+
+                    // Turn label at top
+                    const turnP = document.createElement('p');
+                    turnP.style.cssText = 'font-family: Comic Neue, cursive; font-weight: bold; color: ' + (partyTeams[data.currentTeamIndex]?.labelColor || '#333') + '; text-align: center; margin-bottom: 5px;';
+                    turnP.textContent = `${teamName} is answering...`;
+                    inputArea.appendChild(turnP);
+
+                    if (opts && opts.type === 'multipleChoice' && opts.choices) {
+                        opts.choices.forEach((answer, idx) => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'button-with-shortcut-wrapper';
+                            const shortcut = document.createElement('span');
+                            shortcut.className = 'keyboard-shortcut-label';
+                            shortcut.textContent = `${idx + 1}.`;
+                            wrapper.appendChild(shortcut);
+                            const btn = document.createElement('button');
+                            btn.textContent = answer;
+                            btn.className = 'mc-tf-option-button';
+                            btn.disabled = true;
+                            btn.style.opacity = '0.5';
+                            btn.style.cursor = 'not-allowed';
+                            wrapper.appendChild(btn);
+                            inputArea.appendChild(wrapper);
+                        });
+                    } else if (opts && opts.type === 'trueFalse') {
+                        // Show the T/F statement
+                        const stBox = document.createElement('div');
+                        stBox.className = 'tf-statement-box';
+                        const stLabel = document.createElement('span');
+                        stLabel.className = 'tf-statement-label';
+                        stLabel.textContent = 'Answer';
+                        stBox.appendChild(stLabel);
+                        const stText = document.createElement('p');
+                        stText.className = 'tf-statement-text';
+                        stText.textContent = opts.statement || '';
+                        stBox.appendChild(stText);
+                        inputArea.appendChild(stBox);
+
+                        ['True', 'False'].forEach((label, idx) => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'button-with-shortcut-wrapper';
+                            const shortcut = document.createElement('span');
+                            shortcut.className = 'keyboard-shortcut-label';
+                            shortcut.textContent = `${idx + 1}.`;
+                            wrapper.appendChild(shortcut);
+                            const btn = document.createElement('button');
+                            btn.textContent = label;
+                            btn.className = 'mc-tf-option-button';
+                            btn.disabled = true;
+                            btn.style.opacity = '0.5';
+                            btn.style.cursor = 'not-allowed';
+                            wrapper.appendChild(btn);
+                            inputArea.appendChild(wrapper);
+                        });
+                    } else if (opts && opts.type === 'freeText') {
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.placeholder = 'Type your answer here...';
+                        input.disabled = true;
+                        input.style.opacity = '0.5';
+                        inputArea.appendChild(input);
+                    }
+                }
             } else if (phase === 'result') {
                 // Everyone sees the result
                 if (data.lastResult && lastSyncedPhase !== 'result_' + data.lastResult.questionText) {
@@ -2974,10 +3079,24 @@
                         r.isCorrect, r.pointsEarned, r.basePoints, r.multiplier
                     );
 
-                    // Only active team can advance
+                    // Only active team can advance; others see a waiting label
                     if (!isMyTurn) {
                         document.getElementById('next-question-button').style.display = 'none';
                         document.getElementById('end-game-button').style.display = 'none';
+                        // Add waiting message in place of buttons
+                        const navButtons = document.querySelector('#result-screen .navigation-buttons');
+                        let waitMsg = document.getElementById('result-wait-msg');
+                        if (!waitMsg) {
+                            waitMsg = document.createElement('p');
+                            waitMsg.id = 'result-wait-msg';
+                            waitMsg.style.cssText = 'font-family: Comic Neue, cursive; color: #888; text-align: center; margin-top: 10px;';
+                            navButtons.appendChild(waitMsg);
+                        }
+                        const teamName = partyTeams[data.currentTeamIndex]?.name || 'Active team';
+                        waitMsg.textContent = `Waiting for ${teamName} to continue...`;
+                    } else {
+                        const waitMsg = document.getElementById('result-wait-msg');
+                        if (waitMsg) waitMsg.remove();
                     }
                 }
             } else if (phase === 'gameOver') {
@@ -3500,9 +3619,21 @@
 
             // Push online state: question is now visible
             if (isOnlineParty) {
+                // Gather answer options for non-active players to see
+                let answerOptions = null;
+                if (type === 'multipleChoice') {
+                    const allAnswers = [currentQuestionData.correctAnswer, ...currentQuestionData.incorrectAnswers];
+                    shuffleArray(allAnswers);
+                    answerOptions = { type: 'multipleChoice', choices: allAnswers };
+                } else if (type === 'trueFalse') {
+                    answerOptions = { type: 'trueFalse', statement: currentTrueFalseStatement };
+                } else {
+                    answerOptions = { type: 'freeText' };
+                }
                 pushOnlineState('answering', {
                     selectedAnswerType: type,
-                    questionText: currentQuestionData.question
+                    questionText: currentQuestionData.question,
+                    answerOptions: answerOptions
                 });
             }
         }
