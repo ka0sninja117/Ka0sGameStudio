@@ -2934,7 +2934,10 @@
                     document.getElementById('online-waiting-overlay').style.display = 'none';
                 }
             } else if (phase === 'selectType') {
-                // Everyone sees the category/points and answer type buttons
+                // Active player already rendered this locally — skip
+                if (isMyTurn) return;
+
+                // Non-active: show the same category/points + answer type buttons (disabled)
                 const cell = data.currentCell;
                 const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
                 showScreen('game-screen');
@@ -2945,35 +2948,28 @@
                 document.getElementById('response-input-area').style.display = 'none';
                 document.getElementById('response-selection-area').style.display = 'flex';
 
-                if (!isMyTurn) {
-                    // Disable answer type buttons for non-active players
-                    document.querySelectorAll('.response-type-button').forEach(btn => {
-                        btn.disabled = true;
-                        btn.style.opacity = '0.5';
-                        btn.style.cursor = 'not-allowed';
-                    });
-                    // Show whose turn label
-                    let turnLabel = document.getElementById('online-turn-label');
-                    if (!turnLabel) {
-                        turnLabel = document.createElement('p');
-                        turnLabel.id = 'online-turn-label';
-                        turnLabel.style.cssText = 'font-family: Comic Neue, cursive; font-weight: bold; color: ' + (partyTeams[data.currentTeamIndex]?.labelColor || '#333') + '; text-align: center; margin-bottom: 5px;';
-                        document.getElementById('response-selection-area').prepend(turnLabel);
-                    }
-                    turnLabel.textContent = `${teamName}'s turn`;
-                    turnLabel.style.color = partyTeams[data.currentTeamIndex]?.labelColor || '#333';
-                } else {
-                    // Re-enable for active player
-                    document.querySelectorAll('.response-type-button').forEach(btn => {
-                        btn.disabled = false;
-                        btn.style.opacity = '1';
-                        btn.style.cursor = 'pointer';
-                    });
-                    const turnLabel = document.getElementById('online-turn-label');
-                    if (turnLabel) turnLabel.remove();
+                // Disable answer type buttons
+                document.querySelectorAll('.response-type-button').forEach(btn => {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                });
+                // Show whose turn label
+                let turnLabel = document.getElementById('online-turn-label');
+                if (!turnLabel) {
+                    turnLabel = document.createElement('p');
+                    turnLabel.id = 'online-turn-label';
+                    turnLabel.style.cssText = 'font-family: Comic Neue, cursive; font-weight: bold; color: ' + (partyTeams[data.currentTeamIndex]?.labelColor || '#333') + '; text-align: center; margin-bottom: 5px;';
+                    document.getElementById('response-selection-area').prepend(turnLabel);
                 }
+                turnLabel.textContent = `${teamName}'s turn`;
+                turnLabel.style.color = partyTeams[data.currentTeamIndex]?.labelColor || '#333';
+
             } else if (phase === 'answering') {
-                // Everyone sees the question and answer options
+                // Active player already rendered this locally — skip
+                if (isMyTurn) return;
+
+                // Non-active: show the question + read-only answer options
                 const teamName = partyTeams[data.currentTeamIndex]?.name || `Team ${data.currentTeamIndex + 1}`;
                 showScreen('game-screen');
                 document.getElementById('game-screen').classList.remove('party-selection-mode');
@@ -2985,34 +2981,29 @@
                 inputArea.innerHTML = '';
                 inputArea.style.display = 'flex';
 
-                if (isMyTurn) {
-                    // Active player: use normal renderResponseInput (already rendered locally)
-                    // Don't re-render — the active player already called selectAnswerType locally
-                } else {
-                    // Non-active players: render read-only answer options
-                    const opts = data.answerOptions;
+                const opts = data.answerOptions;
 
-                    // Turn label at top
-                    const turnP = document.createElement('p');
-                    turnP.style.cssText = 'font-family: Comic Neue, cursive; font-weight: bold; color: ' + (partyTeams[data.currentTeamIndex]?.labelColor || '#333') + '; text-align: center; margin-bottom: 5px;';
-                    turnP.textContent = `${teamName} is answering...`;
-                    inputArea.appendChild(turnP);
+                // Turn label at top
+                const turnP = document.createElement('p');
+                turnP.style.cssText = 'font-family: Comic Neue, cursive; font-weight: bold; color: ' + (partyTeams[data.currentTeamIndex]?.labelColor || '#333') + '; text-align: center; margin-bottom: 5px;';
+                turnP.textContent = `${teamName} is answering...`;
+                inputArea.appendChild(turnP);
 
-                    if (opts && opts.type === 'multipleChoice' && opts.choices) {
-                        opts.choices.forEach((answer, idx) => {
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'button-with-shortcut-wrapper';
-                            const shortcut = document.createElement('span');
-                            shortcut.className = 'keyboard-shortcut-label';
-                            shortcut.textContent = `${idx + 1}.`;
-                            wrapper.appendChild(shortcut);
-                            const btn = document.createElement('button');
-                            btn.textContent = answer;
-                            btn.className = 'mc-tf-option-button';
-                            btn.disabled = true;
-                            btn.style.opacity = '0.5';
-                            btn.style.cursor = 'not-allowed';
-                            wrapper.appendChild(btn);
+                if (opts && opts.type === 'multipleChoice' && opts.choices) {
+                    opts.choices.forEach((answer, idx) => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'button-with-shortcut-wrapper';
+                        const shortcut = document.createElement('span');
+                        shortcut.className = 'keyboard-shortcut-label';
+                        shortcut.textContent = `${idx + 1}.`;
+                        wrapper.appendChild(shortcut);
+                        const btn = document.createElement('button');
+                        btn.textContent = answer;
+                        btn.className = 'mc-tf-option-button';
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                        wrapper.appendChild(btn);
                             inputArea.appendChild(wrapper);
                         });
                     } else if (opts && opts.type === 'trueFalse') {
@@ -3053,25 +3044,25 @@
                         input.style.opacity = '0.5';
                         inputArea.appendChild(input);
                     }
-                }
             } else if (phase === 'result') {
-                // Everyone sees the result
                 if (data.lastResult && lastSyncedPhase !== 'result_' + data.lastResult.questionText) {
                     lastSyncedPhase = 'result_' + data.lastResult.questionText;
                     const r = data.lastResult;
 
-                    // Sync answer type for proper result rendering
+                    // Active player already rendered result locally — just update log
+                    if (isMyTurn) {
+                        return;
+                    }
+
+                    // Non-active players: sync state and show result screen
                     if (data.selectedAnswerType) selectedAnswerType = data.selectedAnswerType;
                     if (r.answerLogEntry && r.answerLogEntry.trueFalseStatement) {
                         currentTrueFalseStatement = r.answerLogEntry.trueFalseStatement;
                     }
-
-                    // Update local answer log
                     if (r.answerLogEntry) {
                         playerAnswersLog.push(r.answerLogEntry);
                     }
 
-                    // Play sound effect for result
                     playSfx(r.isCorrect ? 'correct' : 'wrong');
 
                     showResultScreen(
@@ -3079,25 +3070,19 @@
                         r.isCorrect, r.pointsEarned, r.basePoints, r.multiplier
                     );
 
-                    // Only active team can advance; others see a waiting label
-                    if (!isMyTurn) {
-                        document.getElementById('next-question-button').style.display = 'none';
-                        document.getElementById('end-game-button').style.display = 'none';
-                        // Add waiting message in place of buttons
-                        const navButtons = document.querySelector('#result-screen .navigation-buttons');
-                        let waitMsg = document.getElementById('result-wait-msg');
-                        if (!waitMsg) {
-                            waitMsg = document.createElement('p');
-                            waitMsg.id = 'result-wait-msg';
-                            waitMsg.style.cssText = 'font-family: Comic Neue, cursive; color: #888; text-align: center; margin-top: 10px;';
-                            navButtons.appendChild(waitMsg);
-                        }
-                        const teamName = partyTeams[data.currentTeamIndex]?.name || 'Active team';
-                        waitMsg.textContent = `Waiting for ${teamName} to continue...`;
-                    } else {
-                        const waitMsg = document.getElementById('result-wait-msg');
-                        if (waitMsg) waitMsg.remove();
+                    // Non-active: hide navigation, show waiting message
+                    document.getElementById('next-question-button').style.display = 'none';
+                    document.getElementById('end-game-button').style.display = 'none';
+                    const navButtons = document.querySelector('#result-screen .navigation-buttons');
+                    let waitMsg = document.getElementById('result-wait-msg');
+                    if (!waitMsg) {
+                        waitMsg = document.createElement('p');
+                        waitMsg.id = 'result-wait-msg';
+                        waitMsg.style.cssText = 'font-family: Comic Neue, cursive; color: #888; text-align: center; margin-top: 10px;';
+                        navButtons.appendChild(waitMsg);
                     }
+                    const teamName = partyTeams[data.currentTeamIndex]?.name || 'Active team';
+                    waitMsg.textContent = `Waiting for ${teamName} to continue...`;
                 }
             } else if (phase === 'gameOver') {
                 showPartyResultsScreen();
