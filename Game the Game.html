@@ -2031,10 +2031,10 @@
         }
         /* Host takeover button */
         #host-takeover-container {
-            position: absolute;
+            position: fixed;
             bottom: 12px;
             left: 12px;
-            z-index: 40;
+            z-index: 9999;
         }
         .host-takeover-btn {
             font-family: 'Press Start 2P', cursive;
@@ -2055,15 +2055,15 @@
         /* Host takeover team picker popup */
         #host-takeover-popup {
             display: none;
-            position: absolute;
-            bottom: 50px;
-            left: 0;
+            position: fixed;
+            bottom: 55px;
+            left: 12px;
             background: #fff;
             border: 2px solid #FF9800;
             border-radius: 10px;
             padding: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 41;
+            z-index: 10000;
         }
         #host-takeover-popup .takeover-team-btn {
             font-family: 'Comic Neue', cursive;
@@ -2110,6 +2110,11 @@
 </head>
 <body>
     <div id="points-total">Points: 0</div>
+
+    <!-- Host takeover button (global, shown during online party games) -->
+    <div id="host-takeover-container" style="display: none;">
+        <button id="host-takeover-button" class="host-takeover-btn" title="Take control on behalf of a team">Take Control</button>
+    </div>
 
     <div id="title-screen">
         <div class="screen-container">
@@ -2275,9 +2280,6 @@
                 <!-- Jeopardy board will be dynamically generated here -->
             </div>
             <button id="back-to-menu-party-board" class="nav-button">End Party Game</button>
-            <div id="host-takeover-container" style="display: none;">
-                <button id="host-takeover-button" class="host-takeover-btn" title="Take control on behalf of a team">Take Control</button>
-            </div>
             <div id="online-waiting-overlay">
                 <span class="waiting-text" id="waiting-team-text">Waiting for Team...</span>
                 <span class="waiting-subtext">Watch the board for their pick!</span>
@@ -3224,7 +3226,7 @@
             if (!popup) {
                 popup = document.createElement('div');
                 popup.id = 'host-takeover-popup';
-                document.getElementById('host-takeover-container').appendChild(popup);
+                document.body.appendChild(popup);
             }
             popup.innerHTML = '';
 
@@ -4913,7 +4915,9 @@
             document.getElementById('question-display').textContent = `${category}: ${points}`;
             document.getElementById('countdown-timer').style.display = 'none';
 
-            // Add a class to game-screen to apply specific styling for party selection mode
+            // Show game screen first, then add party-selection-mode
+            // (showScreen removes party-selection-mode as a safety reset)
+            showScreen('game-screen');
             document.getElementById('game-screen').classList.add('party-selection-mode');
 
             // Ensure response selection area is visible and input area is hidden
@@ -4921,7 +4925,6 @@
             document.getElementById('response-input-area').innerHTML = '';
             document.getElementById('response-input-area').style.display = 'none';
 
-            showScreen('game-screen');
             // IMPORTANT: displayQuestion() is NOT called here for party mode.
             // The initial state of the game screen (category:points, no timer, choose type)
             // is set up directly by this function. The actual question and answer timer
