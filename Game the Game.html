@@ -2961,6 +2961,7 @@
 
         /** Handle real-time game document updates */
         function handleGameDocUpdate(data) {
+          try {
             console.log('[Sync] Snapshot received. status:', data.status, 'phase:', data.phase, 'isHost:', isHost, 'myTeamIndex:', myTeamIndex, 'currentTeamIndex:', data.currentTeamIndex);
             if (data.status === 'lobby') {
                 renderLobby(data);
@@ -3237,12 +3238,17 @@
                 if (data.teamMaxLosses) {
                     data.teamMaxLosses.forEach((l, i) => { if (partyTeams[i]) partyTeams[i].maxNegativeLoss = l; });
                 }
-                try {
-                    showPartyResultsScreen();
-                } catch (err) {
-                    console.error('[Sync] Error showing party results:', err);
-                }
+                // Ensure the final results screen is shown even if showPartyResultsScreen fails
+                gameMode = 'party';
+                showPartyResultsScreen().catch(err => {
+                    console.error('[Sync] Error in showPartyResultsScreen:', err);
+                    // Fallback: at least show the screen with whatever we have
+                    showScreen('final-results-screen');
+                });
             }
+          } catch (err) {
+            console.error('[Sync] CRITICAL: handleGameDocUpdate crashed!', err, 'phase:', data?.phase);
+          }
         }
 
         /** Host takeover: temporarily act as a specific team */
@@ -5132,7 +5138,8 @@
 
                 // Max difficulty questions correct
                 // Only show if maxDifficultyCorrects > 0
-                const questionDifficulty = triviaQuestions[log.questionIndex].difficulty;
+                const questionData = triviaQuestions[log.questionIndex];
+                const questionDifficulty = questionData ? questionData.difficulty : 3;
                 if (log.isCorrect && (questionDifficulty >= 4 || (log.jeopardyPointsValue >= 400 && gameMode === 'party'))) {
                     maxDifficultyCorrects.set(teamIdx, (maxDifficultyCorrects.get(teamIdx) || 0) + 1);
                 }
