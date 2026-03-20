@@ -3043,6 +3043,9 @@
                 document.getElementById('host-takeover-container').style.display = 'block';
             }
 
+            // Reset sync dedup when phase changes
+            if (phase !== 'result') lastSyncedPhase = '';
+
             if (phase === 'board') {
                 showScreen('party-board-screen');
                 renderJeopardyBoard();
@@ -3173,16 +3176,18 @@
                         inputArea.appendChild(input);
                     }
             } else if (phase === 'result') {
-                if (data.lastResult && lastSyncedPhase !== 'result_' + data.lastResult.questionText) {
-                    lastSyncedPhase = 'result_' + data.lastResult.questionText;
+                if (data.lastResult) {
                     const r = data.lastResult;
 
-                    // Active player already rendered result locally — just update log
-                    if (isMyTurn) {
-                        return;
-                    }
+                    // Active player already rendered result locally — skip
+                    if (isMyTurn) return;
 
-                    // Non-active players: sync state and show result screen
+                    // Non-active players: show result screen
+                    // (dedup by question text to avoid re-rendering on redundant snapshots)
+                    const resultKey = 'result_' + r.questionText + '_' + r.playerAnswer;
+                    if (lastSyncedPhase === resultKey) return;
+                    lastSyncedPhase = resultKey;
+
                     if (data.selectedAnswerType) selectedAnswerType = data.selectedAnswerType;
                     if (r.answerLogEntry && r.answerLogEntry.trueFalseStatement) {
                         currentTrueFalseStatement = r.answerLogEntry.trueFalseStatement;
@@ -4924,6 +4929,16 @@
             document.getElementById('response-selection-area').style.display = 'flex';
             document.getElementById('response-input-area').innerHTML = '';
             document.getElementById('response-input-area').style.display = 'none';
+
+            // Re-enable answer type buttons (may have been disabled by a previous non-active turn)
+            document.querySelectorAll('.response-type-button').forEach(btn => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            });
+            // Remove stale turn label from previous round
+            const staleTurnLabel = document.getElementById('online-turn-label');
+            if (staleTurnLabel) staleTurnLabel.remove();
 
             // IMPORTANT: displayQuestion() is NOT called here for party mode.
             // The initial state of the game screen (category:points, no timer, choose type)
