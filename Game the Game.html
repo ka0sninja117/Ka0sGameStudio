@@ -3178,22 +3178,25 @@
             } else if (phase === 'result') {
                 if (data.lastResult) {
                     const r = data.lastResult;
-
-                    // Active player already rendered result locally — skip
-                    if (isMyTurn) return;
-
-                    // Non-active players: show result screen
-                    // (dedup by question text to avoid re-rendering on redundant snapshots)
                     const resultKey = 'result_' + r.questionText + '_' + r.playerAnswer;
                     if (lastSyncedPhase === resultKey) return;
                     lastSyncedPhase = resultKey;
+
+                    console.log('[Sync] Result phase received. isMyTurn:', isMyTurn, 'question:', r.questionText);
 
                     if (data.selectedAnswerType) selectedAnswerType = data.selectedAnswerType;
                     if (r.answerLogEntry && r.answerLogEntry.trueFalseStatement) {
                         currentTrueFalseStatement = r.answerLogEntry.trueFalseStatement;
                     }
-                    if (r.answerLogEntry) {
+                    if (!isMyTurn && r.answerLogEntry) {
                         playerAnswersLog.push(r.answerLogEntry);
+                    }
+                    // Sync fun stats (maxPositiveGain/maxNegativeLoss) from active player
+                    if (data.teamMaxGains) {
+                        data.teamMaxGains.forEach((g, i) => { if (partyTeams[i]) partyTeams[i].maxPositiveGain = g; });
+                    }
+                    if (data.teamMaxLosses) {
+                        data.teamMaxLosses.forEach((l, i) => { if (partyTeams[i]) partyTeams[i].maxNegativeLoss = l; });
                     }
 
                     playSfx(r.isCorrect ? 'correct' : 'wrong');
@@ -3203,22 +3206,41 @@
                         r.isCorrect, r.pointsEarned, r.basePoints, r.multiplier
                     );
 
-                    // Non-active: hide navigation, show waiting message
-                    document.getElementById('next-question-button').style.display = 'none';
-                    document.getElementById('end-game-button').style.display = 'none';
-                    const navButtons = document.querySelector('#result-screen .navigation-buttons');
-                    let waitMsg = document.getElementById('result-wait-msg');
-                    if (!waitMsg) {
-                        waitMsg = document.createElement('p');
-                        waitMsg.id = 'result-wait-msg';
-                        waitMsg.style.cssText = 'font-family: Comic Neue, cursive; color: #888; text-align: center; margin-top: 10px;';
-                        navButtons.appendChild(waitMsg);
+                    // Active team sees Next/End buttons, others see waiting message
+                    if (isMyTurn) {
+                        document.getElementById('next-question-button').style.display = '';
+                        document.getElementById('end-game-button').style.display = '';
+                        const waitMsg = document.getElementById('result-wait-msg');
+                        if (waitMsg) waitMsg.remove();
+                    } else {
+                        document.getElementById('next-question-button').style.display = 'none';
+                        document.getElementById('end-game-button').style.display = 'none';
+                        const navButtons = document.querySelector('#result-screen .navigation-buttons');
+                        let waitMsg = document.getElementById('result-wait-msg');
+                        if (!waitMsg) {
+                            waitMsg = document.createElement('p');
+                            waitMsg.id = 'result-wait-msg';
+                            waitMsg.style.cssText = 'font-family: Comic Neue, cursive; color: #888; text-align: center; margin-top: 10px;';
+                            navButtons.appendChild(waitMsg);
+                        }
+                        const teamName = partyTeams[data.currentTeamIndex]?.name || 'Active team';
+                        waitMsg.textContent = `Waiting for ${teamName} to continue...`;
                     }
-                    const teamName = partyTeams[data.currentTeamIndex]?.name || 'Active team';
-                    waitMsg.textContent = `Waiting for ${teamName} to continue...`;
                 }
             } else if (phase === 'gameOver') {
-                showPartyResultsScreen();
+                console.log('[Sync] gameOver phase received. partyTeams:', partyTeams.length, 'scores:', partyTeams.map(t => t.score));
+                // Sync final fun stats
+                if (data.teamMaxGains) {
+                    data.teamMaxGains.forEach((g, i) => { if (partyTeams[i]) partyTeams[i].maxPositiveGain = g; });
+                }
+                if (data.teamMaxLosses) {
+                    data.teamMaxLosses.forEach((l, i) => { if (partyTeams[i]) partyTeams[i].maxNegativeLoss = l; });
+                }
+                try {
+                    showPartyResultsScreen();
+                } catch (err) {
+                    console.error('[Sync] Error showing party results:', err);
+                }
             }
         }
 
@@ -4066,7 +4088,9 @@
                         basePoints: basePoints,
                         multiplier: multiplier,
                         answerLogEntry: playerAnswersLog.length > 0 ? playerAnswersLog[playerAnswersLog.length - 1] : null
-                    }
+                    },
+                    teamMaxGains: partyTeams.map(t => t.maxPositiveGain),
+                    teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss)
                 });
             }
         }
@@ -4172,7 +4196,7 @@
             if (gameMode === 'party') {
                 // In party mode, check if all questions on the board are answered
                 if (allJeopardyQuestionsAnswered()) {
-                    if (isOnlineParty) pushOnlineState('gameOver');
+                    if (isOnlineParty) pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
                     showPartyResultsScreen(); // End game if board is clear
                     return;
                 }
@@ -5604,6 +5628,7 @@
                 if (gameMode === 'challenge') {
                     showChallengeResultsScreen();
                 } else if (gameMode === 'party') {
+                    if (isOnlineParty) pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
                     showPartyResultsScreen();
                 }
                 else {
