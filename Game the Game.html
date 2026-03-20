@@ -66,6 +66,7 @@
 
         /* Common container styles for all screens */
         .screen-container {
+            position: relative;
             text-align: center;
             background: rgba(255, 255, 255, 0.9); /* Slightly transparent white background */
             border-radius: 20px; /* Rounded corners */
@@ -1983,6 +1984,104 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
+        /* Lobby: editable team name input */
+        .lobby-team-name-input {
+            font-family: 'Comic Neue', cursive;
+            font-weight: bold;
+            font-size: 0.8em;
+            width: 90%;
+            padding: 4px 6px;
+            border: 2px dashed rgba(255,255,255,0.6);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.3);
+            color: #fff;
+            text-align: center;
+            outline: none;
+        }
+        .lobby-team-name-input:focus {
+            border-style: solid;
+            background: rgba(255,255,255,0.5);
+        }
+        .lobby-team-name-input:disabled {
+            border: none;
+            background: transparent;
+            cursor: default;
+        }
+        .lobby-join-team-btn {
+            font-family: 'Comic Neue', cursive;
+            font-weight: bold;
+            font-size: 0.7em;
+            padding: 5px 12px;
+            margin-top: 6px;
+            border: 2px solid rgba(255,255,255,0.6);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.25);
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .lobby-join-team-btn:hover {
+            background: rgba(255,255,255,0.5);
+        }
+        .lobby-join-team-btn.joined {
+            background: rgba(255,255,255,0.7);
+            color: #333;
+            border-style: solid;
+            cursor: default;
+        }
+        /* Host takeover button */
+        #host-takeover-container {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            z-index: 40;
+        }
+        .host-takeover-btn {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.5em;
+            padding: 8px 12px;
+            border: 2px solid #FF9800;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            color: #fff;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        .host-takeover-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        /* Host takeover team picker popup */
+        #host-takeover-popup {
+            display: none;
+            position: absolute;
+            bottom: 50px;
+            left: 0;
+            background: #fff;
+            border: 2px solid #FF9800;
+            border-radius: 10px;
+            padding: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 41;
+        }
+        #host-takeover-popup .takeover-team-btn {
+            font-family: 'Comic Neue', cursive;
+            font-weight: bold;
+            font-size: 0.8em;
+            display: block;
+            width: 100%;
+            padding: 6px 14px;
+            margin: 3px 0;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            text-align: left;
+        }
+        #host-takeover-popup .takeover-team-btn:hover {
+            opacity: 0.85;
+        }
         /* Waiting overlay for non-active teams on board screen */
         #online-waiting-overlay {
             display: none;
@@ -2155,15 +2254,9 @@
                 <span id="lobby-join-code" class="join-code-value">----</span>
             </div>
             <div id="lobby-teams-container">
-                <!-- Team columns with player names rendered here -->
+                <!-- Team columns with player names + join buttons rendered here -->
             </div>
             <p id="lobby-player-count" style="font-family: 'Comic Neue', cursive; font-size: 0.85em; color: #666;"></p>
-            <div id="lobby-team-picker" style="display: none;">
-                <p style="font-family: 'Comic Neue', cursive; font-weight: bold; margin-bottom: 5px;">Pick your team:</p>
-                <div id="lobby-team-buttons">
-                    <!-- Team pick buttons rendered here -->
-                </div>
-            </div>
             <button id="lobby-start-button" class="nav-button next" style="display: none;">Start Game</button>
             <p id="lobby-waiting-msg" style="font-family: 'Comic Neue', cursive; font-size: 0.8em; color: #999; display: none;">Waiting for host to start...</p>
             <button id="lobby-leave-button" class="nav-button">Leave Lobby</button>
@@ -2182,6 +2275,9 @@
                 <!-- Jeopardy board will be dynamically generated here -->
             </div>
             <button id="back-to-menu-party-board" class="nav-button">End Party Game</button>
+            <div id="host-takeover-container" style="display: none;">
+                <button id="host-takeover-button" class="host-takeover-btn" title="Take control on behalf of a team">Take Control</button>
+            </div>
             <div id="online-waiting-overlay">
                 <span class="waiting-text" id="waiting-team-text">Waiting for Team...</span>
                 <span class="waiting-subtext">Watch the board for their pick!</span>
@@ -2647,14 +2743,10 @@
             isHost = true;
             isOnlineParty = true;
 
-            // Build team names from the setup form
-            const teamNames = [];
-            for (let i = 1; i <= numTeams; i++) {
-                const nameInput = document.getElementById(`team-name-${i}`);
-                teamNames.push(nameInput ? nameInput.value.trim() || `Team ${i}` : `Team ${i}`);
-            }
-            myDisplayName = teamNames[0] + ' (Host)';
-            myTeamIndex = 0;
+            // Default team names — editable in the lobby
+            const teamNames = Array.from({ length: numTeams }, (_, i) => `Team ${i + 1}`);
+            myDisplayName = 'Host';
+            myTeamIndex = -1; // Host starts unassigned too — picks in lobby
 
             const gameData = {
                 hostId: userId,
@@ -2665,7 +2757,7 @@
                 teamColors: teamColors.slice(0, numTeams),
                 teamLabelColors: teamLabelColors.slice(0, numTeams),
                 players: {
-                    [userId]: { name: myDisplayName, teamIndex: 0 }
+                    [userId]: { name: myDisplayName, teamIndex: -1 }
                 }
             };
 
@@ -2677,7 +2769,6 @@
                 document.getElementById('lobby-join-code').textContent = code;
                 document.getElementById('lobby-start-button').style.display = 'inline-block';
                 document.getElementById('lobby-waiting-msg').style.display = 'none';
-                document.getElementById('lobby-team-picker').style.display = 'none';
             } catch (err) {
                 console.error("Error creating game:", err);
                 tempAlert("Failed to create game. Check your connection.");
@@ -2794,45 +2885,71 @@
         function renderLobby(data) {
             const container = document.getElementById('lobby-teams-container');
             container.innerHTML = '';
-            const teamButtons = document.getElementById('lobby-team-buttons');
-            teamButtons.innerHTML = '';
 
-            // Show team columns with players
+            // Determine first player on each team (for name editing rights)
+            const firstPlayerPerTeam = {};
+            if (data.players) {
+                Object.entries(data.players).forEach(([uid, p]) => {
+                    if (p.teamIndex >= 0 && !(p.teamIndex in firstPlayerPerTeam)) {
+                        firstPlayerPerTeam[p.teamIndex] = uid;
+                    }
+                });
+            }
+
             for (let t = 0; t < data.teamCount; t++) {
                 const col = document.createElement('div');
                 col.className = 'lobby-team-col';
                 col.style.background = data.teamLabelColors[t];
-                const h4 = document.createElement('h4');
-                h4.textContent = data.teamNames[t];
-                col.appendChild(h4);
 
-                // Add players in this team
+                // Editable team name input
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'lobby-team-name-input';
+                nameInput.value = data.teamNames[t];
+                nameInput.maxLength = 20;
+
+                // Can edit if: host, OR first player on this team
+                const canEdit = isHost || (firstPlayerPerTeam[t] === userId);
+                nameInput.disabled = !canEdit;
+                if (canEdit) {
+                    const teamIdx = t;
+                    nameInput.addEventListener('change', async () => {
+                        const newName = nameInput.value.trim() || `Team ${teamIdx + 1}`;
+                        const snap = await getDoc(onlineGameDocRef);
+                        if (snap.exists()) {
+                            const names = [...snap.data().teamNames];
+                            names[teamIdx] = newName;
+                            await updateDoc(onlineGameDocRef, { teamNames: names });
+                        }
+                    });
+                }
+                col.appendChild(nameInput);
+
+                // Player names
                 if (data.players) {
-                    Object.values(data.players).forEach(p => {
+                    Object.entries(data.players).forEach(([uid, p]) => {
                         if (p.teamIndex === t) {
                             const div = document.createElement('div');
                             div.className = 'lobby-player-name';
-                            div.textContent = p.name;
+                            div.textContent = p.name + (uid === data.hostId ? ' (Host)' : '');
                             col.appendChild(div);
                         }
                     });
                 }
+
+                // Join / Switch button
+                const joinBtn = document.createElement('button');
+                joinBtn.className = 'lobby-join-team-btn';
+                if (myTeamIndex === t) {
+                    joinBtn.textContent = 'Joined';
+                    joinBtn.classList.add('joined');
+                } else {
+                    joinBtn.textContent = myTeamIndex === -1 ? 'Join' : 'Switch';
+                    joinBtn.addEventListener('click', () => pickTeam(t));
+                }
+                col.appendChild(joinBtn);
+
                 container.appendChild(col);
-
-                // Team pick button (for joiners who haven't picked yet)
-                const btn = document.createElement('button');
-                btn.className = 'lobby-team-pick-btn';
-                btn.style.background = data.teamLabelColors[t];
-                btn.textContent = data.teamNames[t];
-                btn.addEventListener('click', () => pickTeam(t));
-                teamButtons.appendChild(btn);
-            }
-
-            // Show team picker for joiners who haven't picked
-            if (!isHost && myTeamIndex === -1) {
-                document.getElementById('lobby-team-picker').style.display = 'block';
-            } else {
-                document.getElementById('lobby-team-picker').style.display = 'none';
             }
 
             // Player count
@@ -2919,10 +3036,19 @@
 
             currentTeamIndex = data.currentTeamIndex;
 
+            // Show host takeover button on board-related screens
+            if (isHost && partyTeams.length > 0) {
+                document.getElementById('host-takeover-container').style.display = 'block';
+            }
+
             if (phase === 'board') {
                 showScreen('party-board-screen');
                 renderJeopardyBoard();
                 updateAllTeamsScoreSummary();
+
+                // Hide takeover popup when returning to board
+                const popup = document.getElementById('host-takeover-popup');
+                if (popup) popup.style.display = 'none';
 
                 // Show waiting overlay for non-active teams on the board
                 if (!isMyTurn) {
@@ -3089,6 +3215,60 @@
             }
         }
 
+        /** Host takeover: temporarily act as a specific team */
+        let hostTakeoverActive = false;
+        let hostOriginalTeamIndex = -1;
+
+        function showHostTakeoverPopup() {
+            let popup = document.getElementById('host-takeover-popup');
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.id = 'host-takeover-popup';
+                document.getElementById('host-takeover-container').appendChild(popup);
+            }
+            popup.innerHTML = '';
+
+            // If takeover is active, show option to release
+            if (hostTakeoverActive) {
+                const releaseBtn = document.createElement('button');
+                releaseBtn.className = 'takeover-team-btn';
+                releaseBtn.style.background = '#666';
+                releaseBtn.textContent = 'Release Control';
+                releaseBtn.addEventListener('click', () => {
+                    myTeamIndex = hostOriginalTeamIndex;
+                    hostTakeoverActive = false;
+                    popup.style.display = 'none';
+                    document.getElementById('host-takeover-button').textContent = 'Take Control';
+                    document.getElementById('host-takeover-button').style.background = '';
+                });
+                popup.appendChild(releaseBtn);
+            } else {
+                // Show one button per team
+                partyTeams.forEach((team, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'takeover-team-btn';
+                    btn.style.background = team.labelColor;
+                    btn.textContent = team.name;
+                    btn.addEventListener('click', () => {
+                        hostOriginalTeamIndex = myTeamIndex;
+                        myTeamIndex = idx;
+                        hostTakeoverActive = true;
+                        popup.style.display = 'none';
+                        document.getElementById('host-takeover-button').textContent = `Controlling: ${team.name}`;
+                        document.getElementById('host-takeover-button').style.background = team.labelColor;
+
+                        // If we just took over the active team, dismiss the waiting overlay
+                        if (currentTeamIndex === idx) {
+                            document.getElementById('online-waiting-overlay').style.display = 'none';
+                        }
+                    });
+                    popup.appendChild(btn);
+                });
+            }
+
+            popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
+        }
+
         /** Push current game state to Firestore (called by active player) */
         async function pushOnlineState(phase, extras = {}) {
             if (!isOnlineParty || !onlineGameDocRef) return;
@@ -3204,6 +3384,9 @@
             showScreen('party-board-screen');
             renderJeopardyBoard();
             updateAllTeamsScoreSummary();
+
+            // Show host takeover button
+            document.getElementById('host-takeover-container').style.display = 'block';
         }
 
         // --- Trivia Questions (loaded from external JSON) ---
@@ -5105,6 +5288,11 @@
             if (isOnlineParty) {
                 leaveOnlineGame();
             }
+            hostTakeoverActive = false;
+            hostOriginalTeamIndex = -1;
+            document.getElementById('host-takeover-container').style.display = 'none';
+            const takeoverPopup = document.getElementById('host-takeover-popup');
+            if (takeoverPopup) takeoverPopup.style.display = 'none';
         }
 
         /**
@@ -5319,14 +5507,7 @@
 
             // Online party setup button
             document.getElementById('start-online-party-button').addEventListener('click', () => {
-                // Validate team names
-                for (let i = 1; i <= numTeams; i++) {
-                    const teamNameInput = document.getElementById(`team-name-${i}`);
-                    if (!teamNameInput.value.trim()) {
-                        tempAlert(`Please enter a name for Team ${i}.`);
-                        return;
-                    }
-                }
+                // Online: skip team name validation — names are set in the lobby
                 createOnlineGame();
             });
 
@@ -5339,6 +5520,11 @@
             document.getElementById('lobby-leave-button').addEventListener('click', async () => {
                 await leaveOnlineGame();
                 returnToMenu();
+            });
+
+            // Host takeover button
+            document.getElementById('host-takeover-button').addEventListener('click', () => {
+                showHostTakeoverPopup();
             });
 
             // Info screen (solo)
