@@ -2544,7 +2544,7 @@
         // Firebase imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Game Version
         const GAME_VERSION = 'v1.4';
@@ -2658,7 +2658,7 @@
             try {
                 console.log("[Firebase] Initializing with config:", firebaseConfig.projectId);
                 app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
+                db = initializeFirestore(app, { ignoreUndefinedProperties: true });
                 auth = getAuth(app);
                 console.log("[Firebase] App + Firestore + Auth created");
 
@@ -2961,6 +2961,7 @@
 
         /** Handle real-time game document updates */
         function handleGameDocUpdate(data) {
+            console.log('[Sync] Snapshot received. status:', data.status, 'phase:', data.phase, 'isHost:', isHost, 'myTeamIndex:', myTeamIndex, 'currentTeamIndex:', data.currentTeamIndex);
             if (data.status === 'lobby') {
                 renderLobby(data);
                 return;
@@ -3326,8 +3327,9 @@
 
             try {
                 await updateDoc(onlineGameDocRef, update);
+                console.log('[Online] pushOnlineState succeeded:', phase);
             } catch (err) {
-                console.error("Error pushing state:", err);
+                console.error('[Online] pushOnlineState FAILED for phase:', phase, 'Error:', err);
             }
         }
 
@@ -4044,7 +4046,7 @@
                 playerAnswer: playerSelectedAnswer,
                 isCorrect: isCorrect,
                 points: pointsEarned, // This is the *final* points earned for this turn
-                trueFalseStatement: (selectedAnswerType === 'trueFalse') ? currentTrueFalseStatement : undefined,
+                trueFalseStatement: (selectedAnswerType === 'trueFalse') ? currentTrueFalseStatement : null,
                 teamIndex: currentTeamIndex,
                 baseQuestionDifficulty: difficultyForStats, // The 1-5 scale difficulty
                 jeopardyPointsValue: (gameMode === 'party') ? currentJeopardyPoints : null // The 100-500 points chosen for Jeopardy
@@ -4078,6 +4080,7 @@
 
             // Push online result state
             if (isOnlineParty) {
+                console.log('[Online] Pushing result state to Firestore...');
                 pushOnlineState('result', {
                     lastResult: {
                         questionText: currentQuestionData.question,
