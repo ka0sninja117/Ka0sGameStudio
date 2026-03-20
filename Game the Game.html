@@ -2969,7 +2969,35 @@
             }
 
             if (data.status === 'finished') {
-                // Game over — show final results if not already there
+                // Game over — show final results for ALL players
+                console.log('[Sync] Status is finished — showing final results. partyTeams:', partyTeams.length);
+                // Initialize partyTeams from Firestore if not yet done
+                if (partyTeams.length === 0 && data.teamNames) {
+                    const tc = data.teamCount || data.teamNames.length;
+                    partyTeams = Array.from({ length: tc }, (_, i) => ({
+                        name: data.teamNames[i],
+                        score: data.scores ? data.scores[i] : 0,
+                        color: teamColors[i % teamColors.length],
+                        labelColor: teamLabelColors[i % teamLabelColors.length],
+                        maxPositiveGain: 0,
+                        maxNegativeLoss: 0
+                    }));
+                }
+                // Sync scores and fun stats from the document
+                if (data.scores && partyTeams.length > 0) {
+                    data.scores.forEach((s, i) => { if (partyTeams[i]) partyTeams[i].score = s; });
+                }
+                if (data.teamMaxGains) {
+                    data.teamMaxGains.forEach((g, i) => { if (partyTeams[i]) partyTeams[i].maxPositiveGain = g; });
+                }
+                if (data.teamMaxLosses) {
+                    data.teamMaxLosses.forEach((l, i) => { if (partyTeams[i]) partyTeams[i].maxNegativeLoss = l; });
+                }
+                gameMode = 'party';
+                showPartyResultsScreen().catch(err => {
+                    console.error('[Sync] Error in showPartyResultsScreen (finished):', err);
+                    showScreen('final-results-screen');
+                });
                 return;
             }
 
@@ -3330,6 +3358,11 @@
                 boardCells: boardCells,
                 ...extras
             };
+
+            // When game is over, also set document status so all players know
+            if (phase === 'gameOver') {
+                update.status = 'finished';
+            }
 
             try {
                 await updateDoc(onlineGameDocRef, update);
