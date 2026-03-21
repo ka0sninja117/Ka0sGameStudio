@@ -5713,7 +5713,12 @@
 
             // Party board screen
             document.getElementById('back-to-menu-party-board').addEventListener('click', () => {
-                showPartyResultsScreen();
+                if (isOnlineParty) {
+                    pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
+                    // onSnapshot handler will call showPartyResultsScreen for ALL players
+                } else {
+                    showPartyResultsScreen();
+                }
             });
 
             // NEW: Overrule button event listener
