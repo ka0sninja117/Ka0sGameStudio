@@ -4238,8 +4238,12 @@
             if (gameMode === 'party') {
                 // In party mode, check if all questions on the board are answered
                 if (allJeopardyQuestionsAnswered()) {
-                    if (isOnlineParty) pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
-                    showPartyResultsScreen(); // End game if board is clear
+                    if (isOnlineParty) {
+                        pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
+                        // Don't call showPartyResultsScreen locally — the onSnapshot handler will do it for ALL players
+                    } else {
+                        showPartyResultsScreen(); // End game if board is clear
+                    }
                     return;
                 }
                 // Rotate to the next team's turn
@@ -5671,8 +5675,12 @@
                 if (gameMode === 'challenge') {
                     showChallengeResultsScreen();
                 } else if (gameMode === 'party') {
-                    if (isOnlineParty) pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
-                    showPartyResultsScreen();
+                    if (isOnlineParty) {
+                        pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
+                        // Don't call showPartyResultsScreen locally — the onSnapshot handler will do it for ALL players
+                    } else {
+                        showPartyResultsScreen();
+                    }
                 }
                 else {
                     showFinalResultsScreen();
