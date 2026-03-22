@@ -1552,6 +1552,208 @@
         }
 
 
+        /* ─── Mobile-first adjustments (phones in portrait) ─── */
+        @media (max-width: 600px) {
+            /* Base container: use nearly full width on mobile */
+            .screen-container {
+                max-width: 95vw;
+                min-width: unset;
+                padding: 12px;
+                gap: 8px;
+                border-radius: 14px;
+            }
+
+            /* Title screen */
+            #title-screen h1 {
+                font-size: 1.6em;
+            }
+            #title-screen p {
+                font-size: 0.7em;
+            }
+
+            /* Join screen */
+            .join-form {
+                width: 95%;
+            }
+            #join-code-input {
+                letter-spacing: 4px !important;
+                font-size: 1.2em !important;
+            }
+
+            /* Online lobby */
+            .join-code-value {
+                font-size: 1.4em;
+                letter-spacing: 4px;
+                padding: 6px 14px;
+            }
+            #lobby-teams-container {
+                max-width: 100%;
+                gap: 6px;
+            }
+            .lobby-team-col {
+                min-width: 80px;
+                max-width: none;
+                flex: 1 1 40%;
+                padding: 6px;
+            }
+            .lobby-team-col h4 {
+                font-size: 0.7em;
+            }
+            .lobby-team-name-input {
+                font-size: 0.7em;
+                padding: 3px 4px;
+            }
+            .lobby-team-pick-btn,
+            .lobby-join-team-btn {
+                font-size: 0.65em;
+                padding: 6px 10px;
+            }
+
+            /* Jeopardy board */
+            #party-board-screen .screen-container {
+                padding: 6px;
+                padding-top: 10px;
+                gap: 8px;
+            }
+            #all-teams-score-summary {
+                font-size: 0.75em;
+                padding: 8px 10px;
+                gap: 4px 8px;
+            }
+            #jeopardy-board {
+                border-radius: 10px;
+                margin-bottom: 8px;
+            }
+            .category-header {
+                font-size: 0.45em;
+                padding: 8px 2px;
+                line-height: 1.2;
+                white-space: normal;
+            }
+            .jeopardy-cell {
+                padding: 6px 2px;
+            }
+            .question-cell {
+                font-size: 0.8em;
+            }
+            .question-cell.answered {
+                font-size: 0.7em;
+            }
+            #back-to-menu-party-board {
+                font-size: 0.6em;
+                padding: 6px 12px;
+            }
+
+            /* Waiting overlay */
+            #online-waiting-overlay .waiting-text {
+                font-size: 0.95em;
+            }
+
+            /* Game screen (questions / answers) */
+            #game-screen .screen-container {
+                padding: 10px;
+                padding-top: 35px;
+                gap: 8px;
+            }
+            #question-display {
+                font-size: 0.95em;
+                padding: 8px;
+            }
+            #game-screen #countdown-timer {
+                font-size: 1.8em;
+            }
+            .response-type-button {
+                font-size: 0.65em;
+                padding: 8px 12px;
+                max-width: 100%;
+                min-height: 42px;
+            }
+            .mc-tf-option-button {
+                font-size: 0.7em;
+                padding: 8px 10px;
+                min-height: 42px;
+            }
+            #response-input-area input[type="text"] {
+                font-size: 0.9em;
+                padding: 8px 10px;
+            }
+            .submit-answer-button {
+                font-size: 0.7em;
+                padding: 8px 14px;
+            }
+
+            /* Result screen */
+            #result-screen .screen-container {
+                padding: 12px;
+                padding-top: 30px;
+            }
+            #result-screen h3 {
+                font-size: 1.1em;
+            }
+            #result-screen .result-item {
+                font-size: 0.7em;
+                word-break: break-word;
+            }
+            #result-screen .points-awarded {
+                font-size: 0.9em;
+            }
+            #result-screen .navigation-buttons {
+                width: 90%;
+            }
+            .nav-button {
+                font-size: 0.65em;
+                padding: 8px 14px;
+            }
+
+            /* Final results / Game Over */
+            #final-results-screen .screen-container {
+                max-width: 95vw;
+                min-width: unset;
+                padding: 14px;
+            }
+            #final-results-screen h2 {
+                font-size: 1.8em;
+            }
+            #final-results-screen #final-score-display {
+                font-size: 0.9em;
+            }
+            #party-leaderboard-container {
+                max-width: 100%;
+            }
+            .leaderboard-item {
+                font-size: 0.75em;
+                padding: 8px 10px;
+            }
+            #party-fun-stats {
+                font-size: 0.8em;
+            }
+
+            /* Fixed position elements */
+            #sfx-toggle {
+                width: 30px;
+                height: 30px;
+                font-size: 0.85em;
+                top: 8px;
+                right: 8px;
+            }
+            #points-total {
+                font-size: 0.85em;
+                padding: 5px 10px;
+                top: 8px;
+                left: 8px;
+            }
+            .host-takeover-btn {
+                font-size: 0.45em;
+                padding: 6px 10px;
+            }
+
+            /* Overrule button */
+            .overrule-btn {
+                font-size: 1.2em;
+                padding: 4px 10px;
+            }
+        }
+
         /* Media queries for larger screens */
         @media (min-width: 768px) {
             .screen-container {
