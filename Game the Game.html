@@ -3495,8 +3495,29 @@
                         waitMsg.textContent = `Waiting for ${teamName} to continue...`;
                     }
                 }
+            } else if (phase === 'overrule') {
+                // Sync overruled answer log entry from the active player
+                if (data.overruledEntry && typeof data.overruledLogIndex === 'number') {
+                    const idx = data.overruledLogIndex;
+                    if (idx >= 0 && idx < playerAnswersLog.length) {
+                        playerAnswersLog[idx].isCorrect = data.overruledEntry.isCorrect;
+                        playerAnswersLog[idx].points = data.overruledEntry.points;
+                        console.log('[Sync] Overrule applied to playerAnswersLog index', idx);
+                    }
+                }
+                if (data.teamMaxGains) {
+                    data.teamMaxGains.forEach((g, i) => { if (partyTeams[i]) partyTeams[i].maxPositiveGain = g; });
+                }
+                if (data.teamMaxLosses) {
+                    data.teamMaxLosses.forEach((l, i) => { if (partyTeams[i]) partyTeams[i].maxNegativeLoss = l; });
+                }
             } else if (phase === 'gameOver') {
                 console.log('[Sync] gameOver phase received. partyTeams:', partyTeams.length, 'scores:', partyTeams.map(t => t.score));
+                // Sync final playerAnswersLog from host to ensure identical fun stats
+                if (data.playerAnswersLog && Array.isArray(data.playerAnswersLog)) {
+                    playerAnswersLog = data.playerAnswersLog;
+                    console.log('[Sync] playerAnswersLog replaced from host, length:', playerAnswersLog.length);
+                }
                 // Sync final fun stats
                 if (data.teamMaxGains) {
                     data.teamMaxGains.forEach((g, i) => { if (partyTeams[i]) partyTeams[i].maxPositiveGain = g; });
@@ -4477,7 +4498,7 @@
                 // In party mode, check if all questions on the board are answered
                 if (allJeopardyQuestionsAnswered()) {
                     if (isOnlineParty) {
-                        pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
+                        pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss), playerAnswersLog: playerAnswersLog });
                         // Don't call showPartyResultsScreen locally — the onSnapshot handler will do it for ALL players
                     } else {
                         showPartyResultsScreen(); // End game if board is clear
@@ -5744,6 +5765,16 @@
             );
             updateAllTeamsScoreSummary(); // This is crucial for Party mode to show the updated team scores.
             renderJeopardyBoard(); // Re-render the Jeopardy board to reflect any changes if needed
+
+            // Sync overrule to other online players so their playerAnswersLog stays in sync
+            if (isOnlineParty) {
+                pushOnlineState('overrule', {
+                    overruledEntry: lastAnswerLog,
+                    overruledLogIndex: playerAnswersLog.length - 1,
+                    teamMaxGains: partyTeams.map(t => t.maxPositiveGain),
+                    teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss)
+                });
+            }
         }
 
         /**
@@ -5926,7 +5957,7 @@
                     showChallengeResultsScreen();
                 } else if (gameMode === 'party') {
                     if (isOnlineParty) {
-                        pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
+                        pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss), playerAnswersLog: playerAnswersLog });
                         // Don't call showPartyResultsScreen locally — the onSnapshot handler will do it for ALL players
                     } else {
                         showPartyResultsScreen();
@@ -5964,7 +5995,7 @@
             // Party board screen
             document.getElementById('back-to-menu-party-board').addEventListener('click', () => {
                 if (isOnlineParty) {
-                    pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss) });
+                    pushOnlineState('gameOver', { teamMaxGains: partyTeams.map(t => t.maxPositiveGain), teamMaxLosses: partyTeams.map(t => t.maxNegativeLoss), playerAnswersLog: playerAnswersLog });
                     // onSnapshot handler will call showPartyResultsScreen for ALL players
                 } else {
                     showPartyResultsScreen();
