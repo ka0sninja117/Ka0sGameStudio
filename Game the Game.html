@@ -390,6 +390,12 @@
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
         }
 
+        /* Orange-styled buttons on info screens (matching main menu palette) */
+        .info-screen-shared .continue-button.orange-btn,
+        #party-info-screen .continue-button.orange-btn {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+        }
+
         /* --- Party Info Screen Overrides (smaller sizing for compact layout) --- */
         #party-info-screen .screen-container {
             padding: 10px;
@@ -2344,7 +2350,7 @@
 
             <div class="main-menu-buttons" style="margin-top: 10px;">
                 <button id="solo-start-new-button" class="continue-button">Start New Game</button>
-                <button id="solo-enter-code-button" class="challenge-button">Enter Code</button>
+                <button id="solo-enter-code-button" class="continue-button orange-btn">Enter Challenge Code</button>
             </div>
             <button id="back-to-menu-info" class="nav-button">Back to Menu</button>
         </div>
@@ -2380,10 +2386,16 @@
             <p>Correct answers get a point multiplier based on the type of answer option they selected!</p>
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
-            <!-- Online flow: Host / Join buttons -->
-            <div id="party-online-choices" class="main-menu-buttons" style="margin-top: 10px; display: none;">
-                <button id="party-host-button" class="continue-button">Host Game</button>
-                <button id="party-join-button" class="challenge-button">Join Game</button>
+            <!-- Online flow: Host name + Host / Join buttons -->
+            <div id="party-online-choices" style="margin-top: 10px; display: none; flex-direction: column; align-items: center; gap: 10px;">
+                <div id="host-name-row" style="display: flex; align-items: center; gap: 8px;">
+                    <label for="host-display-name" style="font-family: 'Press Start 2P', cursive; font-size: 0.6em; color: #ccc;">Your Name:</label>
+                    <input type="text" id="host-display-name" maxlength="16" placeholder="Host" style="font-family: 'Press Start 2P', cursive; font-size: 0.7em; padding: 5px 10px; border-radius: 8px; border: 2px solid #555; background: #222; color: #fff; width: 140px; text-align: center;">
+                </div>
+                <div class="main-menu-buttons">
+                    <button id="party-host-button" class="continue-button">Host Game</button>
+                    <button id="party-join-button" class="continue-button orange-btn">Join Game</button>
+                </div>
             </div>
             <!-- Local flow: Continue to setup -->
             <button id="party-info-continue-button" class="continue-button" style="display: none;">Continue</button>
@@ -2729,7 +2741,7 @@
         import { initializeFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Game Version
-        const GAME_VERSION = 'v2.0';
+        const GAME_VERSION = 'v2.1';
 
         // ─── Sound Engine (Web Audio API) ───
         let sfxEnabled = true;
@@ -2920,7 +2932,7 @@
         }
 
         /** Create an online party game as host */
-        async function createOnlineGame() {
+        async function createOnlineGame(hostName = 'Host') {
             if (!(await ensureFirebaseReady())) return;
             const code = generateJoinCode();
             onlineGameCode = code;
@@ -2929,7 +2941,7 @@
 
             // Default team names — editable in the lobby
             const teamNames = Array.from({ length: numTeams }, (_, i) => `Team ${i + 1}`);
-            myDisplayName = 'Host';
+            myDisplayName = hostName;
             myTeamIndex = -1; // Host starts unassigned too — picks in lobby
 
             const gameData = {
@@ -5749,9 +5761,10 @@
                 showScreen('party-info-screen');
             });
 
-            // Party info: Host button → create online game
+            // Party info: Host button → create online game with custom name
             document.getElementById('party-host-button').addEventListener('click', () => {
-                createOnlineGame();
+                const hostNameInput = document.getElementById('host-display-name').value.trim();
+                createOnlineGame(hostNameInput || 'Host');
             });
 
             // Party info: Join button → join screen
