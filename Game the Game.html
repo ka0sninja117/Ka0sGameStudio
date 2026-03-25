@@ -396,6 +396,50 @@
             background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
         }
 
+        /* Online choices group (name + host/join) on party info screen */
+        .online-choices-group {
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .online-name-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .online-name-row label {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8em;
+            color: #ccc;
+            white-space: nowrap;
+        }
+
+        .online-name-row input {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8em;
+            padding: 7px 12px;
+            border-radius: 10px;
+            border: 2px solid #b388ff;
+            background: #e0e0e0;
+            color: #111;
+            width: 180px;
+            text-align: center;
+        }
+
+        .online-name-row input::placeholder {
+            color: #999;
+        }
+
+        /* Standardize info-screen button group spacing */
+        .info-screen-shared .main-menu-buttons,
+        #party-info-screen .main-menu-buttons {
+            margin-top: 12px;
+            gap: 12px;
+        }
+
         /* --- Party Info Screen Overrides (smaller sizing for compact layout) --- */
         #party-info-screen .screen-container {
             padding: 10px;
@@ -2348,7 +2392,7 @@
             <p>Correct answers get a point multiplier based on the type of answer option they selected!</</p>
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
-            <div class="main-menu-buttons" style="margin-top: 10px;">
+            <div class="main-menu-buttons">
                 <button id="solo-start-new-button" class="continue-button">Start New Game</button>
                 <button id="solo-enter-code-button" class="continue-button orange-btn">Enter Challenge Code</button>
             </div>
@@ -2387,10 +2431,10 @@
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
             <!-- Online flow: Host name + Host / Join buttons -->
-            <div id="party-online-choices" style="margin-top: 10px; display: none; flex-direction: column; align-items: center; gap: 10px;">
-                <div id="host-name-row" style="display: flex; align-items: center; gap: 8px;">
-                    <label for="host-display-name" style="font-family: 'Press Start 2P', cursive; font-size: 0.6em; color: #ccc;">Your Name:</label>
-                    <input type="text" id="host-display-name" maxlength="16" placeholder="Host" style="font-family: 'Press Start 2P', cursive; font-size: 0.7em; padding: 5px 10px; border-radius: 8px; border: 2px solid #555; background: #222; color: #fff; width: 140px; text-align: center;">
+            <div id="party-online-choices" class="online-choices-group" style="display: none;">
+                <div class="online-name-row">
+                    <label for="host-display-name">Your Name:</label>
+                    <input type="text" id="host-display-name" maxlength="16" placeholder="Enter your name">
                 </div>
                 <div class="main-menu-buttons">
                     <button id="party-host-button" class="continue-button">Host Game</button>
@@ -2398,7 +2442,7 @@
                 </div>
             </div>
             <!-- Local flow: Continue to setup -->
-            <button id="party-info-continue-button" class="continue-button" style="display: none;">Continue</button>
+            <button id="party-info-continue-button" class="continue-button" style="display: none; margin-top: 12px;">Continue</button>
             <button id="back-to-menu-party-info" class="nav-button">Back to Menu</button>
         </div>
     </div>
@@ -2741,7 +2785,7 @@
         import { initializeFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Game Version
-        const GAME_VERSION = 'v2.1';
+        const GAME_VERSION = 'v2.2';
 
         // ─── Sound Engine (Web Audio API) ───
         let sfxEnabled = true;
@@ -5767,10 +5811,11 @@
                 createOnlineGame(hostNameInput || 'Host');
             });
 
-            // Party info: Join button → join screen
+            // Party info: Join button → join screen (carry over name from How to Play screen)
             document.getElementById('party-join-button').addEventListener('click', () => {
+                const enteredName = document.getElementById('host-display-name').value.trim();
                 document.getElementById('join-code-input').value = '';
-                document.getElementById('join-display-name').value = '';
+                document.getElementById('join-display-name').value = enteredName;
                 document.getElementById('join-error').style.display = 'none';
                 showScreen('join-screen');
             });
