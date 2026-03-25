@@ -235,27 +235,11 @@
             align-items: center; /* Center individual items in column */
         }
 
-        /* Container for solo and challenge buttons to keep them on the same row */
-        .solo-versus-row { /* Renamed from solo-challenge-row */
-            display: flex;
-            gap: 20px; /* Space between solo and challenge buttons */
-            justify-content: center;
-            flex-wrap: wrap; /* Allow wrapping on smaller screens */
-            width: 100%; /* Take full width for wrapping */
-        }
-
-        #party-game-button {
-             /* Explicitly center this button if it's the only one in its row */
-            align-self: center;
-            max-width: 200px; /* Keep a max width for this one */
-        }
-
-        #solo-game-button, #versus-mode-button { /* Updated ID */
-            flex: 1; /* Allow flex items to grow and shrink */
-            width: calc(50% - 10px); /* Distribute evenly, accounting for gap. Adjust as needed for specific gap. */
-            min-width: 120px; /* Ensure buttons don't get too small */
-            max-width: 200px; /* Add a max-width to prevent them from becoming too wide on very large screens */
-            box-sizing: border-box; /* Include padding/border in width calculation */
+        #party-online-button, #party-local-button, #solo-game-button {
+            flex: 1;
+            min-width: 120px;
+            max-width: 200px;
+            box-sizing: border-box;
         }
 
 
@@ -1775,19 +1759,10 @@
             .main-menu-buttons {
                 flex-direction: column; /* Keep stacked */
             }
-            .solo-versus-row { /* Updated ID */
-                flex-direction: row; /* Keep side-by-side */
-            }
-
-            #party-game-button {
-                max-width: 250px; /* Slightly wider for desktop */
-            }
-
-            #solo-game-button, #versus-mode-button { /* Updated ID */
+            #party-online-button, #party-local-button, #solo-game-button {
                 font-size: 1.1em;
                 padding: 10px 25px;
-                width: calc(50% - 15px); /* Adjusted for desktop gap */
-                max-width: 250px; /* Larger max-width on desktop */
+                max-width: 250px;
             }
 
             .info-screen-shared h2, #party-setup-screen h2 {
@@ -2330,12 +2305,9 @@
                 <span class="subtitle-part right-slide">Score Big.</span>
             </div>
             <div class="main-menu-buttons">
-                <button id="party-game-button" class="challenge-button">Party</button>
-                <div class="solo-versus-row">
-                    <button id="solo-game-button" class="start-button">Solo</button>
-                    <button id="versus-mode-button" class="challenge-button">Versus</button>
-                </div>
-                <button id="join-game-button" class="challenge-button" style="margin-top: 8px;">Join Online Game</button>
+                <button id="party-online-button" class="challenge-button">Party (Online)</button>
+                <button id="party-local-button" class="challenge-button">Party (Local)</button>
+                <button id="solo-game-button" class="start-button">Solo</button>
             </div>
             <span id="gtg-version" class="gtg-version-display"></span>
         </div>
@@ -2370,7 +2342,10 @@
             <p>Correct answers get a point multiplier based on the type of answer option they selected!</</p>
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
-            <button id="info-continue-button" class="continue-button">Continue</button>
+            <div class="main-menu-buttons" style="margin-top: 10px;">
+                <button id="solo-start-new-button" class="continue-button">Start New Game</button>
+                <button id="solo-enter-code-button" class="challenge-button">Enter Code</button>
+            </div>
             <button id="back-to-menu-info" class="nav-button">Back to Menu</button>
         </div>
     </div>
@@ -2405,7 +2380,13 @@
             <p>Correct answers get a point multiplier based on the type of answer option they selected!</p>
             <p class="spelling-warning">⚠️ Heads up for Free Text: Spelling matters!</p>
 
-            <button id="party-info-continue-button" class="continue-button">Continue</button>
+            <!-- Online flow: Host / Join buttons -->
+            <div id="party-online-choices" class="main-menu-buttons" style="margin-top: 10px; display: none;">
+                <button id="party-host-button" class="continue-button">Host Game</button>
+                <button id="party-join-button" class="challenge-button">Join Game</button>
+            </div>
+            <!-- Local flow: Continue to setup -->
+            <button id="party-info-continue-button" class="continue-button" style="display: none;">Continue</button>
             <button id="back-to-menu-party-info" class="nav-button">Back to Menu</button>
         </div>
     </div>
@@ -2428,8 +2409,7 @@
             </div>
 
             <div class="party-start-buttons">
-                <button id="start-party-game-button" class="nav-button next">Play Locally</button>
-                <button id="start-online-party-button" class="nav-button next" style="background: linear-gradient(135deg, #2196F3 0%, #1565C0 100%); border-color: #1565C0;">Play Online</button>
+                <button id="start-party-game-button" class="nav-button next">Start Game</button>
             </div>
             <button id="back-to-menu-party-setup" class="nav-button">Back to Menu</button>
         </div>
@@ -2749,7 +2729,7 @@
         import { initializeFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Game Version
-        const GAME_VERSION = 'v1.4';
+        const GAME_VERSION = 'v2.0';
 
         // ─── Sound Engine (Web Audio API) ───
         let sfxEnabled = true;
@@ -5756,17 +5736,26 @@
             document.getElementById('solo-game-button').addEventListener('click', () => {
                 showScreen('info-screen');
             });
-            document.getElementById('party-game-button').addEventListener('click', () => {
+            document.getElementById('party-online-button').addEventListener('click', () => {
+                // Show party info with Host/Join choices visible
+                document.getElementById('party-online-choices').style.display = 'flex';
+                document.getElementById('party-info-continue-button').style.display = 'none';
                 showScreen('party-info-screen');
             });
-            document.getElementById('versus-mode-button').addEventListener('click', () => {
-                document.getElementById('challenge-code-input').value = '';
-                document.getElementById('challenge-feedback').style.display = 'none';
-                showScreen('challenge-screen');
+            document.getElementById('party-local-button').addEventListener('click', () => {
+                // Show party info with Continue button for local setup
+                document.getElementById('party-online-choices').style.display = 'none';
+                document.getElementById('party-info-continue-button').style.display = '';
+                showScreen('party-info-screen');
             });
 
-            // Join online game button (main menu)
-            document.getElementById('join-game-button').addEventListener('click', () => {
+            // Party info: Host button → create online game
+            document.getElementById('party-host-button').addEventListener('click', () => {
+                createOnlineGame();
+            });
+
+            // Party info: Join button → join screen
+            document.getElementById('party-join-button').addEventListener('click', () => {
                 document.getElementById('join-code-input').value = '';
                 document.getElementById('join-display-name').value = '';
                 document.getElementById('join-error').style.display = 'none';
@@ -5796,10 +5785,17 @@
                 returnToMenu();
             });
 
-            // Online party setup button
-            document.getElementById('start-online-party-button').addEventListener('click', () => {
-                // Online: skip team name validation — names are set in the lobby
-                createOnlineGame();
+            // Solo info screen: Start New Game
+            document.getElementById('solo-start-new-button').addEventListener('click', () => {
+                showScreen('game-screen');
+                startGame('normal');
+            });
+
+            // Solo info screen: Enter Code (versus/challenge)
+            document.getElementById('solo-enter-code-button').addEventListener('click', () => {
+                document.getElementById('challenge-code-input').value = '';
+                document.getElementById('challenge-feedback').style.display = 'none';
+                showScreen('challenge-screen');
             });
 
             // Lobby start button (host only)
@@ -5816,12 +5812,6 @@
             // Host takeover button
             document.getElementById('host-takeover-button').addEventListener('click', () => {
                 showHostTakeoverPopup();
-            });
-
-            // Info screen (solo)
-            document.getElementById('info-continue-button').addEventListener('click', () => {
-                showScreen('game-screen');
-                startGame('normal');
             });
 
             // Info screen back buttons
@@ -6005,7 +5995,23 @@
             } else if (activeScreen === 'challenge-results-screen') {
                 if (keyPressed === 'a') { document.getElementById('return-to-menu-challenge-results').click(); event.preventDefault(); }
             } else if (activeScreen === 'party-info-screen') {
-                if (keyPressed === 'a') { document.getElementById('party-info-continue-button').click(); event.preventDefault(); }
+                // Keyboard shortcuts depend on which mode buttons are visible
+                if (keyPressed === 'a') {
+                    const continueBtn = document.getElementById('party-info-continue-button');
+                    const onlineChoices = document.getElementById('party-online-choices');
+                    if (continueBtn && continueBtn.style.display !== 'none') {
+                        continueBtn.click();
+                    } else if (onlineChoices && onlineChoices.style.display !== 'none') {
+                        document.getElementById('party-host-button').click();
+                    }
+                    event.preventDefault();
+                } else if (keyPressed === 's') {
+                    const onlineChoices = document.getElementById('party-online-choices');
+                    if (onlineChoices && onlineChoices.style.display !== 'none') {
+                        document.getElementById('party-join-button').click();
+                        event.preventDefault();
+                    }
+                }
             } else if (activeScreen === 'party-setup-screen') {
                 if (!isInputFocused) {
                      if (keyPressed === 'a') { document.getElementById('start-party-game-button').click(); event.preventDefault(); }
