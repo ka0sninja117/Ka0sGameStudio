@@ -37,7 +37,7 @@
     { "question": "What is the theoretical boundary around a black hole beyond which nothing can escape?", "correctAnswer": "Event Horizon", "incorrectAnswers": ["Singularity", "Accretion Disk", "Wormhole"], "difficulty": 5, "boardCategory": "Space", "categories": ["Space", "Black Holes"] },
 
     { "question": "What company makes the PlayStation console?", "correctAnswer": "Sony", "incorrectAnswers": ["Microsoft", "Nintendo", "Sega"], "difficulty": 1, "boardCategory": "Technology", "categories": ["Technology", "Gaming"] },
-    { "question": "Which computer component is responsible for executing instructions and processing data?", "correctAnswer": "CPU", "incorrectAnswers": ["RAM", "GPU", "SSD"], "difficulty": 2, "boardCategory": "Technology", "categories": ["Technology", "Computing"] },
+    { "question": "Which computer component is responsible for executing instructions and processing data?", "correctAnswer": "CPU", "incorrectAnswers": ["RAM", "GPU", "SSD"], "difficulty": 4, "boardCategory": "Technology", "categories": ["Technology", "Computing"] },
     { "question": "Which common internet protocol is used to send and receive email?", "correctAnswer": "SMTP", "incorrectAnswers": ["HTTP", "FTP", "TCP/IP"], "difficulty": 3, "boardCategory": "Technology", "categories": ["Technology", "Internet"] },
     { "question": "What is the name of the first programming language for electronic computers, developed by John Backus at IBM?", "correctAnswer": "FORTRAN", "incorrectAnswers": ["COBOL", "BASIC", "Assembly"], "difficulty": 5, "boardCategory": "Technology", "categories": ["Technology", "Programming"] },
 
