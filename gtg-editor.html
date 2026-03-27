@@ -316,11 +316,225 @@
         }
         .undo-toast .btn { padding: 4px 12px; font-size: 0.75rem; }
 
+        /* ── Fetch overlay ── */
+        .fetch-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .fetch-overlay.active { display: flex; }
+        .fetch-box {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 28px;
+            width: 90%;
+            max-width: 460px;
+        }
+        .fetch-box h3 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.65rem;
+            margin-bottom: 16px;
+            color: #38bdf8;
+        }
+        .fetch-box label {
+            display: block;
+            font-size: 0.78rem;
+            color: #999;
+            margin-bottom: 4px;
+            margin-top: 12px;
+        }
+        .fetch-box label:first-of-type { margin-top: 0; }
+        .fetch-box select, .fetch-box input[type="number"] {
+            width: 100%;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #eee;
+            padding: 8px 10px;
+            font-size: 0.82rem;
+            font-family: inherit;
+        }
+        .fetch-box select:focus, .fetch-box input:focus { border-color: #38bdf8; outline: none; }
+        .fetch-box .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .fetch-box .fetch-status {
+            text-align: center;
+            font-size: 0.78rem;
+            color: #888;
+            margin-top: 12px;
+            min-height: 1.2em;
+        }
+        .btn-fetch { border-color: #38bdf8; color: #38bdf8; }
+        .btn-fetch:hover { background: #38bdf8; color: #111; }
+
+        /* ── Review overlay ── */
+        .review-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 110;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .review-overlay.active { display: flex; flex-direction: column; align-items: center; }
+        .review-header {
+            text-align: center;
+            margin-bottom: 16px;
+            width: 100%;
+            max-width: 600px;
+        }
+        .review-header h3 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.65rem;
+            color: #38bdf8;
+            margin-bottom: 8px;
+        }
+        .review-header .review-progress {
+            font-size: 0.78rem;
+            color: #888;
+        }
+        .review-header .review-toolbar {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .review-card {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 14px;
+            padding: 28px;
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 16px;
+            position: relative;
+        }
+        .review-card .rc-badge {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .rc-badge.easy { background: #166534; color: #4ade80; }
+        .rc-badge.medium { background: #854d0e; color: #facc15; }
+        .rc-badge.hard { background: #7f1d1d; color: #f87171; }
+        .review-card .rc-source {
+            font-size: 0.65rem;
+            color: #555;
+            margin-bottom: 12px;
+        }
+        .review-card .rc-question {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #eee;
+            margin-bottom: 18px;
+            line-height: 1.5;
+        }
+        .review-card .rc-answers {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .rc-answer {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            text-align: center;
+            border: 1px solid #333;
+            background: #252525;
+            color: #ccc;
+        }
+        .rc-answer.correct {
+            border-color: #22c55e;
+            color: #4ade80;
+            background: rgba(34, 197, 94, 0.1);
+        }
+        .rc-answer.wrong {
+            border-color: #444;
+            color: #888;
+        }
+
+        /* ── Review card edit fields ── */
+        .rc-edit-section {
+            border-top: 1px solid #2a2a2a;
+            padding-top: 14px;
+            margin-top: 4px;
+        }
+        .rc-edit-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .rc-edit-row label {
+            font-size: 0.72rem;
+            color: #777;
+            min-width: 70px;
+            white-space: nowrap;
+        }
+        .rc-edit-row input, .rc-edit-row select {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 5px;
+            color: #ddd;
+            padding: 5px 8px;
+            font-size: 0.8rem;
+            font-family: inherit;
+            flex: 1;
+            min-width: 0;
+        }
+        .rc-edit-row input:focus, .rc-edit-row select:focus { border-color: #38bdf8; outline: none; }
+
+        .rc-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 14px;
+        }
+        .btn-approve { border-color: #22c55e; color: #22c55e; }
+        .btn-approve:hover { background: #22c55e; color: #111; }
+        .btn-skip { border-color: #f59e0b; color: #f59e0b; }
+        .btn-skip:hover { background: #f59e0b; color: #111; }
+        .btn-reject { border-color: #ef4444; color: #ef4444; }
+        .btn-reject:hover { background: #ef4444; color: #fff; }
+
+        .review-summary {
+            text-align: center;
+            padding: 20px;
+            color: #aaa;
+            font-size: 0.85rem;
+            max-width: 600px;
+            width: 100%;
+        }
+        .review-summary strong { color: #22c55e; }
+
+        /* Word count warning */
+        .rc-length-warn {
+            font-size: 0.7rem;
+            color: #f59e0b;
+            margin-top: 4px;
+        }
+
         /* ── Responsive ── */
         @media (max-width: 700px) {
             body { padding: 16px 10px 40px; }
             .toolbar { gap: 6px; }
             .toolbar input[type="text"] { width: 100%; }
+            .review-card .rc-answers { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -346,6 +560,7 @@
         <div class="spacer"></div>
         <div class="badge" id="count-badge">Loading...</div>
         <button class="btn btn-primary" id="btn-add" title="Add new question">+ Add</button>
+        <button class="btn btn-fetch" id="btn-fetch" title="Fetch questions from trivia API">Fetch from API</button>
         <button class="btn btn-amber" id="btn-import" title="Import JSON file">Import</button>
         <button class="btn btn-primary" id="btn-export" title="Download as gtg-questions.json">Export JSON</button>
     </div>
@@ -370,6 +585,48 @@
             </thead>
             <tbody id="table-body"></tbody>
         </table>
+    </div>
+
+    <!-- Fetch from API overlay -->
+    <div class="fetch-overlay" id="fetch-overlay">
+        <div class="fetch-box">
+            <h3>Fetch from Trivia API</h3>
+            <label for="fetch-amount">Number of Questions</label>
+            <input type="number" id="fetch-amount" min="1" max="50" value="10">
+            <label for="fetch-category">Category</label>
+            <select id="fetch-category">
+                <option value="">Any Category</option>
+            </select>
+            <label for="fetch-difficulty">Difficulty</label>
+            <select id="fetch-difficulty">
+                <option value="">Any Difficulty</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+            <label for="fetch-max-words">Max Question Length (words)</label>
+            <input type="number" id="fetch-max-words" min="5" max="50" value="20">
+            <div class="btn-row">
+                <button class="btn" id="btn-cancel-fetch">Cancel</button>
+                <button class="btn btn-fetch" id="btn-do-fetch">Fetch Questions</button>
+            </div>
+            <div class="fetch-status" id="fetch-status"></div>
+        </div>
+    </div>
+
+    <!-- Review overlay (card-based question preview) -->
+    <div class="review-overlay" id="review-overlay">
+        <div class="review-header">
+            <h3>Review Fetched Questions</h3>
+            <div class="review-progress" id="review-progress"></div>
+            <div class="review-toolbar">
+                <button class="btn btn-approve" id="btn-approve-all">Approve All Remaining</button>
+                <button class="btn btn-reject" id="btn-reject-all">Reject All Remaining</button>
+                <button class="btn" id="btn-close-review">Done</button>
+            </div>
+        </div>
+        <div id="review-cards-container"></div>
+        <div class="review-summary" id="review-summary"></div>
     </div>
 
     <!-- Import overlay -->
@@ -790,6 +1047,329 @@
                 e.preventDefault();
                 e.returnValue = '';
             }
+        });
+
+        // ── Fetch from API ──
+        const fetchOverlay = document.getElementById('fetch-overlay');
+        const fetchCategorySelect = document.getElementById('fetch-category');
+        const fetchStatus = document.getElementById('fetch-status');
+
+        // Open Trivia DB category mapping to our boardCategory names
+        const OTDB_CATEGORY_MAP = {
+            9: { board: 'General', cats: ['General Knowledge'] },
+            10: { board: 'Books', cats: ['Books', 'Literature'] },
+            11: { board: 'Movies/TV', cats: ['Movies/TV', 'Film History'] },
+            12: { board: 'Music', cats: ['Music'] },
+            13: { board: 'Music', cats: ['Music', 'Theatre'] },
+            14: { board: 'Movies/TV', cats: ['Movies/TV', 'Television'] },
+            15: { board: 'Technology', cats: ['Technology', 'Gaming'] },
+            16: { board: 'General', cats: ['General Knowledge', 'Board Games'] },
+            17: { board: 'Science', cats: ['Science', 'Nature'] },
+            18: { board: 'Technology', cats: ['Technology', 'Computing'] },
+            19: { board: 'Science', cats: ['Science', 'Mathematics'] },
+            20: { board: 'History', cats: ['History', 'Mythology'] },
+            21: { board: 'Sports', cats: ['Sports'] },
+            22: { board: 'Geography', cats: ['Geography'] },
+            23: { board: 'History', cats: ['History'] },
+            24: { board: 'History', cats: ['History', 'Politics'] },
+            25: { board: 'Art', cats: ['Art'] },
+            26: { board: 'General', cats: ['General Knowledge', 'Celebrities'] },
+            27: { board: 'Animals', cats: ['Animals'] },
+            28: { board: 'Technology', cats: ['Technology', 'Vehicles'] },
+            29: { board: 'General', cats: ['General Knowledge', 'Comics'] },
+            30: { board: 'Technology', cats: ['Technology', 'Gadgets'] },
+            31: { board: 'Movies/TV', cats: ['Movies/TV', 'Anime'] },
+            32: { board: 'Movies/TV', cats: ['Movies/TV', 'Animation'] }
+        };
+
+        const OTDB_DIFF_MAP = { easy: 1, medium: 3, hard: 5 };
+
+        // Populate fetch category dropdown
+        const OTDB_CATEGORIES = [
+            [9, 'General Knowledge'], [27, 'Animals'], [25, 'Art'],
+            [10, 'Books'], [22, 'Geography'], [23, 'History'],
+            [12, 'Music'], [11, 'Film'], [14, 'Television'],
+            [15, 'Video Games'], [17, 'Science & Nature'], [18, 'Computers'],
+            [19, 'Mathematics'], [20, 'Mythology'], [21, 'Sports'],
+            [24, 'Politics'], [26, 'Celebrities'], [28, 'Vehicles'],
+            [29, 'Comics'], [31, 'Anime & Manga'], [32, 'Cartoons']
+        ];
+        OTDB_CATEGORIES.forEach(([id, name]) => {
+            const opt = document.createElement('option');
+            opt.value = id; opt.textContent = name;
+            fetchCategorySelect.appendChild(opt);
+        });
+
+        document.getElementById('btn-fetch').addEventListener('click', () => {
+            fetchStatus.textContent = '';
+            fetchOverlay.classList.add('active');
+        });
+        document.getElementById('btn-cancel-fetch').addEventListener('click', () => {
+            fetchOverlay.classList.remove('active');
+        });
+        fetchOverlay.addEventListener('click', (e) => {
+            if (e.target === fetchOverlay) fetchOverlay.classList.remove('active');
+        });
+
+        // HTML entity decoder
+        function decodeHTML(html) {
+            const txt = document.createElement('textarea');
+            txt.innerHTML = html;
+            return txt.value;
+        }
+
+        document.getElementById('btn-do-fetch').addEventListener('click', async () => {
+            const amount = parseInt(document.getElementById('fetch-amount').value) || 10;
+            const category = document.getElementById('fetch-category').value;
+            const difficulty = document.getElementById('fetch-difficulty').value;
+            const maxWords = parseInt(document.getElementById('fetch-max-words').value) || 20;
+
+            let url = `https://opentdb.com/api.php?amount=${Math.min(amount * 2, 50)}&type=multiple`;
+            if (category) url += `&category=${category}`;
+            if (difficulty) url += `&difficulty=${difficulty}`;
+
+            fetchStatus.textContent = 'Fetching questions...';
+
+            try {
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (data.response_code !== 0) {
+                    const messages = {
+                        1: 'Not enough questions available for those filters. Try fewer or different settings.',
+                        2: 'Invalid parameter. Please try different settings.',
+                        5: 'Rate limited — please wait a few seconds and try again.'
+                    };
+                    fetchStatus.textContent = messages[data.response_code] || `API error (code ${data.response_code})`;
+                    return;
+                }
+
+                // Map and filter questions
+                let mapped = data.results.map(q => {
+                    const decoded = {
+                        question: decodeHTML(q.question),
+                        correctAnswer: decodeHTML(q.correct_answer),
+                        incorrectAnswers: q.incorrect_answers.map(a => decodeHTML(a)),
+                        apiDifficulty: q.difficulty,
+                        apiCategory: q.category,
+                        apiCategoryId: parseInt(category) || null
+                    };
+
+                    // Map to our format
+                    const catId = decoded.apiCategoryId || Object.entries(OTDB_CATEGORY_MAP).find(([_, v]) =>
+                        q.category.includes(v.cats[0]) || v.cats.some(c => q.category.includes(c))
+                    )?.[0];
+                    const mapping = OTDB_CATEGORY_MAP[catId] || { board: 'General', cats: ['General Knowledge'] };
+
+                    return {
+                        question: decoded.question,
+                        correctAnswer: decoded.correctAnswer,
+                        incorrectAnswers: decoded.incorrectAnswers,
+                        difficulty: OTDB_DIFF_MAP[decoded.apiDifficulty] || 3,
+                        boardCategory: mapping.board,
+                        categories: [...mapping.cats],
+                        _wordCount: decoded.question.split(/\s+/).length,
+                        _apiSource: decoded.apiCategory
+                    };
+                });
+
+                // Filter by word count
+                mapped = mapped.filter(q => q._wordCount <= maxWords);
+
+                // Remove duplicates (questions already in our bank)
+                const existingSet = new Set(questions.map(q => q.question.toLowerCase().trim()));
+                mapped = mapped.filter(q => !existingSet.has(q.question.toLowerCase().trim()));
+
+                // Cap at requested amount
+                mapped = mapped.slice(0, amount);
+
+                if (mapped.length === 0) {
+                    fetchStatus.textContent = 'No new questions matched the criteria. Try different filters.';
+                    return;
+                }
+
+                fetchStatus.textContent = `Got ${mapped.length} questions! Opening review...`;
+                fetchOverlay.classList.remove('active');
+
+                // Open review mode
+                setTimeout(() => openReviewMode(mapped), 200);
+
+            } catch (err) {
+                console.error('Fetch error:', err);
+                fetchStatus.textContent = 'Network error. Check your connection and try again.';
+            }
+        });
+
+        // ── Review Mode ──
+        const reviewOverlay = document.getElementById('review-overlay');
+        const reviewCardsContainer = document.getElementById('review-cards-container');
+        const reviewProgress = document.getElementById('review-progress');
+        const reviewSummary = document.getElementById('review-summary');
+        let reviewQueue = []; // { ...question, _status: 'pending'|'approved'|'rejected' }
+
+        function openReviewMode(fetchedQuestions) {
+            reviewQueue = fetchedQuestions.map(q => ({ ...q, _status: 'pending' }));
+            renderReviewCards();
+            reviewOverlay.classList.add('active');
+        }
+
+        function renderReviewCards() {
+            reviewCardsContainer.innerHTML = '';
+            const pending = reviewQueue.filter(q => q._status === 'pending');
+            const approved = reviewQueue.filter(q => q._status === 'approved');
+            const rejected = reviewQueue.filter(q => q._status === 'rejected');
+
+            reviewProgress.textContent = `${approved.length} approved · ${rejected.length} rejected · ${pending.length} remaining`;
+
+            // Collect existing board categories for dropdown
+            const existingBoardCats = new Set(questions.map(q => q.boardCategory));
+            reviewQueue.forEach(q => existingBoardCats.add(q.boardCategory));
+            const boardCatOptions = [...existingBoardCats].sort();
+
+            reviewQueue.forEach((q, idx) => {
+                const card = document.createElement('div');
+                card.className = 'review-card';
+                if (q._status === 'approved') card.style.borderColor = '#22c55e';
+                if (q._status === 'rejected') card.style.borderColor = '#ef4444';
+                if (q._status === 'rejected') card.style.opacity = '0.4';
+
+                // Difficulty badge
+                const diffLabel = q.difficulty <= 2 ? 'easy' : q.difficulty <= 3 ? 'medium' : 'hard';
+                const badgeClass = q.difficulty <= 2 ? 'easy' : q.difficulty <= 3 ? 'medium' : 'hard';
+
+                // Shuffle answers for display
+                const allAnswers = [
+                    { text: q.correctAnswer, correct: true },
+                    ...q.incorrectAnswers.map(a => ({ text: a, correct: false }))
+                ].sort(() => Math.random() - 0.5);
+
+                const statusLabel = q._status === 'approved' ? ' · APPROVED' : q._status === 'rejected' ? ' · REJECTED' : '';
+
+                card.innerHTML = `
+                    <div class="rc-badge ${badgeClass}">Diff ${q.difficulty}${statusLabel}</div>
+                    <div class="rc-source">Source: ${q._apiSource || 'Open Trivia DB'} · ${q._wordCount} words</div>
+                    <div class="rc-question">${q.question}</div>
+                    <div class="rc-answers">
+                        ${allAnswers.map(a => `<div class="rc-answer ${a.correct ? 'correct' : 'wrong'}">${a.correct ? '✓ ' : ''}${a.text}</div>`).join('')}
+                    </div>
+                    ${q._wordCount > 15 ? '<div class="rc-length-warn">⚠ This question is a bit wordy</div>' : ''}
+                    <div class="rc-edit-section">
+                        <div class="rc-edit-row">
+                            <label>Difficulty</label>
+                            <select data-idx="${idx}" data-field="difficulty">
+                                ${[1,2,3,4,5].map(d => `<option value="${d}" ${d === q.difficulty ? 'selected' : ''}>${d}</option>`).join('')}
+                            </select>
+                            <label>Board Cat</label>
+                            <select data-idx="${idx}" data-field="boardCategory">
+                                ${boardCatOptions.map(c => `<option value="${c}" ${c === q.boardCategory ? 'selected' : ''}>${c}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="rc-edit-row">
+                            <label>Categories</label>
+                            <input type="text" data-idx="${idx}" data-field="categories" value="${q.categories.join(', ')}">
+                        </div>
+                        <div class="rc-edit-row">
+                            <label>Correct</label>
+                            <input type="text" data-idx="${idx}" data-field="correctAnswer" value="${q.correctAnswer}">
+                        </div>
+                        <div class="rc-edit-row">
+                            <label>Wrong 1</label>
+                            <input type="text" data-idx="${idx}" data-field="wrong0" value="${q.incorrectAnswers[0] || ''}">
+                        </div>
+                        <div class="rc-edit-row">
+                            <label>Wrong 2</label>
+                            <input type="text" data-idx="${idx}" data-field="wrong1" value="${q.incorrectAnswers[1] || ''}">
+                        </div>
+                        <div class="rc-edit-row">
+                            <label>Wrong 3</label>
+                            <input type="text" data-idx="${idx}" data-field="wrong2" value="${q.incorrectAnswers[2] || ''}">
+                        </div>
+                    </div>
+                    <div class="rc-actions">
+                        ${q._status === 'pending' ? `
+                            <button class="btn btn-approve" data-action="approve" data-idx="${idx}">Approve</button>
+                            <button class="btn btn-reject" data-action="reject" data-idx="${idx}">Reject</button>
+                        ` : `
+                            <button class="btn btn-skip" data-action="undo" data-idx="${idx}">Undo</button>
+                        `}
+                    </div>
+                `;
+
+                // Edit field listeners
+                card.querySelectorAll('[data-field]').forEach(el => {
+                    el.addEventListener('change', () => {
+                        const i = parseInt(el.dataset.idx);
+                        const field = el.dataset.field;
+                        if (field === 'difficulty') {
+                            reviewQueue[i].difficulty = parseInt(el.value);
+                        } else if (field === 'categories') {
+                            reviewQueue[i].categories = el.value.split(',').map(s => s.trim()).filter(Boolean);
+                        } else if (field === 'correctAnswer') {
+                            reviewQueue[i].correctAnswer = el.value;
+                        } else if (field.startsWith('wrong')) {
+                            const wIdx = parseInt(field.replace('wrong', ''));
+                            reviewQueue[i].incorrectAnswers[wIdx] = el.value;
+                        } else {
+                            reviewQueue[i][field] = el.value;
+                        }
+                    });
+                });
+
+                // Action button listeners
+                card.querySelectorAll('[data-action]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const i = parseInt(btn.dataset.idx);
+                        const action = btn.dataset.action;
+                        if (action === 'approve') reviewQueue[i]._status = 'approved';
+                        else if (action === 'reject') reviewQueue[i]._status = 'rejected';
+                        else if (action === 'undo') reviewQueue[i]._status = 'pending';
+                        renderReviewCards();
+                    });
+                });
+
+                reviewCardsContainer.appendChild(card);
+            });
+
+            // Summary
+            if (pending.length === 0 && reviewQueue.length > 0) {
+                reviewSummary.innerHTML = `All questions reviewed! <strong>${approved.length}</strong> approved, ${rejected.length} rejected. Click <strong>Done</strong> to add approved questions.`;
+            } else {
+                reviewSummary.textContent = '';
+            }
+        }
+
+        // Approve/Reject all
+        document.getElementById('btn-approve-all').addEventListener('click', () => {
+            reviewQueue.forEach(q => { if (q._status === 'pending') q._status = 'approved'; });
+            renderReviewCards();
+        });
+        document.getElementById('btn-reject-all').addEventListener('click', () => {
+            reviewQueue.forEach(q => { if (q._status === 'pending') q._status = 'rejected'; });
+            renderReviewCards();
+        });
+
+        // Done — add approved to question bank
+        document.getElementById('btn-close-review').addEventListener('click', () => {
+            const approved = reviewQueue.filter(q => q._status === 'approved');
+            if (approved.length > 0) {
+                approved.forEach(q => {
+                    // Clean up internal fields before adding
+                    const clean = {
+                        question: q.question,
+                        correctAnswer: q.correctAnswer,
+                        incorrectAnswers: [...q.incorrectAnswers],
+                        difficulty: q.difficulty,
+                        boardCategory: q.boardCategory,
+                        categories: [...q.categories]
+                    };
+                    questions.push(clean);
+                });
+                markDirty();
+                rebuildCategoryFilter();
+                onDataChanged();
+            }
+            reviewQueue = [];
+            reviewOverlay.classList.remove('active');
         });
 
         // ── Init ──
