@@ -834,7 +834,8 @@
             const ENEMY_SUB_HITBOX_OFFSET_Y = (ENEMY_SUB_HEIGHT / 2) + 2 - ENEMY_SUB_HITBOX_RADIUS;
 
             // --- Helicopter Parameters ---
-            const HELI_SPEED = MAX_FORWARD_SPEED * 2.5; // Helicopters are fast
+            const HELI_PATROL_SPEED = PATROL_SHIP_MAX_SPEED * 2; // 2x patrol boat speed for normal patrol
+            const HELI_ALARMED_SPEED = PATROL_SHIP_MAX_SPEED * 3; // 3x patrol boat speed when alarmed/investigating
             const HELI_REFUEL_TIME_MS = 20000; // 20 seconds refuel
             const HELI_PATROL_MIN_DIST = 700;
             const HELI_PATROL_MAX_DIST = 1000;
@@ -842,8 +843,8 @@
             const HELI_MAX_HEALTH = 40;
 
             // --- Sonobuoy Parameters ---
-            const SONOBUOY_PING_LIFETIME_MS = 7000; // 7 seconds active
-            const SONOBUOY_PING_INTERVAL_MS = 1500; // Ping every 1.5 seconds
+            const SONOBUOY_PING_LIFETIME_MS = 10000; // 10 seconds active
+            const SONOBUOY_PING_INTERVAL_MS = 2000; // Ping every 2 seconds
             const SONOBUOY_DETECTION_RANGE = 250; // Detection radius
             const SONOBUOY_PING_VISUAL_RANGE = 250; // Visual ping ring max radius
 
@@ -2019,25 +2020,28 @@
                 heli.patrolProgress = 0;
                 heli.buoyDroppedOut = false;
                 heli.buoyDroppedReturn = false;
-                heli.buoyDropPointOut = 0.3 + Math.random() * 0.5; // Drop between 30-80% of way out
-                heli.buoyDropPointReturn = 0.3 + Math.random() * 0.5;
+                heli.buoyDropPointOut = 0.1 + Math.random() * 0.3; // Drop between 10-40% (outbound half)
+                heli.buoyDropPointReturn = 0.6 + Math.random() * 0.3; // Drop between 60-90% (return half)
             }
 
             function heliUpdatePatrolPosition(heli) {
-                // Elliptical path: major axis along patrolAngle, minor axis perpendicular (40% width)
-                const t = heli.patrolProgress * Math.PI; // 0 → PI (out and back forms one half of ellipse)
-                const alongDist = heli.patrolMaxDist * Math.sin(t); // Distance along major axis
-                const perpDist = heli.patrolMaxDist * 0.4 * Math.sin(t) * Math.cos(t * 2); // Lateral wobble for oval shape
+                // Full elliptical orbit: progress 0→1 traces a complete ellipse
+                // Base is at t=0 (and t=1). Farthest point is at t=0.5.
+                const t = heli.patrolProgress * Math.PI * 2; // 0 → 2PI for full ellipse
+                // Along patrol angle: 0 at base, max at halfway, back to 0
+                const alongDist = heli.patrolMaxDist * 0.5 * (1 - Math.cos(t));
+                // Perpendicular: curves to one side going out, other side coming back
+                const perpDist = heli.patrolMaxDist * 0.3 * Math.sin(t);
                 const cosA = Math.cos(heli.patrolAngle);
                 const sinA = Math.sin(heli.patrolAngle);
                 heli.worldX = heli.patrolBaseX + alongDist * cosA - perpDist * sinA;
                 heli.worldY = heli.patrolBaseY + alongDist * sinA + perpDist * cosA;
-                // Update heading to face direction of travel
-                if (heli.aiState === 'PATROL_OUT') {
-                    heli.heading = normalizeDegreeAngle(radiansToDegrees(heli.patrolAngle) + 90);
-                } else {
-                    heli.heading = normalizeDegreeAngle(radiansToDegrees(heli.patrolAngle) + 90 + 180);
-                }
+                // Compute heading from curve tangent (derivatives of parametric position)
+                const dAlong = heli.patrolMaxDist * 0.5 * Math.sin(t) * Math.PI * 2;
+                const dPerp = heli.patrolMaxDist * 0.3 * Math.cos(t) * Math.PI * 2;
+                const dWorldX = dAlong * cosA - dPerp * sinA;
+                const dWorldY = dAlong * sinA + dPerp * cosA;
+                heli.heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dWorldY, dWorldX)) + 90);
             }
 
             function heliDropBuoy(heli, heliIndex, currentTime) {
@@ -4736,27 +4740,28 @@
                             break;
                         }
                         case 'PATROL_OUT': {
-                            heli.speed = HELI_SPEED;
-                            heli.patrolProgress += (HELI_SPEED * deltaTimeInSeconds) / heli.patrolMaxDist;
-                            if (heli.patrolProgress >= 1) {
-                                heli.patrolProgress = 1;
+                            heli.speed = HELI_PATROL_SPEED;
+                            // Full ellipse: progress 0→0.5 is the outbound half
+                            const ellipseCircumference = Math.PI * heli.patrolMaxDist * 0.8; // approximate
+                            heli.patrolProgress += (HELI_PATROL_SPEED * deltaTimeInSeconds) / ellipseCircumference;
+                            if (heli.patrolProgress >= 0.5) {
+                                heli.patrolProgress = 0.5;
                                 heli.aiState = 'PATROL_RETURN';
-                                heli.buoyDroppedReturn = false;
-                                heli.buoyDropPointReturn = 0.3 + Math.random() * 0.5;
                             }
-                            // Drop buoy on way out
+                            // Drop buoy on way out (buoyDropPointOut is in 0.1-0.4 range)
                             if (!heli.buoyDroppedOut && heli.patrolProgress >= heli.buoyDropPointOut) {
                                 heliDropBuoy(heli, h, currentTime);
                                 heli.buoyDroppedOut = true;
                             }
-                            // Update position along elliptical path
                             heliUpdatePatrolPosition(heli);
                             break;
                         }
                         case 'PATROL_RETURN': {
-                            heli.speed = HELI_SPEED;
-                            heli.patrolProgress -= (HELI_SPEED * deltaTimeInSeconds) / heli.patrolMaxDist;
-                            if (heli.patrolProgress <= 0) {
+                            heli.speed = HELI_PATROL_SPEED;
+                            // Full ellipse: progress 0.5→1.0 is the return half
+                            const ellipseCircumReturn = Math.PI * heli.patrolMaxDist * 0.8;
+                            heli.patrolProgress += (HELI_PATROL_SPEED * deltaTimeInSeconds) / ellipseCircumReturn;
+                            if (heli.patrolProgress >= 1.0) {
                                 heli.patrolProgress = 0;
                                 heli.aiState = 'REFUELING';
                                 heli.refuelStartTime = currentTime;
@@ -4767,8 +4772,8 @@
                                 heli.patrolBaseX = baseCentroid.x;
                                 heli.patrolBaseY = baseCentroid.y;
                             }
-                            // Drop buoy on way back
-                            if (!heli.buoyDroppedReturn && heli.patrolProgress <= heli.buoyDropPointReturn) {
+                            // Drop buoy on way back (buoyDropPointReturn is in 0.6-0.9 range)
+                            if (!heli.buoyDroppedReturn && heli.patrolProgress >= heli.buoyDropPointReturn) {
                                 heliDropBuoy(heli, h, currentTime);
                                 heli.buoyDroppedReturn = true;
                             }
@@ -4776,7 +4781,7 @@
                             break;
                         }
                         case 'INVESTIGATING': {
-                            heli.speed = HELI_SPEED;
+                            heli.speed = HELI_ALARMED_SPEED;
                             const dx = heli.investigateTargetX - heli.worldX;
                             const dy = heli.investigateTargetY - heli.worldY;
                             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -4785,9 +4790,14 @@
                             if (dist < 30) {
                                 // Arrived at investigation point — drop a buoy
                                 heliDropBuoy(heli, h, currentTime);
-                                // Return to patrol
-                                heli.aiState = 'PATROL_RETURN';
-                                heli.buoyDroppedReturn = true; // Already dropped
+                                // Return to base to refuel
+                                heli.aiState = 'REFUELING';
+                                heli.refuelStartTime = currentTime;
+                                const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
+                                heli.worldX = baseCentroid.x;
+                                heli.worldY = baseCentroid.y;
+                                heli.patrolBaseX = baseCentroid.x;
+                                heli.patrolBaseY = baseCentroid.y;
                             }
                             // Move toward target
                             const moveRad = degreesToRadians(heli.heading - 90);
@@ -4797,7 +4807,7 @@
                             break;
                         }
                         case 'RELOCATING': {
-                            heli.speed = HELI_SPEED;
+                            heli.speed = HELI_ALARMED_SPEED;
                             if (heli.relocateTargetIsland) {
                                 // Check if target island is still alive
                                 if (!heli.relocateTargetIsland.hasHeadquarters || heli.relocateTargetIsland.hqHealth <= 0) {
@@ -4828,11 +4838,12 @@
                             break;
                         }
                         case 'CRASH_LANDING': {
-                            // Continue current patrol if in flight, then crash land
+                            // Continue current patrol to complete the loop, then crash
                             if (!heli.crashPatrolDone) {
-                                heli.speed = HELI_SPEED;
-                                heli.patrolProgress -= (HELI_SPEED * deltaTimeInSeconds) / (heli.patrolMaxDist || 500);
-                                if (heli.patrolProgress <= 0) {
+                                heli.speed = HELI_PATROL_SPEED;
+                                const ellipseCircumCrash = Math.PI * (heli.patrolMaxDist || 500) * 0.8;
+                                heli.patrolProgress += (HELI_PATROL_SPEED * deltaTimeInSeconds) / ellipseCircumCrash;
+                                if (heli.patrolProgress >= 1.0) {
                                     heli.crashPatrolDone = true;
                                 }
                                 heliUpdatePatrolPosition(heli);
