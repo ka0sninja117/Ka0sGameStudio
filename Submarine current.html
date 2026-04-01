@@ -836,15 +836,17 @@
             // --- Helicopter Parameters ---
             const HELI_PATROL_SPEED = PATROL_SHIP_MAX_SPEED * 2; // 2x patrol boat speed for normal patrol
             const HELI_ALARMED_SPEED = PATROL_SHIP_MAX_SPEED * 3; // 3x patrol boat speed when alarmed/investigating
-            const HELI_REFUEL_TIME_MS = 20000; // 20 seconds refuel
+            const HELI_REFUEL_TIME_MIN_MS = 5000; // 5-10 seconds refuel (random)
+            const HELI_REFUEL_TIME_MAX_MS = 10000;
+            const HELI_SURFACE_DETECTION_RANGE = 1000; // Helicopter can spot surface subs within 1000px
             const HELI_PATROL_MIN_DIST = 700;
             const HELI_PATROL_MAX_DIST = 1000;
             const HELI_HITBOX_RADIUS = 12;
             const HELI_MAX_HEALTH = 40;
 
             // --- Sonobuoy Parameters ---
-            const SONOBUOY_PING_LIFETIME_MS = 10000; // 10 seconds active
-            const SONOBUOY_PING_INTERVAL_MS = 2000; // Ping every 2 seconds
+            const SONOBUOY_PING_LIFETIME_MS = 12000; // 12 seconds active
+            const SONOBUOY_PING_INTERVAL_MS = 1500; // Ping every 1.5 seconds
             const SONOBUOY_DETECTION_RANGE = 250; // Detection radius
             const SONOBUOY_PING_VISUAL_RANGE = 250; // Visual ping ring max radius
 
@@ -1988,8 +1990,9 @@
                     heading: 0, speed: 0,
                     maxHealth: HELI_MAX_HEALTH, currentHealth: HELI_MAX_HEALTH,
                     homeIsland: homeIsland,
-                    aiState: 'REFUELING', // REFUELING, PATROL_OUT, PATROL_RETURN, INVESTIGATING, RELOCATING, CRASH_LANDING
+                    aiState: 'REFUELING', // REFUELING, PATROL_OUT, PATROL_RETURN, INVESTIGATING, RELOCATING, CRASH_LANDING, RETURNING
                     refuelStartTime: performance.now(),
+                    refuelDuration: HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS),
                     // Patrol path (elliptical)
                     patrolAngle: 0, // radial direction of current patrol
                     patrolMaxDist: 0, // max distance for this patrol
@@ -4669,19 +4672,33 @@
                         }
                     }
 
-                    // Check for alerts: base alarm, patrol ship detection, or buoy detection
-                    if (heli.aiState === 'PATROL_OUT' || heli.aiState === 'PATROL_RETURN') {
+                    // Check for alerts: base alarm, patrol ship detection, buoy detection, or visual surface detection
+                    if (heli.aiState === 'PATROL_OUT' || heli.aiState === 'PATROL_RETURN' || heli.aiState === 'RETURNING') {
                         let alertX = null, alertY = null;
                         let onSurface = false;
 
+                        // Helicopter can visually spot player on or near surface (depth < 10m)
+                        if (submarine.depth < 10) {
+                            const dxPlayer = submarine.worldX - heli.worldX;
+                            const dyPlayer = submarine.worldY - heli.worldY;
+                            const distToPlayer = Math.sqrt(dxPlayer * dxPlayer + dyPlayer * dyPlayer);
+                            if (distToPlayer <= HELI_SURFACE_DETECTION_RANGE) {
+                                alertX = submarine.worldX;
+                                alertY = submarine.worldY;
+                                onSurface = true;
+                            }
+                        }
+
                         // Check sonobuoy detections
-                        for (const buoy of sonobuoys) {
-                            if (buoy.detectedPlayer && buoy.parentHeliId === h) {
-                                alertX = buoy.detectedPlayerX;
-                                alertY = buoy.detectedPlayerY;
-                                onSurface = buoy.detectedPlayerOnSurface;
-                                buoy.detectedPlayer = false;
-                                break;
+                        if (!alertX) {
+                            for (const buoy of sonobuoys) {
+                                if (buoy.detectedPlayer && buoy.parentHeliId === h) {
+                                    alertX = buoy.detectedPlayerX;
+                                    alertY = buoy.detectedPlayerY;
+                                    onSurface = buoy.detectedPlayerOnSurface;
+                                    buoy.detectedPlayer = false;
+                                    break;
+                                }
                             }
                         }
 
@@ -4733,7 +4750,8 @@
                     switch (heli.aiState) {
                         case 'REFUELING': {
                             heli.speed = 0;
-                            if (currentTime - heli.refuelStartTime >= HELI_REFUEL_TIME_MS) {
+                            const refuelDuration = heli.refuelDuration || HELI_REFUEL_TIME_MIN_MS;
+                            if (currentTime - heli.refuelStartTime >= refuelDuration) {
                                 heliStartPatrol(heli);
                                 heli.aiState = 'PATROL_OUT';
                             }
@@ -4765,6 +4783,7 @@
                                 heli.patrolProgress = 0;
                                 heli.aiState = 'REFUELING';
                                 heli.refuelStartTime = currentTime;
+                                heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
                                 // Snap to base
                                 const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
                                 heli.worldX = baseCentroid.x;
@@ -4790,20 +4809,40 @@
                             if (dist < 30) {
                                 // Arrived at investigation point — drop a buoy
                                 heliDropBuoy(heli, h, currentTime);
-                                // Return to base to refuel
-                                heli.aiState = 'REFUELING';
-                                heli.refuelStartTime = currentTime;
-                                const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
-                                heli.worldX = baseCentroid.x;
-                                heli.worldY = baseCentroid.y;
-                                heli.patrolBaseX = baseCentroid.x;
-                                heli.patrolBaseY = baseCentroid.y;
+                                // Fly back to base (not teleport)
+                                heli.aiState = 'RETURNING';
                             }
                             // Move toward target
                             const moveRad = degreesToRadians(heli.heading - 90);
                             const moveDist = Math.min(heli.speed * deltaTimeInSeconds, dist);
                             heli.worldX += moveDist * Math.cos(moveRad);
                             heli.worldY += moveDist * Math.sin(moveRad);
+                            break;
+                        }
+                        case 'RETURNING': {
+                            // Fly back to base after investigating
+                            heli.speed = HELI_ALARMED_SPEED;
+                            const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
+                            const dxR = baseCentroid.x - heli.worldX;
+                            const dyR = baseCentroid.y - heli.worldY;
+                            const distR = Math.sqrt(dxR * dxR + dyR * dyR);
+                            heli.heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dyR, dxR)) + 90);
+
+                            if (distR < 50) {
+                                // Arrived at base — land and refuel
+                                heli.worldX = baseCentroid.x;
+                                heli.worldY = baseCentroid.y;
+                                heli.patrolBaseX = baseCentroid.x;
+                                heli.patrolBaseY = baseCentroid.y;
+                                heli.aiState = 'REFUELING';
+                                heli.refuelStartTime = currentTime;
+                                heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
+                            } else {
+                                const moveRadR = degreesToRadians(heli.heading - 90);
+                                const moveDistR = Math.min(heli.speed * deltaTimeInSeconds, distR);
+                                heli.worldX += moveDistR * Math.cos(moveRadR);
+                                heli.worldY += moveDistR * Math.sin(moveRadR);
+                            }
                             break;
                         }
                         case 'RELOCATING': {
@@ -4828,6 +4867,7 @@
                                     heli.patrolBaseY = targetCentroid.y;
                                     heli.aiState = 'REFUELING';
                                     heli.refuelStartTime = currentTime;
+                                    heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
                                 } else {
                                     const moveRad = degreesToRadians(heli.heading - 90);
                                     const moveDist = Math.min(heli.speed * deltaTimeInSeconds, dist);
