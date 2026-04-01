@@ -838,7 +838,8 @@
             const HELI_ALARMED_SPEED = PATROL_SHIP_MAX_SPEED * 3; // 3x patrol boat speed when alarmed/investigating
             const HELI_REFUEL_TIME_MIN_MS = 5000; // 5-10 seconds refuel (random)
             const HELI_REFUEL_TIME_MAX_MS = 10000;
-            const HELI_SURFACE_DETECTION_RANGE = 1000; // Helicopter can spot surface subs within 1000px
+            const HELI_SURFACE_DETECTION_RANGE = 600; // Helicopter can spot surface subs within 600px
+            const HELI_INTEL_SHARE_RANGE = 600; // Range within which nearby units share detection info with heli
             const HELI_PATROL_MIN_DIST = 700;
             const HELI_PATROL_MAX_DIST = 1000;
             const HELI_HITBOX_RADIUS = 12;
@@ -1990,22 +1991,26 @@
                     heading: 0, speed: 0,
                     maxHealth: HELI_MAX_HEALTH, currentHealth: HELI_MAX_HEALTH,
                     homeIsland: homeIsland,
-                    aiState: 'REFUELING', // REFUELING, PATROL_OUT, PATROL_RETURN, INVESTIGATING, RELOCATING, CRASH_LANDING, RETURNING
+                    // States: REFUELING, PATROL_OUT, PATROL_RETURN, ALERT_PATROL_OUT, ALERT_PATROL_RETURN,
+                    //         INVESTIGATING, WAITING_FOR_BUOY, RETURNING, RELOCATING, CRASH_LANDING
+                    aiState: 'REFUELING',
                     refuelStartTime: performance.now(),
                     refuelDuration: HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS),
                     // Patrol path (elliptical)
-                    patrolAngle: 0, // radial direction of current patrol
-                    patrolMaxDist: 0, // max distance for this patrol
-                    patrolProgress: 0, // 0 to 1 (out), 0 to 1 (return)
+                    patrolAngle: 0,
+                    patrolMaxDist: 0,
+                    patrolProgress: 0, // 0→1 for full ellipse
                     patrolBaseX: x, patrolBaseY: y,
-                    // Sonobuoy drop tracking
-                    buoyDroppedOut: false,
-                    buoyDropPointOut: 0, // progress value at which to drop (0-1)
-                    buoyDroppedReturn: false,
-                    buoyDropPointReturn: 0,
-                    // Investigation
+                    // Buoy inventory (2 per excursion, reset on refuel)
+                    buoysRemaining: 2,
+                    // Investigation / targeted alert
                     investigateTargetX: 0, investigateTargetY: 0,
                     lastKnownPlayerX: 0, lastKnownPlayerY: 0,
+                    hasPlayerLocation: false, // true = knows where player is
+                    // Waiting for buoy state
+                    waitingBuoyDropTime: 0, // when the first buoy was dropped
+                    waitingCircleAngle: 0, // angle for circling behavior
+                    waitingCircleCenterX: 0, waitingCircleCenterY: 0,
                     // Relocation
                     relocateTargetIsland: null,
                     // Crash landing
@@ -2021,10 +2026,8 @@
                 heli.patrolAngle = Math.random() * Math.PI * 2;
                 heli.patrolMaxDist = HELI_PATROL_MIN_DIST + Math.random() * (HELI_PATROL_MAX_DIST - HELI_PATROL_MIN_DIST);
                 heli.patrolProgress = 0;
-                heli.buoyDroppedOut = false;
-                heli.buoyDroppedReturn = false;
-                heli.buoyDropPointOut = 0.1 + Math.random() * 0.3; // Drop between 10-40% (outbound half)
-                heli.buoyDropPointReturn = 0.6 + Math.random() * 0.3; // Drop between 60-90% (return half)
+                heli.buoysRemaining = 2;
+                heli.hasPlayerLocation = false;
             }
 
             function heliUpdatePatrolPosition(heli) {
@@ -4672,78 +4675,144 @@
                         }
                     }
 
-                    // Check for alerts: base alarm, patrol ship detection, buoy detection, or visual surface detection
-                    if (heli.aiState === 'PATROL_OUT' || heli.aiState === 'PATROL_RETURN' || heli.aiState === 'RETURNING') {
-                        let alertX = null, alertY = null;
-                        let onSurface = false;
+                    // --- Helicopter detection & alert system ---
+                    // Gather detection info: visual surface spotting, buoy pings, nearby unit intel
+                    let heliDetectedX = null, heliDetectedY = null;
+                    let heliKnowsLocation = false;
+                    let heliBaseAttacked = false;
 
-                        // Helicopter can visually spot player on or near surface (depth < 10m)
-                        if (submarine.depth < 10) {
-                            const dxPlayer = submarine.worldX - heli.worldX;
-                            const dyPlayer = submarine.worldY - heli.worldY;
-                            const distToPlayer = Math.sqrt(dxPlayer * dxPlayer + dyPlayer * dyPlayer);
-                            if (distToPlayer <= HELI_SURFACE_DETECTION_RANGE) {
-                                alertX = submarine.worldX;
-                                alertY = submarine.worldY;
-                                onSurface = true;
+                    // 1. Helicopter can visually spot player on or near surface (depth < 10m)
+                    if (submarine.depth < 10) {
+                        const dxP = submarine.worldX - heli.worldX;
+                        const dyP = submarine.worldY - heli.worldY;
+                        if (Math.sqrt(dxP * dxP + dyP * dyP) <= HELI_SURFACE_DETECTION_RANGE) {
+                            heliDetectedX = submarine.worldX;
+                            heliDetectedY = submarine.worldY;
+                            heliKnowsLocation = true;
+                        }
+                    }
+
+                    // 2. Check sonobuoy detections from this heli's buoys
+                    if (!heliDetectedX) {
+                        for (const buoy of sonobuoys) {
+                            if (buoy.detectedPlayer && buoy.parentHeliId === h) {
+                                heliDetectedX = buoy.detectedPlayerX;
+                                heliDetectedY = buoy.detectedPlayerY;
+                                heliKnowsLocation = true;
+                                buoy.detectedPlayer = false;
+                                break;
                             }
                         }
+                    }
 
-                        // Check sonobuoy detections
-                        if (!alertX) {
-                            for (const buoy of sonobuoys) {
-                                if (buoy.detectedPlayer && buoy.parentHeliId === h) {
-                                    alertX = buoy.detectedPlayerX;
-                                    alertY = buoy.detectedPlayerY;
-                                    onSurface = buoy.detectedPlayerOnSurface;
-                                    buoy.detectedPlayer = false;
+                    // 3. Check any unit within 600px of the heli that is detecting the player
+                    if (!heliDetectedX) {
+                        // Patrol ships
+                        for (const ship of patrolShips) {
+                            if (ship.isDetectingPlayer) {
+                                const dxS = ship.worldX - heli.worldX;
+                                const dyS = ship.worldY - heli.worldY;
+                                if (Math.sqrt(dxS * dxS + dyS * dyS) <= HELI_INTEL_SHARE_RANGE) {
+                                    heliDetectedX = ship.lockedOnTargetX;
+                                    heliDetectedY = ship.lockedOnTargetY;
+                                    heliKnowsLocation = true;
                                     break;
                                 }
                             }
                         }
-
-                        // Check if home base alarm is active
-                        if (!alertX && heli.homeIsland && heli.homeIsland.isBoosting) {
-                            // Find which patrol ship triggered it
-                            for (const ship of patrolShips) {
-                                if (ship.isDetectingPlayer) {
-                                    alertX = ship.lockedOnTargetX;
-                                    alertY = ship.lockedOnTargetY;
-                                    onSurface = submarine.depth <= FADE_START_DEPTH;
+                    }
+                    if (!heliDetectedX) {
+                        // Enemy subs in combat/hunting states know where the player is
+                        for (const esub of enemySubmarines) {
+                            if (esub.aiState === 'COMBAT' || esub.aiState === 'HUNTING') {
+                                const dxE = esub.worldX - heli.worldX;
+                                const dyE = esub.worldY - heli.worldY;
+                                if (Math.sqrt(dxE * dxE + dyE * dyE) <= HELI_INTEL_SHARE_RANGE) {
+                                    heliDetectedX = submarine.worldX;
+                                    heliDetectedY = submarine.worldY;
+                                    heliKnowsLocation = true;
                                     break;
                                 }
                             }
                         }
+                    }
 
-                        // Check patrol ships near home base detecting player
-                        if (!alertX) {
-                            for (const ship of patrolShips) {
-                                if (ship.island === heli.homeIsland && ship.isDetectingPlayer) {
-                                    alertX = ship.lockedOnTargetX;
-                                    alertY = ship.lockedOnTargetY;
-                                    onSurface = submarine.depth <= FADE_START_DEPTH;
-                                    break;
+                    // 4. Check if home base was attacked (alarm active) but no player location known
+                    if (!heliDetectedX && heli.homeIsland && heli.homeIsland.isBoosting) {
+                        heliBaseAttacked = true;
+                    }
+
+                    // --- Apply detections to state transitions ---
+                    const patrolStates = ['PATROL_OUT', 'PATROL_RETURN', 'ALERT_PATROL_OUT', 'ALERT_PATROL_RETURN', 'RETURNING', 'WAITING_FOR_BUOY'];
+                    if (patrolStates.includes(heli.aiState)) {
+                        if (heliKnowsLocation && heliDetectedX !== null) {
+                            heli.investigateTargetX = heliDetectedX;
+                            heli.investigateTargetY = heliDetectedY;
+                            heli.hasPlayerLocation = true;
+
+                            // Only go to INVESTIGATING if heli has buoys left
+                            if (heli.buoysRemaining > 0 && heli.aiState !== 'INVESTIGATING' && heli.aiState !== 'WAITING_FOR_BUOY') {
+                                const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
+                                const distFromBase = Math.sqrt((heliDetectedX - baseCentroid.x)**2 + (heliDetectedY - baseCentroid.y)**2);
+                                if (distFromBase <= heli.patrolMaxDist * 1.5) {
+                                    heli.aiState = 'INVESTIGATING';
                                 }
                             }
+                        } else if (heliBaseAttacked && !heli.hasPlayerLocation) {
+                            // Base attacked but don't know where player is — fast random patrol
+                            if (heli.aiState === 'PATROL_OUT') {
+                                heli.aiState = 'ALERT_PATROL_OUT';
+                            } else if (heli.aiState === 'PATROL_RETURN') {
+                                heli.aiState = 'ALERT_PATROL_RETURN';
+                            } else if (heli.aiState === 'RETURNING') {
+                                // If returning, start a new fast patrol instead
+                                heliStartPatrol(heli);
+                                heli.aiState = 'ALERT_PATROL_OUT';
+                            }
                         }
+                    }
 
-                        if (alertX !== null) {
-                            heli.investigateTargetX = alertX;
-                            heli.investigateTargetY = alertY;
-                            heli.lastKnownPlayerX = alertX;
-                            heli.lastKnownPlayerY = alertY;
-                            heli.buoyDroppedOut = false; // Reset so it drops a buoy at target
-                            if (onSurface) {
-                                heli.investigateTargetX = submarine.worldX;
-                                heli.investigateTargetY = submarine.worldY;
-                            }
-                            // Only investigate within patrol range
-                            const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
-                            const distFromBase = Math.sqrt((alertX - baseCentroid.x)**2 + (alertY - baseCentroid.y)**2);
-                            if (distFromBase <= heli.patrolMaxDist * 1.5) {
-                                heli.aiState = 'INVESTIGATING';
-                            }
-                        }
+                    // Also update target if heli is already investigating and gets new detection
+                    if (heli.aiState === 'INVESTIGATING' && heliKnowsLocation && heliDetectedX !== null) {
+                        heli.investigateTargetX = heliDetectedX;
+                        heli.investigateTargetY = heliDetectedY;
+                    }
+                    // Update target while waiting for buoy if player is redetected
+                    if (heli.aiState === 'WAITING_FOR_BUOY' && heliKnowsLocation && heliDetectedX !== null) {
+                        heli.investigateTargetX = heliDetectedX;
+                        heli.investigateTargetY = heliDetectedY;
+                        heli.hasPlayerLocation = true;
+                    }
+
+                    // Helper: advance along elliptical path
+                    function heliAdvancePatrol(speed) {
+                        const ellipseCircum = Math.PI * heli.patrolMaxDist * 0.8;
+                        heli.patrolProgress += (speed * deltaTimeInSeconds) / ellipseCircum;
+                    }
+
+                    // Helper: fly toward a point, return distance
+                    function heliFlyToward(targetX, targetY, speed) {
+                        const dx = targetX - heli.worldX;
+                        const dy = targetY - heli.worldY;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        heli.heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dy, dx)) + 90);
+                        const moveRad = degreesToRadians(heli.heading - 90);
+                        const moveDist = Math.min(speed * deltaTimeInSeconds, dist);
+                        heli.worldX += moveDist * Math.cos(moveRad);
+                        heli.worldY += moveDist * Math.sin(moveRad);
+                        return dist;
+                    }
+
+                    // Helper: transition to refueling at base
+                    function heliLandAtBase() {
+                        const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
+                        heli.worldX = baseCentroid.x;
+                        heli.worldY = baseCentroid.y;
+                        heli.patrolBaseX = baseCentroid.x;
+                        heli.patrolBaseY = baseCentroid.y;
+                        heli.aiState = 'REFUELING';
+                        heli.refuelStartTime = currentTime;
+                        heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
                     }
 
                     // State machine
@@ -4759,126 +4828,160 @@
                         }
                         case 'PATROL_OUT': {
                             heli.speed = HELI_PATROL_SPEED;
-                            // Full ellipse: progress 0→0.5 is the outbound half
-                            const ellipseCircumference = Math.PI * heli.patrolMaxDist * 0.8; // approximate
-                            heli.patrolProgress += (HELI_PATROL_SPEED * deltaTimeInSeconds) / ellipseCircumference;
+                            heliAdvancePatrol(HELI_PATROL_SPEED);
+                            // Drop buoy #1 at ~25% (halfway to zenith)
+                            if (heli.buoysRemaining === 2 && heli.patrolProgress >= 0.25) {
+                                heliDropBuoy(heli, h, currentTime);
+                                heli.buoysRemaining = 1;
+                            }
+                            // Drop buoy #2 at zenith (~50%)
+                            if (heli.buoysRemaining === 1 && heli.patrolProgress >= 0.5) {
+                                heliDropBuoy(heli, h, currentTime);
+                                heli.buoysRemaining = 0;
+                            }
                             if (heli.patrolProgress >= 0.5) {
                                 heli.patrolProgress = 0.5;
                                 heli.aiState = 'PATROL_RETURN';
-                            }
-                            // Drop buoy on way out (buoyDropPointOut is in 0.1-0.4 range)
-                            if (!heli.buoyDroppedOut && heli.patrolProgress >= heli.buoyDropPointOut) {
-                                heliDropBuoy(heli, h, currentTime);
-                                heli.buoyDroppedOut = true;
                             }
                             heliUpdatePatrolPosition(heli);
                             break;
                         }
                         case 'PATROL_RETURN': {
                             heli.speed = HELI_PATROL_SPEED;
-                            // Full ellipse: progress 0.5→1.0 is the return half
-                            const ellipseCircumReturn = Math.PI * heli.patrolMaxDist * 0.8;
-                            heli.patrolProgress += (HELI_PATROL_SPEED * deltaTimeInSeconds) / ellipseCircumReturn;
+                            heliAdvancePatrol(HELI_PATROL_SPEED);
                             if (heli.patrolProgress >= 1.0) {
                                 heli.patrolProgress = 0;
-                                heli.aiState = 'REFUELING';
-                                heli.refuelStartTime = currentTime;
-                                heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
-                                // Snap to base
-                                const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
-                                heli.worldX = baseCentroid.x;
-                                heli.worldY = baseCentroid.y;
-                                heli.patrolBaseX = baseCentroid.x;
-                                heli.patrolBaseY = baseCentroid.y;
+                                heliLandAtBase();
                             }
-                            // Drop buoy on way back (buoyDropPointReturn is in 0.6-0.9 range)
-                            if (!heli.buoyDroppedReturn && heli.patrolProgress >= heli.buoyDropPointReturn) {
+                            heliUpdatePatrolPosition(heli);
+                            break;
+                        }
+                        case 'ALERT_PATROL_OUT': {
+                            // Alerted but no player location — fast random patrol loop
+                            heli.speed = HELI_ALARMED_SPEED;
+                            heliAdvancePatrol(HELI_ALARMED_SPEED);
+                            // Still drop buoys at normal points
+                            if (heli.buoysRemaining === 2 && heli.patrolProgress >= 0.25) {
                                 heliDropBuoy(heli, h, currentTime);
-                                heli.buoyDroppedReturn = true;
+                                heli.buoysRemaining = 1;
+                            }
+                            if (heli.buoysRemaining === 1 && heli.patrolProgress >= 0.5) {
+                                heliDropBuoy(heli, h, currentTime);
+                                heli.buoysRemaining = 0;
+                            }
+                            if (heli.patrolProgress >= 0.5) {
+                                heli.patrolProgress = 0.5;
+                                heli.aiState = 'ALERT_PATROL_RETURN';
+                            }
+                            heliUpdatePatrolPosition(heli);
+                            break;
+                        }
+                        case 'ALERT_PATROL_RETURN': {
+                            heli.speed = HELI_ALARMED_SPEED;
+                            heliAdvancePatrol(HELI_ALARMED_SPEED);
+                            if (heli.patrolProgress >= 1.0) {
+                                heli.patrolProgress = 0;
+                                heliLandAtBase();
                             }
                             heliUpdatePatrolPosition(heli);
                             break;
                         }
                         case 'INVESTIGATING': {
+                            // Directed flight to player's detected location
                             heli.speed = HELI_ALARMED_SPEED;
-                            const dx = heli.investigateTargetX - heli.worldX;
-                            const dy = heli.investigateTargetY - heli.worldY;
-                            const dist = Math.sqrt(dx * dx + dy * dy);
-                            heli.heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dy, dx)) + 90);
+                            const distToTarget = heliFlyToward(heli.investigateTargetX, heli.investigateTargetY, HELI_ALARMED_SPEED);
 
-                            if (dist < 30) {
-                                // Arrived at investigation point — drop a buoy
+                            if (distToTarget < 30) {
+                                // Arrived — drop a buoy
                                 heliDropBuoy(heli, h, currentTime);
-                                // Fly back to base (not teleport)
-                                heli.aiState = 'RETURNING';
+                                heli.buoysRemaining--;
+
+                                if (heli.buoysRemaining > 0) {
+                                    // Has second buoy — wait for first to fade, then drop #2
+                                    heli.aiState = 'WAITING_FOR_BUOY';
+                                    heli.waitingBuoyDropTime = currentTime;
+                                    heli.waitingCircleAngle = 0;
+                                    heli.waitingCircleCenterX = heli.worldX;
+                                    heli.waitingCircleCenterY = heli.worldY;
+                                } else {
+                                    // No buoys left — head home
+                                    heli.aiState = 'RETURNING';
+                                }
                             }
-                            // Move toward target
-                            const moveRad = degreesToRadians(heli.heading - 90);
-                            const moveDist = Math.min(heli.speed * deltaTimeInSeconds, dist);
-                            heli.worldX += moveDist * Math.cos(moveRad);
-                            heli.worldY += moveDist * Math.sin(moveRad);
+                            break;
+                        }
+                        case 'WAITING_FOR_BUOY': {
+                            // Wait for first buoy to fade (SONOBUOY_PING_LIFETIME_MS) before dropping #2
+                            heli.speed = HELI_PATROL_SPEED;
+                            const timeSinceDrop = currentTime - heli.waitingBuoyDropTime;
+
+                            if (heli.hasPlayerLocation && heliKnowsLocation) {
+                                // Player redetected — trail them at ~30px distance
+                                const distToPlayer = heliFlyToward(heli.investigateTargetX, heli.investigateTargetY, HELI_ALARMED_SPEED);
+                                heli.speed = HELI_ALARMED_SPEED;
+                            } else {
+                                // No current detection — slow circle around drop point
+                                heli.waitingCircleAngle += deltaTimeInSeconds * 0.5; // ~12 seconds per circle
+                                const circleRadius = 60;
+                                heli.worldX = heli.waitingCircleCenterX + Math.cos(heli.waitingCircleAngle) * circleRadius;
+                                heli.worldY = heli.waitingCircleCenterY + Math.sin(heli.waitingCircleAngle) * circleRadius;
+                                heli.heading = normalizeDegreeAngle(radiansToDegrees(heli.waitingCircleAngle + Math.PI / 2) + 90);
+                            }
+
+                            // Once first buoy has faded, drop #2
+                            if (timeSinceDrop >= SONOBUOY_PING_LIFETIME_MS) {
+                                // Move to latest known/target position to drop #2
+                                const dx2 = heli.investigateTargetX - heli.worldX;
+                                const dy2 = heli.investigateTargetY - heli.worldY;
+                                const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+                                if (dist2 < 30) {
+                                    // Close enough — drop buoy #2
+                                    heliDropBuoy(heli, h, currentTime);
+                                    heli.buoysRemaining--;
+                                    heli.aiState = 'RETURNING';
+                                } else {
+                                    // Need to fly to updated target first
+                                    heli.aiState = 'INVESTIGATING';
+                                }
+                            }
                             break;
                         }
                         case 'RETURNING': {
-                            // Fly back to base after investigating
+                            // Fly back to base
                             heli.speed = HELI_ALARMED_SPEED;
                             const baseCentroid = getPolygonCentroid(heli.homeIsland.points);
-                            const dxR = baseCentroid.x - heli.worldX;
-                            const dyR = baseCentroid.y - heli.worldY;
-                            const distR = Math.sqrt(dxR * dxR + dyR * dyR);
-                            heli.heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dyR, dxR)) + 90);
+                            const distToBase = heliFlyToward(baseCentroid.x, baseCentroid.y, HELI_ALARMED_SPEED);
 
-                            if (distR < 50) {
-                                // Arrived at base — land and refuel
-                                heli.worldX = baseCentroid.x;
-                                heli.worldY = baseCentroid.y;
-                                heli.patrolBaseX = baseCentroid.x;
-                                heli.patrolBaseY = baseCentroid.y;
-                                heli.aiState = 'REFUELING';
-                                heli.refuelStartTime = currentTime;
-                                heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
-                            } else {
-                                const moveRadR = degreesToRadians(heli.heading - 90);
-                                const moveDistR = Math.min(heli.speed * deltaTimeInSeconds, distR);
-                                heli.worldX += moveDistR * Math.cos(moveRadR);
-                                heli.worldY += moveDistR * Math.sin(moveRadR);
+                            if (distToBase < 50) {
+                                heliLandAtBase();
                             }
                             break;
                         }
                         case 'RELOCATING': {
                             heli.speed = HELI_ALARMED_SPEED;
                             if (heli.relocateTargetIsland) {
-                                // Check if target island is still alive
                                 if (!heli.relocateTargetIsland.hasHeadquarters || heli.relocateTargetIsland.hqHealth <= 0) {
                                     heli.aiState = 'CRASH_LANDING';
                                     break;
                                 }
                                 const targetCentroid = getPolygonCentroid(heli.relocateTargetIsland.points);
-                                const dx = targetCentroid.x - heli.worldX;
-                                const dy = targetCentroid.y - heli.worldY;
-                                const dist = Math.sqrt(dx * dx + dy * dy);
-                                heli.heading = normalizeDegreeAngle(radiansToDegrees(Math.atan2(dy, dx)) + 90);
+                                const dist = heliFlyToward(targetCentroid.x, targetCentroid.y, HELI_ALARMED_SPEED);
 
                                 if (dist < 50) {
                                     heli.homeIsland = heli.relocateTargetIsland;
-                                    heli.worldX = targetCentroid.x;
-                                    heli.worldY = targetCentroid.y;
-                                    heli.patrolBaseX = targetCentroid.x;
-                                    heli.patrolBaseY = targetCentroid.y;
+                                    const tc = getPolygonCentroid(heli.relocateTargetIsland.points);
+                                    heli.worldX = tc.x;
+                                    heli.worldY = tc.y;
+                                    heli.patrolBaseX = tc.x;
+                                    heli.patrolBaseY = tc.y;
                                     heli.aiState = 'REFUELING';
                                     heli.refuelStartTime = currentTime;
                                     heli.refuelDuration = HELI_REFUEL_TIME_MIN_MS + Math.random() * (HELI_REFUEL_TIME_MAX_MS - HELI_REFUEL_TIME_MIN_MS);
-                                } else {
-                                    const moveRad = degreesToRadians(heli.heading - 90);
-                                    const moveDist = Math.min(heli.speed * deltaTimeInSeconds, dist);
-                                    heli.worldX += moveDist * Math.cos(moveRad);
-                                    heli.worldY += moveDist * Math.sin(moveRad);
                                 }
                             }
                             break;
                         }
                         case 'CRASH_LANDING': {
-                            // Continue current patrol to complete the loop, then crash
                             if (!heli.crashPatrolDone) {
                                 heli.speed = HELI_PATROL_SPEED;
                                 const ellipseCircumCrash = Math.PI * (heli.patrolMaxDist || 500) * 0.8;
@@ -4888,7 +4991,6 @@
                                 }
                                 heliUpdatePatrolPosition(heli);
                             } else {
-                                // Crash at home island
                                 heli.speed = 0;
                                 heli.currentHealth = 0;
                                 helicopters.splice(h, 1);
