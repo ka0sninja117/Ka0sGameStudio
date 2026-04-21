@@ -34,9 +34,10 @@
       bottom: 8px;
       left: 8px;
       font-size: 10px;
-      color: #003322;
+      color: #5a8a7a;
       letter-spacing: 1px;
       pointer-events: none;
+      text-shadow: 0 0 4px rgba(0,0,0,0.8);
     }
     /* ── SIDE PANELS ── */
     #left-panel {
@@ -84,18 +85,19 @@
     #hotbar-label {
       font-size: 9px;
       letter-spacing: 2px;
-      color: #002211;
+      color: #5d8878;
       writing-mode: vertical-rl;
       text-orientation: mixed;
     }
     .panel-title {
       font-size: 10px;
       letter-spacing: 3px;
-      color: #004433;
+      color: #33cc99;
       text-transform: uppercase;
       margin-bottom: 8px;
-      border-bottom: 1px solid #002211;
+      border-bottom: 1px solid #114433;
       padding-bottom: 4px;
+      text-shadow: 0 0 6px rgba(0,200,140,0.25);
     }
     .fragment-item {
       display: flex;
@@ -141,28 +143,28 @@
       box-shadow: 0 0 8px rgba(60,120,255,0.25);
     }
     .loadout-item.equipped {
-      color: #224422;
-      border-color: #112211;
+      color: #669977;
+      border-color: #224433;
       cursor: default;
-      opacity: 0.5;
+      opacity: 0.7;
     }
     .loadout-item.disabled {
-      color: #1a1a2a;
-      border-color: #0d0d18;
+      color: #556677;
+      border-color: #22334a;
       cursor: not-allowed;
-      opacity: 0.4;
+      opacity: 0.55;
     }
     .loadout-item-label  { display: block; font-weight: bold; }
     .loadout-item-desc   { display: block; font-size: 9px; color: inherit; opacity: 0.6; margin-top: 2px; }
     .log-line {
       font-size: 11px;
       line-height: 1.7;
-      color: #004422;
+      color: #4fb380;
     }
-    .log-line.system  { color: #003a1f; }
-    .log-line.acquire { color: #00cc55; }
-    .log-line.error   { color: #aa2200; }
-    .log-line.success { color: #00ffaa; }
+    .log-line.system  { color: #7a9a8a; }
+    .log-line.acquire { color: #33ee88; text-shadow: 0 0 6px rgba(0,220,110,0.3); }
+    .log-line.error   { color: #ff5544; text-shadow: 0 0 6px rgba(220,50,0,0.3); }
+    .log-line.success { color: #55ffbb; text-shadow: 0 0 6px rgba(0,255,150,0.35); }
     #status-bar {
       height: 38px;
       background: #030310;
@@ -173,7 +175,7 @@
       gap: 18px;
       font-size: 10px;
       letter-spacing: 1px;
-      color: #004433;
+      color: #33cc99;
       flex-shrink: 0;
     }
     .status-item { display: flex; align-items: center; gap: 6px; }
@@ -207,14 +209,15 @@
       line-height: 2;
       letter-spacing: 1px;
     }
-    .boot-line { color: #006633; white-space: pre; }
-    .boot-line.warn    { color: #cc8800; }
-    .boot-line.error   { color: #aa2200; }
-    .boot-line.success { color: #00cc66; }
+    .boot-line { color: #22dd88; white-space: pre; text-shadow: 0 0 8px rgba(0,200,120,0.35); }
+    .boot-line.warn    { color: #ffbb33; text-shadow: 0 0 8px rgba(220,150,0,0.4); }
+    .boot-line.error   { color: #ff5533; text-shadow: 0 0 8px rgba(220,60,0,0.45); }
+    .boot-line.success { color: #33ffaa; text-shadow: 0 0 8px rgba(0,230,140,0.4); }
     .boot-cursor {
       display: inline-block;
       width: 8px;
-      background: #00aa44;
+      background: #22dd88;
+      box-shadow: 0 0 8px rgba(0,220,130,0.6);
       animation: blink 0.7s step-end infinite;
       vertical-align: text-bottom;
       height: 1.1em;
@@ -263,8 +266,8 @@
   <div id="hotbar-row">
     <div id="hotbar-label">// MODULE RACK</div>
     <canvas id="hotbarCanvas" width="170" height="170" style="cursor:pointer;"></canvas>
-    <div style="font-size:9px; color:#002211; letter-spacing:1px; line-height:1.8;">
-      SLOT 1<br><span id="slot-status" style="color:#004422;">EMPTY</span>
+    <div style="font-size:9px; color:#5d8878; letter-spacing:1px; line-height:1.8;">
+      SLOT 1<br><span id="slot-status" style="color:#4fb380;">EMPTY</span>
     </div>
   </div>
 
@@ -277,7 +280,7 @@
         <div class="bar-fill" id="scan-fill" style="width:100%; background:#0066cc;"></div>
       </div>
     </div>
-    <span class="status-item" style="margin-left:auto; color:#002211;">NEXUS // AWAKENING &nbsp;v0.2-poc</span>
+    <span class="status-item" style="margin-left:auto; color:#5a8a7a;">NEXUS // AWAKENING &nbsp;v0.2-poc</span>
   </div>
 
   <script>
@@ -490,10 +493,10 @@
         div.className = 'fragment-item' + (count > 0 ? ' active' : '');
         div.style.opacity = count > 0 ? '1' : '0.28';
         div.innerHTML =
-          `<div class="fragment-dot" style="background:${count>0?def.dot:'#111'}"></div>` +
-          `<span class="fragment-label" style="color:${count>0?def.color:'#002'}">` +
+          `<div class="fragment-dot" style="background:${count>0?def.dot:'#334'}"></div>` +
+          `<span class="fragment-label" style="color:${count>0?def.color:'#667788'}">` +
           `${def.label}</span>` +
-          `<span class="fragment-count" style="color:${count>0?def.color:'#001'}">${count}</span>`;
+          `<span class="fragment-count" style="color:${count>0?def.color:'#556677'}">${count}</span>`;
         list.appendChild(div);
       }
       document.getElementById('frag-count').textContent = `FRAGS: ${total}`;
@@ -809,11 +812,11 @@
       const dist = Math.hypot(obj.x - player.x, obj.y - player.y);
       if (dist < SCAN_RANGE + 20) {
         const alpha = Math.max(0, 1 - dist / (SCAN_RANGE + 20));
-        ctx.font = `${9 / zoom}px Courier New`;
+        ctx.font = `bold ${10 / zoom}px Courier New`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(0,200,100,${alpha})`;
+        ctx.fillStyle = `rgba(80,255,160,${alpha})`;
         ctx.fillText(obj.label, wx, wy - 20);
-        ctx.fillStyle = `rgba(0,150,80,${alpha * 0.7})`;
+        ctx.fillStyle = `rgba(120,255,180,${alpha * 0.85})`;
         ctx.fillText('[E] SCAN', wx, wy - 10);
       }
     }
@@ -832,11 +835,11 @@
             ctx.strokeStyle = `rgba(220,30,0,${(1-ft)*0.6})`; ctx.lineWidth=1.5; ctx.stroke();
           }
         }
-        ctx.font = `${9 / zoom}px Courier New`;
+        ctx.font = `bold ${10 / zoom}px Courier New`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(200,60,30,${a})`;
+        ctx.fillStyle = `rgba(255,110,80,${a})`;
         ctx.fillText(obj.label, obj.x, obj.y - 20);
-        ctx.fillStyle = `rgba(150,40,20,${a * 0.7})`;
+        ctx.fillStyle = `rgba(255,140,110,${a * 0.85})`;
         ctx.fillText('[F] INTERFACE', obj.x, obj.y - 10);
       }
     }
@@ -964,16 +967,21 @@
         hCtx.strokeStyle = '#1c1c44'; hCtx.lineWidth = 1.2; hCtx.stroke();
       }
 
-      // 1/6 blue pie wedge for scanner module
-      if (hotbarState.scannerModule) {
-        const a1 = 0, a2 = Math.PI / 3;   // first two flat-top vertices
+      // Module wedges — fill slots clockwise starting at 12:00
+      // Wedge i spans vertices at (240° + i*60°) and (300° + i*60°)
+      function drawWedge(idx, fill, stroke) {
+        const a1 = (240 + idx * 60) * Math.PI / 180;
+        const a2 = (300 + idx * 60) * Math.PI / 180;
         hCtx.beginPath();
         hCtx.moveTo(CX, CY);
         hCtx.lineTo(CX + S * Math.cos(a1), CY + S * Math.sin(a1));
         hCtx.lineTo(CX + S * Math.cos(a2), CY + S * Math.sin(a2));
         hCtx.closePath();
-        hCtx.fillStyle = 'rgba(0,70,200,0.85)'; hCtx.fill();
-        hCtx.strokeStyle = 'rgba(0,140,255,0.7)'; hCtx.lineWidth = 0.8; hCtx.stroke();
+        hCtx.fillStyle = fill; hCtx.fill();
+        if (stroke) { hCtx.strokeStyle = stroke; hCtx.lineWidth = 0.8; hCtx.stroke(); }
+      }
+      if (hotbarState.scannerModule) {
+        drawWedge(0, 'rgba(0,90,230,0.88)', 'rgba(80,170,255,0.8)');
       }
 
       // "INSTALL" hint when an item is selected
