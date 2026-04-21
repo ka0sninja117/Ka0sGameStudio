@@ -38,17 +38,55 @@
       letter-spacing: 1px;
       pointer-events: none;
     }
-    #sidebar {
-      width: 260px;
+    /* ── SIDE PANELS ── */
+    #left-panel {
+      width: 220px;
+      display: flex;
+      flex-direction: column;
+      background: #050510;
+      border-right: 1px solid #0a1a2a;
+      min-height: 0;
+      flex-shrink: 0;
+    }
+    #right-panel {
+      width: 220px;
       display: flex;
       flex-direction: column;
       background: #050510;
       border-left: 1px solid #0a1a2a;
       min-height: 0;
+      flex-shrink: 0;
     }
-    #inventory-panel {
-      padding: 12px;
+    .panel-section {
+      padding: 10px 12px;
       border-bottom: 1px solid #0a1a2a;
+    }
+    .panel-section.grow {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: #002211 transparent;
+    }
+    .panel-section.grow::-webkit-scrollbar { width: 4px; }
+    .panel-section.grow::-webkit-scrollbar-thumb { background: #002211; }
+    /* ── HOTBAR ROW ── */
+    #hotbar-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 6px 0 4px;
+      background: #030310;
+      border-top: 1px solid #0a1a2a;
+      flex-shrink: 0;
+      gap: 10px;
+    }
+    #hotbar-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: #002211;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
     }
     .panel-title {
       font-size: 10px;
@@ -83,16 +121,7 @@
     }
     .fragment-label { flex: 1; }
     .fragment-count { font-weight: bold; }
-    #scan-log {
-      flex: 1;
-      padding: 10px;
-      overflow-y: auto;
-      min-height: 0;
-      scrollbar-width: thin;
-      scrollbar-color: #002211 transparent;
-    }
-    #scan-log::-webkit-scrollbar { width: 4px; }
-    #scan-log::-webkit-scrollbar-thumb { background: #002211; }
+    /* log lines live inside .panel-section.grow in the right panel */
     .log-line {
       font-size: 11px;
       line-height: 1.7;
@@ -144,43 +173,52 @@
   <div id="overlay"></div>
 
   <div id="game-wrapper">
-    <div id="canvas-container">
-      <canvas id="gameCanvas"></canvas>
-      <div id="keyhints">WASD / ARROWS — MOVE &nbsp;|&nbsp; [E] — SCAN TECH &nbsp;|&nbsp; [F] — INTERFACE</div>
-    </div>
-    <div id="sidebar">
-      <div id="inventory-panel">
+
+    <!-- LEFT: Fragment Cache -->
+    <div id="left-panel">
+      <div class="panel-section">
         <div class="panel-title">// FRAGMENT CACHE</div>
         <div id="inventory-list"></div>
       </div>
-      <div id="scan-log">
+    </div>
+
+    <!-- CENTER: Game Canvas -->
+    <div id="canvas-container">
+      <canvas id="gameCanvas"></canvas>
+      <div id="keyhints">WASD — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [F] — INTERFACE &nbsp;|&nbsp; SCROLL — ZOOM</div>
+    </div>
+
+    <!-- RIGHT: System Log -->
+    <div id="right-panel">
+      <div class="panel-section grow">
         <div class="panel-title">// SYSTEM LOG</div>
         <div id="log-entries"></div>
       </div>
     </div>
+
+  </div>
+
+  <!-- HOTBAR ROW (placeholder — hex hotbar comes next step) -->
+  <div id="hotbar-row">
+    <div id="hotbar-label">// MODULE RACK</div>
+    <canvas id="hotbarCanvas" width="170" height="170"
+      style="opacity:0.25; border:1px dashed #0a1a2a; border-radius:4px;"></canvas>
   </div>
 
   <div id="status-bar">
-    <div class="status-item">
-      PWR
-      <div class="bar-track" id="power-track">
-        <div class="bar-fill" id="power-fill" style="width:100%; background:#00aa44;"></div>
-      </div>
-      <span id="power-pct">100%</span>
-    </div>
+    <span class="status-item" id="frag-count">FRAGS: 0</span>
+    <span class="status-item" id="location">LOC: UNKNOWN</span>
     <div class="status-item">
       SCAN
-      <div class="bar-track" id="scan-track">
+      <div class="bar-track" id="scan-track" style="width:55px;">
         <div class="bar-fill" id="scan-fill" style="width:100%; background:#0066cc;"></div>
       </div>
     </div>
-    <span class="status-item" id="frag-count">FRAGS: 0</span>
-    <span class="status-item" id="location">LOC: UNKNOWN</span>
-    <span class="status-item" style="margin-left:auto; color:#002211;">NEXUS // AWAKENING &nbsp;v0.1-poc</span>
+    <span class="status-item" style="margin-left:auto; color:#002211;">NEXUS // AWAKENING &nbsp;v0.2-poc</span>
   </div>
 
   <script>
-    const GAME_VERSION = 'v0.1-poc';
+    const GAME_VERSION = 'v0.2-poc';
 
     // ── TILE CONSTANTS ────────────────────────────────────────────────────────
     const TILE = 32;
@@ -733,19 +771,21 @@
     function updateStatusBar(now) {
       const coolPct = Math.min(1, (now - player.scanCooldownStart) / player.scanCooldownMs);
       const scanFill = document.getElementById('scan-fill');
-      scanFill.style.width = (coolPct * 100) + '%';
-      scanFill.style.background = coolPct >= 1 ? '#0088ff' : '#003366';
+      if (scanFill) {
+        scanFill.style.width = (coolPct * 100) + '%';
+        scanFill.style.background = coolPct >= 1 ? '#0088ff' : '#003366';
+      }
 
-      // Location based on player tile
       const pr = Math.floor(player.y / TILE);
       const pc = Math.floor(player.x / TILE);
       const locEl = document.getElementById('location');
+      if (!locEl) return;
       if (pr >= 28 && pc >= 5 && pc <= 27) {
-        locEl.textContent = 'LOC: SECTOR B — PROCESSING CORE';
+        locEl.textContent = 'LOC: SECTOR B';
       } else if (pr >= 2 && pr <= 17 && pc >= 2 && pc <= 21) {
-        locEl.textContent = 'LOC: SECTOR A — ENTRY CHAMBER';
+        locEl.textContent = 'LOC: SECTOR A';
       } else {
-        locEl.textContent = 'LOC: TRANSIT CORRIDOR';
+        locEl.textContent = 'LOC: CORRIDOR';
       }
     }
 
