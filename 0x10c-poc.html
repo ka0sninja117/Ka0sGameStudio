@@ -156,21 +156,46 @@
       border-radius: 2px;
       transition: width 0.2s, background 0.3s;
     }
-    #power-track { width: 70px; }
     #scan-track  { width: 55px; }
-    #overlay {
+
+    /* ── BOOT SCREEN ── */
+    #boot-screen {
       position: fixed;
       inset: 0;
       background: #000;
-      z-index: 100;
-      pointer-events: none;
-      opacity: 1;
-      transition: opacity 1.8s ease;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.8s ease;
     }
+    #boot-text-center {
+      width: 480px;
+      font-size: 13px;
+      line-height: 2;
+      letter-spacing: 1px;
+    }
+    .boot-line { color: #006633; white-space: pre; }
+    .boot-line.warn    { color: #cc8800; }
+    .boot-line.error   { color: #aa2200; }
+    .boot-line.success { color: #00cc66; }
+    .boot-cursor {
+      display: inline-block;
+      width: 8px;
+      background: #00aa44;
+      animation: blink 0.7s step-end infinite;
+      vertical-align: text-bottom;
+      height: 1.1em;
+      margin-left: 1px;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
   </style>
 </head>
 <body>
-  <div id="overlay"></div>
+  <!-- BOOT SCREEN -->
+  <div id="boot-screen">
+    <div id="boot-text-center"></div>
+  </div>
 
   <div id="game-wrapper">
 
@@ -499,25 +524,69 @@
 
     // ── BOOT SEQUENCE ─────────────────────────────────────────────────────────
     let booting = true;
-    const BOOT_LINES = [
-      { t:  200, text: '> NEXUS CYBERNETIC SYSTEMS v7.4.1',   cls: 'system'  },
-      { t:  700, text: '> NEURAL BRIDGE: ESTABLISHING...',    cls: 'system'  },
-      { t: 1350, text: '> NEURAL BRIDGE: ONLINE',             cls: 'success' },
-      { t: 1850, text: '> MOTOR CORTEX: RESTORED',            cls: 'success' },
-      { t: 2350, text: '> SCAN ARRAY: ONLINE',                cls: 'success' },
-      { t: 2850, text: '> MEMORY CORE: FRAGMENTED',           cls: 'error'   },
-      { t: 3350, text: '> LOCATION DATA: CORRUPTED',          cls: 'error'   },
-      { t: 3850, text: '> LAST KNOWN MISSION: [REDACTED]',    cls: 'error'   },
-      { t: 4400, text: '> ...',                               cls: 'system'  },
-      { t: 5100, text: '> AWAKENING.',                        cls: 'success' },
+
+    const BOOT_SCRIPT = [
+      { text: 'V_OS sequence reboot',                    cls: '',        speed: 22, pause: 500  },
+      { text: 'Identity: unknown',                       cls: 'warn',    speed: 30, pause: 400  },
+      { text: 'Location: unknown',                       cls: 'warn',    speed: 30, pause: 500  },
+      { text: 'Scanning memory... ... data corruption',  cls: 'error',   speed: 38, pause: 700  },
+      { text: 'Repair sequence... fail',                 cls: 'error',   speed: 38, pause: 1000 },
     ];
-    BOOT_LINES.forEach(({ t, text, cls }) => setTimeout(() => log(text, cls), t));
-    setTimeout(() => {
+
+    (function runBoot() {
+      const container = document.getElementById('boot-text-center');
+      // persistent blinking cursor element
+      const cursor = document.createElement('span');
+      cursor.className = 'boot-cursor';
+
+      let scriptIdx = 0;
+
+      function nextLine() {
+        if (scriptIdx >= BOOT_SCRIPT.length) {
+          // All lines done — remove cursor, then transition
+          cursor.remove();
+          setTimeout(transitionFromBoot, 900);
+          return;
+        }
+        const entry = BOOT_SCRIPT[scriptIdx++];
+        const lineEl = document.createElement('div');
+        lineEl.className = 'boot-line ' + entry.cls;
+        lineEl.textContent = '';
+        container.appendChild(lineEl);
+        lineEl.appendChild(cursor);
+
+        let charIdx = 0;
+        function typeChar() {
+          if (charIdx < entry.text.length) {
+            // insert char before cursor
+            lineEl.insertBefore(document.createTextNode(entry.text[charIdx++]), cursor);
+            setTimeout(typeChar, entry.speed);
+          } else {
+            // line done: move cursor to next line after pause
+            setTimeout(nextLine, entry.pause);
+          }
+        }
+        typeChar();
+      }
+      nextLine();
+    })();
+
+    function transitionFromBoot() {
+      // Mirror typed lines into the System Log
+      document.querySelectorAll('#boot-text-center .boot-line').forEach(el => {
+        const cls = el.className.replace('boot-line', '').trim();
+        // map boot cls names to log cls names
+        const logCls = cls === 'warn' ? 'system' : cls === 'error' ? 'error' : cls === 'success' ? 'success' : 'system';
+        log('> ' + el.textContent, logCls);
+      });
+
+      // Fade out boot screen
+      const bs = document.getElementById('boot-screen');
+      bs.style.opacity = '0';
+      setTimeout(() => { bs.style.display = 'none'; }, 850);
+
       booting = false;
-      const overlay = document.getElementById('overlay');
-      overlay.style.opacity = '0';
-      setTimeout(() => { overlay.style.display = 'none'; }, 2000);
-    }, 5500);
+    }
 
     // ── DRAW: TILES ───────────────────────────────────────────────────────────
     function drawTiles(camX, camY, now) {
