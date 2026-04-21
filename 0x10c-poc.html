@@ -122,6 +122,38 @@
     .fragment-label { flex: 1; }
     .fragment-count { font-weight: bold; }
     /* log lines live inside .panel-section.grow in the right panel */
+    /* ── LOADOUT ITEMS ── */
+    .loadout-item {
+      padding: 6px 8px;
+      margin: 4px 0;
+      background: #030318;
+      border: 1px solid #101030;
+      border-radius: 2px;
+      font-size: 11px;
+      color: #3366aa;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .loadout-item:hover  { border-color: #2255cc; color: #66aaff; }
+    .loadout-item.selected {
+      border-color: #4488ff;
+      color: #88ccff;
+      box-shadow: 0 0 8px rgba(60,120,255,0.25);
+    }
+    .loadout-item.equipped {
+      color: #224422;
+      border-color: #112211;
+      cursor: default;
+      opacity: 0.5;
+    }
+    .loadout-item.disabled {
+      color: #1a1a2a;
+      border-color: #0d0d18;
+      cursor: not-allowed;
+      opacity: 0.4;
+    }
+    .loadout-item-label  { display: block; font-weight: bold; }
+    .loadout-item-desc   { display: block; font-size: 9px; color: inherit; opacity: 0.6; margin-top: 2px; }
     .log-line {
       font-size: 11px;
       line-height: 1.7;
@@ -199,9 +231,13 @@
 
   <div id="game-wrapper">
 
-    <!-- LEFT: Fragment Cache -->
+    <!-- LEFT: Loadout items + Fragment Cache -->
     <div id="left-panel">
-      <div class="panel-section">
+      <div class="panel-section" id="loadout-section" style="display:none;">
+        <div class="panel-title">// AVAILABLE</div>
+        <div id="loadout-list"></div>
+      </div>
+      <div class="panel-section grow">
         <div class="panel-title">// FRAGMENT CACHE</div>
         <div id="inventory-list"></div>
       </div>
@@ -226,8 +262,10 @@
   <!-- HOTBAR ROW (placeholder — hex hotbar comes next step) -->
   <div id="hotbar-row">
     <div id="hotbar-label">// MODULE RACK</div>
-    <canvas id="hotbarCanvas" width="170" height="170"
-      style="opacity:0.25; border:1px dashed #0a1a2a; border-radius:4px;"></canvas>
+    <canvas id="hotbarCanvas" width="170" height="170" style="cursor:pointer;"></canvas>
+    <div style="font-size:9px; color:#002211; letter-spacing:1px; line-height:1.8;">
+      SLOT 1<br><span id="slot-status" style="color:#004422;">EMPTY</span>
+    </div>
   </div>
 
   <div id="status-bar">
@@ -618,6 +656,9 @@
       setTimeout(() => { bs.style.display = 'none'; }, 850);
 
       booting = false;
+
+      // Reveal loadout panel with scan animation after a short delay
+      setTimeout(revealLoadout, 1400);
     }
 
     // ── DRAW: HEX TILES (world-space) ────────────────────────────────────────
@@ -860,6 +901,191 @@
       }
     }
 
+    // ── HOTBAR ────────────────────────────────────────────────────────────────
+    const hotbarCanvas = document.getElementById('hotbarCanvas');
+    const hCtx = hotbarCanvas.getContext('2d');
+    const HOT_SIZE = 26;                         // hotbar hex circumradius
+    const HOT_DIST = HOT_SIZE * Math.sqrt(3);    // center-to-neighbor distance
+
+    // Ring angles for flat-top hex neighbors (degrees → radians)
+    const RING_ANGLES = [330, 30, 90, 150, 210, 270].map(d => d * Math.PI / 180);
+
+    const hotbarState = {
+      powerNode:     false,  // power node equipped
+      scannerModule: false,  // short-range scanner equipped
+      selectedItem:  null,   // id of item selected from left panel
+    };
+
+    function hotHexPath(hc, cx, cy, s) {
+      hc.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;
+        i === 0
+          ? hc.moveTo(cx + s * Math.cos(a), cy + s * Math.sin(a))
+          : hc.lineTo(cx + s * Math.cos(a), cy + s * Math.sin(a));
+      }
+      hc.closePath();
+    }
+
+    function drawHotbar(now) {
+      const W = hotbarCanvas.width, H = hotbarCanvas.height;
+      hCtx.clearRect(0, 0, W, H);
+      const CX = W / 2, CY = H / 2;
+      const S = HOT_SIZE;
+
+      // ── Ring hexes (locked) ──
+      for (const angle of RING_ANGLES) {
+        const rx = CX + HOT_DIST * Math.cos(angle);
+        const ry = CY + HOT_DIST * Math.sin(angle);
+        hotHexPath(hCtx, rx, ry, S - 1);
+        hCtx.fillStyle = '#08081a'; hCtx.fill();
+        hCtx.strokeStyle = '#141432'; hCtx.lineWidth = 1.2; hCtx.stroke();
+        // red diagonal X inside
+        const inset = S * 0.45;
+        hCtx.strokeStyle = 'rgba(160,20,0,0.45)'; hCtx.lineWidth = 1;
+        hCtx.beginPath();
+        hCtx.moveTo(rx - inset, ry - inset); hCtx.lineTo(rx + inset, ry + inset);
+        hCtx.moveTo(rx + inset, ry - inset); hCtx.lineTo(rx - inset, ry + inset);
+        hCtx.stroke();
+      }
+
+      // ── Center hex (usable slot) ──
+      hotHexPath(hCtx, CX, CY, S - 1);
+      hCtx.fillStyle = '#0c0c22'; hCtx.fill();
+
+      // Blue edge pulse when power node installed
+      if (hotbarState.powerNode) {
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.003);
+        hotHexPath(hCtx, CX, CY, S - 1);
+        hCtx.strokeStyle = `rgba(30,100,255,${0.45 + pulse * 0.5})`;
+        hCtx.lineWidth = 3 + pulse * 2; hCtx.stroke();
+      } else {
+        hotHexPath(hCtx, CX, CY, S - 1);
+        hCtx.strokeStyle = '#1c1c44'; hCtx.lineWidth = 1.2; hCtx.stroke();
+      }
+
+      // 1/6 blue pie wedge for scanner module
+      if (hotbarState.scannerModule) {
+        const a1 = 0, a2 = Math.PI / 3;   // first two flat-top vertices
+        hCtx.beginPath();
+        hCtx.moveTo(CX, CY);
+        hCtx.lineTo(CX + S * Math.cos(a1), CY + S * Math.sin(a1));
+        hCtx.lineTo(CX + S * Math.cos(a2), CY + S * Math.sin(a2));
+        hCtx.closePath();
+        hCtx.fillStyle = 'rgba(0,70,200,0.85)'; hCtx.fill();
+        hCtx.strokeStyle = 'rgba(0,140,255,0.7)'; hCtx.lineWidth = 0.8; hCtx.stroke();
+      }
+
+      // "INSTALL" hint when an item is selected
+      if (hotbarState.selectedItem && !hotbarState.powerNode) {
+        hCtx.font = '7px Courier New';
+        hCtx.textAlign = 'center';
+        hCtx.fillStyle = 'rgba(80,140,255,0.7)';
+        hCtx.fillText('▼ INSTALL', CX, CY + 4);
+      } else if (hotbarState.selectedItem === 'scanner_short' && hotbarState.powerNode && !hotbarState.scannerModule) {
+        hCtx.font = '7px Courier New';
+        hCtx.textAlign = 'center';
+        hCtx.fillStyle = 'rgba(80,140,255,0.7)';
+        hCtx.fillText('▼ INSTALL', CX, CY + 4);
+      }
+    }
+
+    // Click center hex to equip selected item
+    hotbarCanvas.addEventListener('click', e => {
+      if (!hotbarState.selectedItem) return;
+      const rect = hotbarCanvas.getBoundingClientRect();
+      const dx = e.clientX - rect.left - hotbarCanvas.width  / 2;
+      const dy = e.clientY - rect.top  - hotbarCanvas.height / 2;
+      if (Math.hypot(dx, dy) > HOT_SIZE * 1.1) return; // must click center hex
+      equipSelected();
+    });
+
+    // ── LOADOUT ITEMS ─────────────────────────────────────────────────────────
+    const LOADOUT_ITEMS = [
+      { id: 'power_node',    label: 'Power node: basic',      desc: 'V_OS baseline power supply', equipped: false, enabled: true  },
+      { id: 'scanner_short', label: 'Short-range scanner',    desc: 'Detection radius: 120u',     equipped: false, enabled: false },
+    ];
+
+    function renderLoadout() {
+      const el = document.getElementById('loadout-list');
+      el.innerHTML = '';
+      for (const item of LOADOUT_ITEMS) {
+        const div = document.createElement('div');
+        let cls = 'loadout-item';
+        if (item.equipped)                    cls += ' equipped';
+        else if (!item.enabled)               cls += ' disabled';
+        else if (hotbarState.selectedItem === item.id) cls += ' selected';
+        div.className = cls;
+        div.innerHTML =
+          `<span class="loadout-item-label">${item.label}</span>` +
+          `<span class="loadout-item-desc">${item.equipped ? '— INSTALLED' : item.desc}</span>`;
+        if (item.enabled && !item.equipped) {
+          div.addEventListener('click', () => selectLoadoutItem(item.id));
+        }
+        el.appendChild(div);
+      }
+    }
+
+    function selectLoadoutItem(id) {
+      hotbarState.selectedItem = (hotbarState.selectedItem === id) ? null : id;
+      renderLoadout();
+      if (hotbarState.selectedItem) {
+        const item = LOADOUT_ITEMS.find(i => i.id === id);
+        log(`> Selected: ${item.label} — click center module to install`, 'system');
+      }
+    }
+
+    function equipSelected() {
+      const id = hotbarState.selectedItem;
+      if (!id) return;
+      const item = LOADOUT_ITEMS.find(i => i.id === id);
+      if (!item || item.equipped) return;
+
+      if (id === 'power_node') {
+        hotbarState.powerNode    = true;
+        item.equipped            = true;
+        hotbarState.selectedItem = null;
+        // Enable scanner now that power is present
+        LOADOUT_ITEMS.find(i => i.id === 'scanner_short').enabled = true;
+        document.getElementById('slot-status').textContent = 'PWR: BASIC';
+        log('> Power node: basic — INSTALLED. Slot 1 online.', 'success');
+      } else if (id === 'scanner_short') {
+        if (!hotbarState.powerNode) {
+          log('> Requires power node first.', 'error'); return;
+        }
+        hotbarState.scannerModule = true;
+        item.equipped             = true;
+        hotbarState.selectedItem  = null;
+        document.getElementById('slot-status').textContent = 'PWR + SCAN';
+        log('> Short-range scanner — ONLINE. Tech detection active [120u range].', 'success');
+      }
+      renderLoadout();
+    }
+
+    // Reveal loadout panel after boot transition + scan animation
+    function revealLoadout() {
+      const section = document.getElementById('loadout-section');
+      section.style.display = 'block';
+
+      // Scan beam animation across the left panel
+      const beam = document.createElement('div');
+      beam.style.cssText = 'position:absolute;left:0;right:0;height:2px;' +
+        'background:linear-gradient(90deg,transparent,#00ff88,transparent);' +
+        'box-shadow:0 0 8px #00ff88;top:0;pointer-events:none;transition:top 1.4s linear,opacity 0.3s;';
+      const lp = document.getElementById('left-panel');
+      lp.style.position = 'relative';
+      lp.appendChild(beam);
+      requestAnimationFrame(() => {
+        beam.style.top  = lp.clientHeight + 'px';
+        beam.style.opacity = '0';
+      });
+      setTimeout(() => {
+        beam.remove();
+        log('> Diagnostic: low power. Upgrade internal sensor hardware [V_OS compatibility].', 'system');
+        renderLoadout();
+      }, 1500);
+    }
+
     // ── STATUS BAR UPDATE ─────────────────────────────────────────────────────
     function updateStatusBar(now) {
       const coolPct = Math.min(1, (now - player.scanCooldownStart) / player.scanCooldownMs);
@@ -951,6 +1177,7 @@
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      drawHotbar(now);
       updateStatusBar(now);
     }
 
