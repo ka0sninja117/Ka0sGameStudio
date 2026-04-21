@@ -245,9 +245,34 @@
   <script>
     const GAME_VERSION = 'v0.2-poc';
 
-    // ── TILE CONSTANTS ────────────────────────────────────────────────────────
-    const TILE = 32;
+    // ── TILE / HEX CONSTANTS ──────────────────────────────────────────────────
+    const TILE = 32; // kept for legacy area-trigger checks; hex coords are primary
     const VOID = 0, WALL = 1, FLOOR = 2, DOOR_LOCKED = 3, DOOR_OPEN = 4;
+
+    // Flat-top hex: pointy vertices left/right, flat edges top/bottom
+    const HEX_SIZE     = 20;                          // circumradius (px)
+    const HEX_COL_STEP = HEX_SIZE * 1.5;             // 30  – horizontal col pitch
+    const HEX_ROW_STEP = HEX_SIZE * Math.sqrt(3);    // ~34.64 – vertical row pitch
+
+    function hexToWorld(col, row) {
+      return {
+        x: col * HEX_COL_STEP,
+        y: row * HEX_ROW_STEP + (col % 2 === 1 ? HEX_ROW_STEP / 2 : 0),
+      };
+    }
+
+    function worldToHex(wx, wy) {
+      const col = Math.round(wx / HEX_COL_STEP);
+      const c   = Math.max(0, Math.min(MAP_COLS - 1, col));
+      const yOff = (c % 2 === 1) ? HEX_ROW_STEP / 2 : 0;
+      const row = Math.round((wy - yOff) / HEX_ROW_STEP);
+      const r   = Math.max(0, Math.min(MAP_ROWS - 1, row));
+      return { col: c, row: r };
+    }
+
+    // ── ZOOM ──────────────────────────────────────────────────────────────────
+    let zoom = 1.0;
+    const ZOOM_MIN = 0.5, ZOOM_MAX = 1.3, ZOOM_STEP = 0.08;
 
     // ── MAP BUILD ─────────────────────────────────────────────────────────────
     const MAP_COLS = 42;
@@ -289,8 +314,9 @@
     // ── TECH OBJECTS ──────────────────────────────────────────────────────────
     class TechObject {
       constructor(col, row, label, drops, shape) {
-        this.x = col * TILE + TILE / 2;
-        this.y = row * TILE + TILE / 2;
+        const pos = hexToWorld(col, row);
+        this.x = pos.x;
+        this.y = pos.y;
         this.label = label;
         this.drops = drops;   // [{type, count}]
         this.shape = shape;   // 'console'|'scanner'|'drone'|'core'
@@ -315,8 +341,10 @@
     // ── INTERACTABLES ─────────────────────────────────────────────────────────
     class Interactable {
       constructor(col, row, label, requires, unlockMsg) {
-        this.x = (col + 0.5) * TILE;  // center between two door tiles
-        this.y = row * TILE + TILE / 2;
+        // World pos = midpoint between the two door hex centers
+        const p1 = hexToWorld(col, row), p2 = hexToWorld(col + 1, row);
+        this.x = (p1.x + p2.x) / 2;
+        this.y = (p1.y + p2.y) / 2;
         this.col = col; this.row = row;
         this.label = label;
         this.requires = requires;     // { FRAGMENT_TYPE: count }
@@ -333,9 +361,10 @@
     ];
 
     // ── PLAYER ────────────────────────────────────────────────────────────────
+    const _pStart = hexToWorld(12, 10);
     const player = {
-      x: 12 * TILE + TILE / 2,
-      y: 10 * TILE + TILE / 2,
+      x: _pStart.x,
+      y: _pStart.y,
       radius: 10,
       speed: 2.4,
       angle: Math.PI / 2,
@@ -394,6 +423,11 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
+    }, { passive: false });
+
     // ── LOGGING ───────────────────────────────────────────────────────────────
     function log(text, cls = '') {
       const el = document.getElementById('log-entries');
@@ -428,25 +462,23 @@
     }
     updateInventoryUI();
 
-    // ── TILE HELPERS ──────────────────────────────────────────────────────────
+    // ── TILE HELPERS (hex) ────────────────────────────────────────────────────
     function tileAt(wx, wy) {
-      const c = Math.floor(wx / TILE);
-      const r = Math.floor(wy / TILE);
-      if (r < 0 || r >= MAP_ROWS || c < 0 || c >= MAP_COLS) return WALL;
-      return mapData[r][c];
+      const { col, row } = worldToHex(wx, wy);
+      return mapData[row][col];
     }
     function isSolid(t) { return t === WALL || t === VOID || t === DOOR_LOCKED; }
 
     function canMoveTo(nx, ny) {
-      const r = player.radius - 1;
-      return !isSolid(tileAt(nx - r, ny - r)) &&
-             !isSolid(tileAt(nx + r, ny - r)) &&
-             !isSolid(tileAt(nx - r, ny + r)) &&
-             !isSolid(tileAt(nx + r, ny + r)) &&
+      const r = player.radius - 2; // slightly smaller than visual radius
+      return !isSolid(tileAt(nx - r, ny    )) &&
+             !isSolid(tileAt(nx + r, ny    )) &&
              !isSolid(tileAt(nx,     ny - r)) &&
              !isSolid(tileAt(nx,     ny + r)) &&
-             !isSolid(tileAt(nx - r, ny    )) &&
-             !isSolid(tileAt(nx + r, ny    ));
+             !isSolid(tileAt(nx - r, ny - r)) &&
+             !isSolid(tileAt(nx + r, ny - r)) &&
+             !isSolid(tileAt(nx - r, ny + r)) &&
+             !isSolid(tileAt(nx + r, ny + r));
     }
 
     // ── SCAN MECHANIC ─────────────────────────────────────────────────────────
@@ -588,54 +620,60 @@
       booting = false;
     }
 
-    // ── DRAW: TILES ───────────────────────────────────────────────────────────
-    function drawTiles(camX, camY, now) {
-      const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
-      const c1 = Math.min(MAP_COLS - 1, Math.ceil((camX + canvas.width)  / TILE) + 1);
-      const r0 = Math.max(0, Math.floor(camY / TILE) - 1);
-      const r1 = Math.min(MAP_ROWS - 1, Math.ceil((camY + canvas.height) / TILE) + 1);
+    // ── DRAW: HEX TILES (world-space) ────────────────────────────────────────
+    function hexPath(wx, wy, s) {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;  // flat-top: 0°,60°,120°,180°,240°,300°
+        const vx = wx + s * Math.cos(a);
+        const vy = wy + s * Math.sin(a);
+        i === 0 ? ctx.moveTo(vx, vy) : ctx.lineTo(vx, vy);
+      }
+      ctx.closePath();
+    }
 
-      for (let r = r0; r <= r1; r++) {
-        for (let c = c0; c <= c1; c++) {
+    function drawHexTiles(camX, camY, now) {
+      const wLeft  = camX;
+      const wRight = camX + canvas.width  / zoom;
+      const wTop   = camY;
+      const wBot   = camY + canvas.height / zoom;
+
+      const cStart = Math.max(0, Math.floor(wLeft  / HEX_COL_STEP) - 1);
+      const cEnd   = Math.min(MAP_COLS - 1, Math.ceil(wRight / HEX_COL_STEP) + 1);
+
+      for (let c = cStart; c <= cEnd; c++) {
+        const yOff   = (c % 2 === 1) ? HEX_ROW_STEP / 2 : 0;
+        const rStart = Math.max(0, Math.floor((wTop - yOff) / HEX_ROW_STEP) - 1);
+        const rEnd   = Math.min(MAP_ROWS - 1, Math.ceil((wBot - yOff) / HEX_ROW_STEP) + 1);
+
+        for (let r = rStart; r <= rEnd; r++) {
           const t = mapData[r][c];
           if (t === VOID) continue;
-          const sx = c * TILE - camX;
-          const sy = r * TILE - camY;
+
+          const wx = c * HEX_COL_STEP;
+          const wy = r * HEX_ROW_STEP + yOff;
+          const S  = HEX_SIZE - 0.8; // tiny gap between hexes
 
           if (t === WALL) {
-            ctx.fillStyle = '#0d0d20';
-            ctx.fillRect(sx, sy, TILE, TILE);
-            ctx.strokeStyle = '#141430';
-            ctx.lineWidth = 0.4;
-            ctx.strokeRect(sx, sy, TILE, TILE);
-            // panel detail lines on walls
-            if ((c + r) % 4 === 0) {
-              ctx.strokeStyle = '#111126';
-              ctx.beginPath();
-              ctx.moveTo(sx + 4, sy + 4); ctx.lineTo(sx + TILE - 4, sy + 4);
-              ctx.stroke();
-            }
+            hexPath(wx, wy, S);
+            ctx.fillStyle = '#0d0d20'; ctx.fill();
+            ctx.strokeStyle = '#1a1a38'; ctx.lineWidth = 0.6; ctx.stroke();
           } else if (t === FLOOR) {
-            ctx.fillStyle = '#0a0a18';
-            ctx.fillRect(sx, sy, TILE, TILE);
-            ctx.strokeStyle = '#0c0c1c';
-            ctx.lineWidth = 0.3;
-            ctx.strokeRect(sx, sy, TILE, TILE);
+            hexPath(wx, wy, S);
+            ctx.fillStyle = '#0a0a18'; ctx.fill();
+            ctx.strokeStyle = '#0d0d22'; ctx.lineWidth = 0.3; ctx.stroke();
           } else if (t === DOOR_LOCKED) {
             const pulse = 0.5 + 0.5 * Math.sin(now * 0.0025);
-            ctx.fillStyle = '#150404';
-            ctx.fillRect(sx, sy, TILE, TILE);
-            ctx.strokeStyle = `rgba(200,20,0,${0.5 + pulse * 0.4})`;
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(sx + 2, sy + 2, TILE - 4, TILE - 4);
-            ctx.fillStyle = `rgba(180,10,0,${0.06 + pulse * 0.07})`;
-            ctx.fillRect(sx, sy, TILE, TILE);
+            hexPath(wx, wy, S);
+            ctx.fillStyle = '#160408'; ctx.fill();
+            ctx.strokeStyle = `rgba(200,20,0,${0.6 + pulse * 0.35})`; ctx.lineWidth = 1.5; ctx.stroke();
+            // inner glow fill
+            hexPath(wx, wy, S * 0.7);
+            ctx.fillStyle = `rgba(180,10,0,${0.06 + pulse * 0.08})`; ctx.fill();
           } else if (t === DOOR_OPEN) {
-            ctx.fillStyle = '#0a0a18';
-            ctx.fillRect(sx, sy, TILE, TILE);
-            ctx.strokeStyle = 'rgba(0,255,160,0.15)';
-            ctx.lineWidth = 0.5;
-            ctx.strokeRect(sx, sy, TILE, TILE);
+            hexPath(wx, wy, S);
+            ctx.fillStyle = '#0a0a18'; ctx.fill();
+            ctx.strokeStyle = 'rgba(0,255,160,0.18)'; ctx.lineWidth = 0.5; ctx.stroke();
           }
         }
       }
@@ -649,24 +687,23 @@
       core:    '255,20,120',
     };
 
-    function drawTechObject(obj, camX, camY, now) {
+    function drawTechObject(obj, now) {
       if (!obj.intact) return;
-      const sx = obj.x - camX;
-      const sy = obj.y - camY;
+      const wx = obj.x, wy = obj.y;
       const rgb = SHAPE_COLORS[obj.shape] || '200,130,20';
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.0018 + obj.glowPhase);
 
       // Ambient glow halo
-      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 26);
+      const g = ctx.createRadialGradient(wx, wy, 0, wx, wy, 26);
       g.addColorStop(0,   `rgba(${rgb},${0.4 + pulse * 0.35})`);
       g.addColorStop(0.5, `rgba(${rgb},${0.1 + pulse * 0.1})`);
       g.addColorStop(1,   `rgba(${rgb},0)`);
-      ctx.beginPath(); ctx.arc(sx, sy, 26, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(wx, wy, 26, 0, Math.PI * 2);
       ctx.fillStyle = g; ctx.fill();
 
       // Body
       ctx.save();
-      ctx.translate(sx, sy);
+      ctx.translate(wx, wy);
       ctx.rotate(now * 0.0004);
       ctx.strokeStyle = `rgba(${rgb},${0.7 + pulse * 0.3})`;
       ctx.lineWidth = 1.5;
@@ -720,106 +757,94 @@
       if (obj.scanStartTime >= 0) {
         const t = Math.min(1, (now - obj.scanStartTime) / SCAN_DUR_MS);
         ctx.beginPath();
-        ctx.arc(sx, sy, t * 44, 0, Math.PI * 2);
+        ctx.arc(wx, wy, t * 44, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(0,255,80,${1 - t})`;
         ctx.lineWidth = 1.5; ctx.stroke();
         ctx.strokeStyle = `rgba(0,200,60,${(1 - t) * 0.5})`;
-        ctx.beginPath(); ctx.arc(sx, sy, t * 28, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(wx, wy, t * 28, 0, Math.PI * 2); ctx.stroke();
       }
 
       // Proximity prompt
       const dist = Math.hypot(obj.x - player.x, obj.y - player.y);
       if (dist < SCAN_RANGE + 20) {
-        const a = Math.max(0, 1 - dist / (SCAN_RANGE + 20));
-        ctx.font = '9px Courier New';
+        const alpha = Math.max(0, 1 - dist / (SCAN_RANGE + 20));
+        ctx.font = `${9 / zoom}px Courier New`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(0,200,100,${a})`;
-        ctx.fillText(obj.label, sx, sy - 20);
-        ctx.fillStyle = `rgba(0,150,80,${a * 0.7})`;
-        ctx.fillText('[E] SCAN', sx, sy - 10);
+        ctx.fillStyle = `rgba(0,200,100,${alpha})`;
+        ctx.fillText(obj.label, wx, wy - 20);
+        ctx.fillStyle = `rgba(0,150,80,${alpha * 0.7})`;
+        ctx.fillText('[E] SCAN', wx, wy - 10);
       }
     }
 
-    // ── DRAW: INTERACTABLES ───────────────────────────────────────────────────
-    function drawInteractables(camX, camY, now) {
+    // ── DRAW: INTERACTABLES (world-space) ─────────────────────────────────────
+    function drawInteractables(now) {
       for (const obj of interactables) {
         if (!obj.locked) continue;
         const dist = Math.hypot(obj.x - player.x, obj.y - player.y);
         if (dist > INTERACT_RANGE + 30) continue;
-        const sx = obj.x - camX;
-        const sy = obj.y - camY;
-        const a  = Math.max(0, 1 - dist / (INTERACT_RANGE + 30));
-        // Deny flash
+        const a = Math.max(0, 1 - dist / (INTERACT_RANGE + 30));
         if (obj.unlockFlash > 0) {
           const ft = (now - obj.unlockFlash) / 600;
           if (ft < 1) {
-            ctx.beginPath(); ctx.arc(sx, sy, 20 + ft * 30, 0, Math.PI*2);
+            ctx.beginPath(); ctx.arc(obj.x, obj.y, 20 + ft * 30, 0, Math.PI*2);
             ctx.strokeStyle = `rgba(220,30,0,${(1-ft)*0.6})`; ctx.lineWidth=1.5; ctx.stroke();
           }
         }
-        ctx.font = '9px Courier New';
+        ctx.font = `${9 / zoom}px Courier New`;
         ctx.textAlign = 'center';
         ctx.fillStyle = `rgba(200,60,30,${a})`;
-        ctx.fillText(obj.label, sx, sy - 20);
+        ctx.fillText(obj.label, obj.x, obj.y - 20);
         ctx.fillStyle = `rgba(150,40,20,${a * 0.7})`;
-        ctx.fillText('[F] INTERFACE', sx, sy - 10);
+        ctx.fillText('[F] INTERFACE', obj.x, obj.y - 10);
       }
     }
 
-    // ── DRAW: PLAYER ──────────────────────────────────────────────────────────
-    function drawPlayer(camX, camY, now) {
-      const sx = player.x - camX;
-      const sy = player.y - camY;
+    // ── DRAW: PLAYER (world-space) ────────────────────────────────────────────
+    function drawPlayer(now) {
+      const wx = player.x, wy = player.y;
 
-      // Outer glow
-      const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 30);
+      const glow = ctx.createRadialGradient(wx, wy, 0, wx, wy, 30);
       glow.addColorStop(0,   'rgba(0,180,255,0.16)');
       glow.addColorStop(0.6, 'rgba(0,120,220,0.05)');
       glow.addColorStop(1,   'rgba(0,80,180,0)');
-      ctx.beginPath(); ctx.arc(sx, sy, 30, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(wx, wy, 30, 0, Math.PI*2);
       ctx.fillStyle = glow; ctx.fill();
 
-      // Direction arrow
       ctx.save();
-      ctx.translate(sx, sy);
+      ctx.translate(wx, wy);
       ctx.rotate(player.angle);
       ctx.beginPath();
-      ctx.moveTo(13, 0);
-      ctx.lineTo(7, 4);
-      ctx.lineTo(7, -4);
+      ctx.moveTo(13, 0); ctx.lineTo(7, 4); ctx.lineTo(7, -4);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(100,230,255,0.85)';
-      ctx.fill();
+      ctx.fillStyle = 'rgba(100,230,255,0.85)'; ctx.fill();
       ctx.restore();
 
-      // Body
-      ctx.beginPath(); ctx.arc(sx, sy, player.radius, 0, Math.PI*2);
-      const bodyGrad = ctx.createRadialGradient(sx - 3, sy - 3, 0, sx, sy, player.radius);
+      ctx.beginPath(); ctx.arc(wx, wy, player.radius, 0, Math.PI*2);
+      const bodyGrad = ctx.createRadialGradient(wx - 3, wy - 3, 0, wx, wy, player.radius);
       bodyGrad.addColorStop(0, '#bbffff');
       bodyGrad.addColorStop(1, '#004488');
       ctx.fillStyle = bodyGrad; ctx.fill();
-      ctx.strokeStyle = '#00bbff';
-      ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = '#00bbff'; ctx.lineWidth = 1.5; ctx.stroke();
 
-      // Scan cooldown arc
       const coolPct = Math.min(1, (now - player.scanCooldownStart) / player.scanCooldownMs);
       if (coolPct < 1) {
         ctx.beginPath();
-        ctx.arc(sx, sy, player.radius + 4, -Math.PI/2, -Math.PI/2 + Math.PI*2*coolPct);
+        ctx.arc(wx, wy, player.radius + 4, -Math.PI/2, -Math.PI/2 + Math.PI*2*coolPct);
         ctx.strokeStyle = `rgba(0,160,255,${0.5 + coolPct*0.3})`;
         ctx.lineWidth = 2; ctx.stroke();
       }
     }
 
-    // ── DRAW: SCAN RINGS + PARTICLES ──────────────────────────────────────────
-    function drawFX(camX, camY) {
+    // ── DRAW: FX (world-space) ────────────────────────────────────────────────
+    function drawFX() {
       for (let i = scanRings.length - 1; i >= 0; i--) {
         const ring = scanRings[i];
         ring.r   += 1.8;
         ring.life -= 0.016;
         if (ring.life <= 0) { scanRings.splice(i, 1); continue; }
         ctx.beginPath();
-        ctx.arc(ring.x - camX, ring.y - camY, ring.r, 0, Math.PI*2);
+        ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI*2);
         ctx.strokeStyle = `rgba(${ring.color},${ring.life * 0.65})`;
         ctx.lineWidth = 1.2; ctx.stroke();
       }
@@ -829,8 +854,7 @@
         p.life -= p.decay;
         if (p.life <= 0) { particles.splice(i, 1); continue; }
         ctx.beginPath();
-        ctx.arc(p.x - camX, p.y - camY, p.size * p.life, 0, Math.PI*2);
-        const alpha = Math.floor(p.life * 255).toString(16).padStart(2, '0');
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
         ctx.fillStyle = `rgba(${p.color},${p.life})`;
         ctx.fill();
       }
@@ -845,13 +869,12 @@
         scanFill.style.background = coolPct >= 1 ? '#0088ff' : '#003366';
       }
 
-      const pr = Math.floor(player.y / TILE);
-      const pc = Math.floor(player.x / TILE);
+      const { col: pc, row: pr } = worldToHex(player.x, player.y);
       const locEl = document.getElementById('location');
       if (!locEl) return;
       if (pr >= 28 && pc >= 5 && pc <= 27) {
         locEl.textContent = 'LOC: SECTOR B';
-      } else if (pr >= 2 && pr <= 17 && pc >= 2 && pc <= 21) {
+      } else if (pr >= 2 && pr <= 18 && pc >= 2 && pc <= 22) {
         locEl.textContent = 'LOC: SECTOR A';
       } else {
         locEl.textContent = 'LOC: CORRIDOR';
@@ -860,8 +883,7 @@
 
     // ── AREA TRIGGER CHECK ────────────────────────────────────────────────────
     function checkAreaTriggers() {
-      const pr = Math.floor(player.y / TILE);
-      const pc = Math.floor(player.x / TILE);
+      const { col: pc, row: pr } = worldToHex(player.x, player.y);
       for (const trigger of areaTriggers) {
         if (trigger.triggered) continue;
         if (pr >= trigger.r0 && pr <= trigger.r1 && pc >= trigger.c0 && pc <= trigger.c1) {
@@ -898,22 +920,28 @@
 
       checkAreaTriggers();
 
-      // Camera
-      const camX = player.x - canvas.width  / 2;
-      const camY = player.y - canvas.height / 2;
+      // Camera (world-space top-left corner of view)
+      const camX = player.x - canvas.width  / (2 * zoom);
+      const camY = player.y - canvas.height / (2 * zoom);
 
       // Clear
       ctx.fillStyle = '#070710';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // World
-      drawTiles(camX, camY, now);
-      for (const obj of techObjects)   drawTechObject(obj, camX, camY, now);
-      drawInteractables(camX, camY, now);
-      drawFX(camX, camY);
-      drawPlayer(camX, camY, now);
+      // World-space rendering (all coords are world units)
+      ctx.save();
+      ctx.scale(zoom, zoom);
+      ctx.translate(-camX, -camY);
 
-      // Edge vignette
+      drawHexTiles(camX, camY, now);
+      for (const obj of techObjects) drawTechObject(obj, now);
+      drawInteractables(now);
+      drawFX();
+      drawPlayer(now);
+
+      ctx.restore();
+
+      // Screen-space vignette
       const vig = ctx.createRadialGradient(
         canvas.width/2, canvas.height/2, canvas.height*0.3,
         canvas.width/2, canvas.height/2, canvas.height*0.85
