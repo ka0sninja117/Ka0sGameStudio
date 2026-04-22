@@ -224,6 +224,49 @@
       margin-left: 1px;
     }
     @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── COMMAND WINDOW ── */
+    #hotbar-row {
+      justify-content: flex-start;
+      padding: 6px 14px 4px;
+    }
+    #command-window {
+      flex: 1;
+      align-self: stretch;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+      border-left: 1px solid #0a1a2a;
+    }
+    #cmd-display {
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: #33cc99;
+      min-height: 26px;
+      display: flex;
+      align-items: center;
+    }
+    #cmd-stage-hint {
+      font-size: 9px;
+      color: #4a7a66;
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+    .cmd-cursor {
+      display: inline-block;
+      width: 7px;
+      background: #33cc99;
+      height: 0.85em;
+      vertical-align: text-bottom;
+      animation: blink 0.7s step-end infinite;
+      margin-left: 1px;
+    }
+    .cmd-idle { color: #2a5544; font-size: 10px; letter-spacing: 1px; }
+    /* Panel highlight during command entry */
+    .cmd-hl-frags { box-shadow: inset 0 0 0 1px rgba(0,220,140,0.55), 0 0 14px rgba(0,200,130,0.12); transition: box-shadow 0.2s; }
+    .cmd-hl-core  { outline: 1px solid rgba(60,130,255,0.6); outline-offset: -2px; }
   </style>
 </head>
 <body>
@@ -262,12 +305,13 @@
 
   </div>
 
-  <!-- HOTBAR ROW (placeholder — hex hotbar comes next step) -->
   <div id="hotbar-row">
     <div id="hotbar-label">// MODULE RACK</div>
     <canvas id="hotbarCanvas" width="170" height="170" style="cursor:pointer;"></canvas>
-    <div style="font-size:9px; color:#5d8878; letter-spacing:1px; line-height:1.8;">
-      SLOT 1<br><span id="slot-status" style="color:#4fb380;">EMPTY</span>
+    <div id="command-window">
+      <div class="panel-title" style="margin-bottom:6px;">// CMD</div>
+      <div id="cmd-display"><span class="cmd-idle">[ &gt; ] enter command</span></div>
+      <div id="cmd-stage-hint"></div>
     </div>
   </div>
 
@@ -351,6 +395,21 @@
       ACTUATOR_UNIT: { label: 'ACTUATOR UNIT',  color: '#bb44ff', dot: '#8822cc' },
       CORE_SHARD:    { label: 'CORE SHARD',     color: '#ff1177', dot: '#cc0055' },
     };
+
+    // ── FRAGMENT HEX CODES (deterministic per type) ───────────────────────────
+    const FRAG_CODES = {
+      LOOP_FRAGMENT: '1F3A',
+      SENSOR_NODE:   '4C2E',
+      ACTUATOR_UNIT: 'B509',
+      CORE_SHARD:    'F0FF',
+    };
+    const CODE_TO_FRAG = Object.fromEntries(
+      Object.entries(FRAG_CODES).map(([k, v]) => [v, k])
+    );
+
+    function hexColorToRgb(hex) {
+      return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+    }
 
     // ── TECH OBJECTS ──────────────────────────────────────────────────────────
     class TechObject {
@@ -444,10 +503,11 @@
     // ── INPUT ─────────────────────────────────────────────────────────────────
     const keys = {};
     document.addEventListener('keydown', e => {
-      if (!booting) {
-        if (e.code === 'KeyE') tryScanning();
-        if (e.code === 'KeyF') tryInteract();
-      }
+      if (booting) { keys[e.code] = true; return; }
+      if (cmdState.active) { handleCmdKey(e); return; }
+      if (e.key === '>') { startCmd(); return; }
+      if (e.code === 'KeyE') tryScanning();
+      if (e.code === 'KeyF') tryInteract();
       keys[e.code] = true;
     });
     document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -492,10 +552,11 @@
         const div = document.createElement('div');
         div.className = 'fragment-item' + (count > 0 ? ' active' : '');
         div.style.opacity = count > 0 ? '1' : '0.28';
+        const code = FRAG_CODES[key];
         div.innerHTML =
           `<div class="fragment-dot" style="background:${count>0?def.dot:'#334'}"></div>` +
           `<span class="fragment-label" style="color:${count>0?def.color:'#667788'}">` +
-          `${def.label}</span>` +
+          `${def.label}<span style="color:${count>0?'#336655':'#223333'};font-size:9px;margin-left:5px;">[${code}]</span></span>` +
           `<span class="fragment-count" style="color:${count>0?def.color:'#556677'}">${count}</span>`;
         list.appendChild(div);
       }
@@ -904,6 +965,111 @@
       }
     }
 
+    // ── COMMAND MODE ─────────────────────────────────────────────────────────
+    function startCmd() {
+      cmdState.active = true;
+      cmdState.stage  = 1;
+      cmdState.input  = '';
+      cmdState.fragType = null;
+      document.getElementById('left-panel').classList.add('cmd-hl-frags');
+      updateCmdWindow();
+    }
+
+    function cancelCmd() {
+      cmdState.active   = false;
+      cmdState.stage    = 0;
+      cmdState.input    = '';
+      cmdState.fragType = null;
+      document.getElementById('left-panel').classList.remove('cmd-hl-frags');
+      document.getElementById('hotbarCanvas').classList.remove('cmd-hl-core');
+      updateCmdWindow();
+    }
+
+    function handleCmdKey(e) {
+      e.preventDefault();
+      if (e.key === 'Escape') { cancelCmd(); return; }
+
+      if (e.key === 'Backspace') {
+        cmdState.input = cmdState.input.slice(0, -1);
+        updateCmdWindow();
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (cmdState.stage === 1) confirmFragCode();
+        else if (cmdState.stage === 2) confirmCoreSlot();
+        return;
+      }
+
+      if (cmdState.stage === 1 && cmdState.input.length < 4) {
+        const ch = e.key.toUpperCase();
+        if (/^[0-9A-F]$/.test(ch)) { cmdState.input += ch; updateCmdWindow(); }
+      } else if (cmdState.stage === 2 && cmdState.input.length < 1) {
+        if (/^[1-7]$/.test(e.key)) { cmdState.input += e.key; updateCmdWindow(); }
+      }
+    }
+
+    function confirmFragCode() {
+      const fragType = CODE_TO_FRAG[cmdState.input];
+      if (!fragType) {
+        log(`> CMD — unknown code: ${cmdState.input}`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      if ((player.inventory[fragType] || 0) === 0) {
+        log(`> CMD — ${FRAGMENTS[fragType].label}: not in cache`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      cmdState.fragType = fragType;
+      cmdState.stage    = 2;
+      cmdState.input    = '';
+      document.getElementById('left-panel').classList.remove('cmd-hl-frags');
+      document.getElementById('hotbarCanvas').classList.add('cmd-hl-core');
+      updateCmdWindow();
+    }
+
+    function confirmCoreSlot() {
+      const slotNum = parseInt(cmdState.input, 10);
+      const slot = CORE_SLOTS[slotNum];
+      if (!slot || !slot.unlocked) {
+        log(`> CMD — core ${cmdState.input || '?'}: not available`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      if (slot.assignments.length >= 6) {
+        log(`> CMD — core ${slotNum}: full (6/6)`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      slot.assignments.push({ fragType: cmdState.fragType });
+      log(`> ${FRAGMENTS[cmdState.fragType].label} > Core ${slotNum}`, 'success');
+      cancelCmd();
+    }
+
+    function updateCmdWindow() {
+      const display = document.getElementById('cmd-display');
+      const hint    = document.getElementById('cmd-stage-hint');
+      if (!cmdState.active) {
+        display.innerHTML = '<span class="cmd-idle">[ &gt; ] enter command</span>';
+        hint.textContent  = '';
+        return;
+      }
+      if (cmdState.stage === 1) {
+        display.innerHTML = `<span style="color:#33cc99;">&gt; ${cmdState.input}<span class="cmd-cursor"></span></span>`;
+        hint.textContent  = 'FRAG CODE  [ 0-9  A-F ]   ESC to cancel';
+      } else if (cmdState.stage === 2) {
+        const code = FRAG_CODES[cmdState.fragType];
+        display.innerHTML =
+          `<span style="color:#33cc99;">&gt; ${code} → Core ${cmdState.input}<span class="cmd-cursor"></span></span>`;
+        hint.textContent = `${FRAGMENTS[cmdState.fragType].label} → CORE #  [ 1-7 ]   ESC to cancel`;
+      }
+    }
+
     // ── HOTBAR ────────────────────────────────────────────────────────────────
     const hotbarCanvas = document.getElementById('hotbarCanvas');
     const hCtx = hotbarCanvas.getContext('2d');
@@ -914,9 +1080,28 @@
     const RING_ANGLES = [330, 30, 90, 150, 210, 270].map(d => d * Math.PI / 180);
 
     const hotbarState = {
-      powerNode:     false,  // power node equipped
-      scannerModule: false,  // short-range scanner equipped
-      selectedItem:  null,   // id of item selected from left panel
+      powerNode:     false,
+      scannerModule: false,
+      selectedItem:  null,
+    };
+
+    // Core slots: 1=center, 2-7=ring clockwise from upper-left (330°)
+    const CORE_SLOTS = {
+      1: { unlocked: true,  ringIdx: -1, assignments: [] },
+      2: { unlocked: false, ringIdx:  0, assignments: [] },
+      3: { unlocked: false, ringIdx:  1, assignments: [] },
+      4: { unlocked: false, ringIdx:  2, assignments: [] },
+      5: { unlocked: false, ringIdx:  3, assignments: [] },
+      6: { unlocked: false, ringIdx:  4, assignments: [] },
+      7: { unlocked: false, ringIdx:  5, assignments: [] },
+    };
+
+    // Command-mode state
+    const cmdState = {
+      active:   false,
+      stage:    0,      // 0=idle, 1=entering frag code, 2=entering core #
+      input:    '',
+      fragType: null,
     };
 
     function hotHexPath(hc, cx, cy, s) {
@@ -930,33 +1115,66 @@
       hc.closePath();
     }
 
+    // Wedge i fills the i-th clockwise slice of a hex, starting at 12:00.
+    function drawWedge(cx, cy, s, idx, fill, stroke) {
+      const a1 = (240 + idx * 60) * Math.PI / 180;
+      const a2 = (300 + idx * 60) * Math.PI / 180;
+      hCtx.beginPath();
+      hCtx.moveTo(cx, cy);
+      hCtx.lineTo(cx + s * Math.cos(a1), cy + s * Math.sin(a1));
+      hCtx.lineTo(cx + s * Math.cos(a2), cy + s * Math.sin(a2));
+      hCtx.closePath();
+      hCtx.fillStyle = fill; hCtx.fill();
+      if (stroke) { hCtx.strokeStyle = stroke; hCtx.lineWidth = 0.8; hCtx.stroke(); }
+    }
+
     function drawHotbar(now) {
       const W = hotbarCanvas.width, H = hotbarCanvas.height;
       hCtx.clearRect(0, 0, W, H);
       const CX = W / 2, CY = H / 2;
       const S = HOT_SIZE;
 
-      // ── Ring hexes (locked) ──
-      for (const angle of RING_ANGLES) {
+      // ── Ring hexes ──
+      RING_ANGLES.forEach((angle, ringIdx) => {
+        const slotNum = ringIdx + 2;
+        const slot = CORE_SLOTS[slotNum];
         const rx = CX + HOT_DIST * Math.cos(angle);
         const ry = CY + HOT_DIST * Math.sin(angle);
         hotHexPath(hCtx, rx, ry, S - 1);
-        hCtx.fillStyle = '#08081a'; hCtx.fill();
-        hCtx.strokeStyle = '#141432'; hCtx.lineWidth = 1.2; hCtx.stroke();
-        // red diagonal X inside
-        const inset = S * 0.45;
-        hCtx.strokeStyle = 'rgba(160,20,0,0.45)'; hCtx.lineWidth = 1;
-        hCtx.beginPath();
-        hCtx.moveTo(rx - inset, ry - inset); hCtx.lineTo(rx + inset, ry + inset);
-        hCtx.moveTo(rx + inset, ry - inset); hCtx.lineTo(rx - inset, ry + inset);
-        hCtx.stroke();
-      }
 
-      // ── Center hex (usable slot) ──
+        if (slot.unlocked) {
+          hCtx.fillStyle = '#0c0c22'; hCtx.fill();
+          hCtx.strokeStyle = '#2a2a55'; hCtx.lineWidth = 1.2; hCtx.stroke();
+          slot.assignments.forEach((a, i) => {
+            const rgb = hexColorToRgb(FRAGMENTS[a.fragType].color);
+            drawWedge(rx, ry, S, i, `rgba(${rgb},0.8)`, `rgba(${rgb},0.95)`);
+          });
+        } else {
+          hCtx.fillStyle = '#08081a'; hCtx.fill();
+          hCtx.strokeStyle = '#141432'; hCtx.lineWidth = 1.2; hCtx.stroke();
+          const inset = S * 0.45;
+          hCtx.strokeStyle = 'rgba(160,20,0,0.45)'; hCtx.lineWidth = 1;
+          hCtx.beginPath();
+          hCtx.moveTo(rx - inset, ry - inset); hCtx.lineTo(rx + inset, ry + inset);
+          hCtx.moveTo(rx + inset, ry - inset); hCtx.lineTo(rx - inset, ry + inset);
+          hCtx.stroke();
+        }
+
+        // Core number overlay for unlocked ring slots
+        if (slot.unlocked) {
+          hCtx.font = 'bold 9px Courier New';
+          hCtx.textAlign = 'center';
+          hCtx.textBaseline = 'middle';
+          hCtx.fillStyle = 'rgba(220,230,240,0.5)';
+          hCtx.fillText(String(slotNum), rx, ry);
+          hCtx.textBaseline = 'alphabetic';
+        }
+      });
+
+      // ── Center hex ──
       hotHexPath(hCtx, CX, CY, S - 1);
       hCtx.fillStyle = '#0c0c22'; hCtx.fill();
 
-      // Blue edge pulse when power node installed
       if (hotbarState.powerNode) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 0.003);
         hotHexPath(hCtx, CX, CY, S - 1);
@@ -967,35 +1185,40 @@
         hCtx.strokeStyle = '#1c1c44'; hCtx.lineWidth = 1.2; hCtx.stroke();
       }
 
-      // Module wedges — fill slots clockwise starting at 12:00
-      // Wedge i spans vertices at (240° + i*60°) and (300° + i*60°)
-      function drawWedge(idx, fill, stroke) {
-        const a1 = (240 + idx * 60) * Math.PI / 180;
-        const a2 = (300 + idx * 60) * Math.PI / 180;
-        hCtx.beginPath();
-        hCtx.moveTo(CX, CY);
-        hCtx.lineTo(CX + S * Math.cos(a1), CY + S * Math.sin(a1));
-        hCtx.lineTo(CX + S * Math.cos(a2), CY + S * Math.sin(a2));
-        hCtx.closePath();
-        hCtx.fillStyle = fill; hCtx.fill();
-        if (stroke) { hCtx.strokeStyle = stroke; hCtx.lineWidth = 0.8; hCtx.stroke(); }
-      }
+      // Scanner module wedge (loadout-equip system)
       if (hotbarState.scannerModule) {
-        drawWedge(0, 'rgba(0,90,230,0.88)', 'rgba(80,170,255,0.8)');
+        drawWedge(CX, CY, S, 0, 'rgba(0,90,230,0.88)', 'rgba(80,170,255,0.8)');
       }
 
-      // "INSTALL" hint when an item is selected
-      if (hotbarState.selectedItem && !hotbarState.powerNode) {
+      // Fragment assignment wedges for core 1 (start after scanner if present)
+      const wedgeOffset = hotbarState.scannerModule ? 1 : 0;
+      CORE_SLOTS[1].assignments.forEach((a, i) => {
+        const wi = wedgeOffset + i;
+        if (wi < 6) {
+          const rgb = hexColorToRgb(FRAGMENTS[a.fragType].color);
+          drawWedge(CX, CY, S, wi, `rgba(${rgb},0.75)`, `rgba(${rgb},0.95)`);
+        }
+      });
+
+      // "INSTALL" hint for loadout items
+      const showInstall = (hotbarState.selectedItem && !hotbarState.powerNode) ||
+        (hotbarState.selectedItem === 'scanner_short' && hotbarState.powerNode && !hotbarState.scannerModule);
+      if (showInstall) {
         hCtx.font = '7px Courier New';
         hCtx.textAlign = 'center';
+        hCtx.textBaseline = 'middle';
         hCtx.fillStyle = 'rgba(80,140,255,0.7)';
         hCtx.fillText('▼ INSTALL', CX, CY + 4);
-      } else if (hotbarState.selectedItem === 'scanner_short' && hotbarState.powerNode && !hotbarState.scannerModule) {
-        hCtx.font = '7px Courier New';
-        hCtx.textAlign = 'center';
-        hCtx.fillStyle = 'rgba(80,140,255,0.7)';
-        hCtx.fillText('▼ INSTALL', CX, CY + 4);
+        hCtx.textBaseline = 'alphabetic';
       }
+
+      // Core "1" number — always on top, white-grey, 50% opacity
+      hCtx.font = 'bold 10px Courier New';
+      hCtx.textAlign = 'center';
+      hCtx.textBaseline = 'middle';
+      hCtx.fillStyle = 'rgba(220,230,240,0.5)';
+      hCtx.fillText('1', CX, CY);
+      hCtx.textBaseline = 'alphabetic';
     }
 
     // Click center hex to equip selected item
