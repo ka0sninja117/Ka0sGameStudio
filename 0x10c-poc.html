@@ -296,7 +296,7 @@
     <!-- CENTER: Game Canvas -->
     <div id="canvas-container">
       <canvas id="gameCanvas"></canvas>
-      <div id="keyhints">WASD — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt;] — COMMAND &nbsp;|&nbsp; SCROLL — ZOOM</div>
+      <div id="keyhints">ARROWS — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt;] — COMMAND &nbsp;|&nbsp; SCROLL — ZOOM</div>
     </div>
 
     <!-- RIGHT: System Log -->
@@ -435,7 +435,7 @@
       radius: 10,
       speed: 2.4,
       angle: Math.PI / 2,
-      inventory: { POWER_NODE: 1 },
+      inventory: { POWER_NODE: 1, SENSOR_NODE: 1 },
       scanning: false,
       scanCooldownStart: -99999,
       scanCooldownMs: 2200,
@@ -457,6 +457,35 @@
     }
 
     const scanRings = [];
+
+    // ── VISIBILITY / FOG OF WAR ───────────────────────────────────────────────
+    const visibleHexes = new Set(); // "col,row" keys of currently lit tiles
+
+    function offsetToCube(col, row) {
+      const q = col;
+      const r = row - (col - (col & 1)) / 2;
+      return { q, r, s: -q - r };
+    }
+
+    function hexDistance(c1, r1, c2, r2) {
+      const a = offsetToCube(c1, r1), b = offsetToCube(c2, r2);
+      return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(a.s - b.s));
+    }
+
+    function updateVisibility() {
+      visibleHexes.clear();
+      const hasSensor = Object.values(CORE_SLOTS).some(slot =>
+        slot.unlocked && slot.assignments.some(a => a.fragType === 'SENSOR_NODE')
+      );
+      if (!hasSensor) return;
+      const { col: pc, row: pr } = worldToHex(player.x, player.y);
+      const range = 3;
+      for (let c = Math.max(0, pc - range - 1); c <= Math.min(MAP_COLS - 1, pc + range + 1); c++) {
+        for (let r = Math.max(0, pr - range - 1); r <= Math.min(MAP_ROWS - 1, pr + range + 1); r++) {
+          if (hexDistance(pc, pr, c, r) <= range) visibleHexes.add(`${c},${r}`);
+        }
+      }
+    }
 
     // ── INPUT ─────────────────────────────────────────────────────────────────
     const keys = {};
@@ -516,9 +545,11 @@
       hwList.innerHTML = fragList.innerHTML = '';
       let hwCount = 0, fragCount = 0, total = 0;
 
+      const powerInstalled = CORE_SLOTS[1].assignments.some(a => a.fragType === 'POWER_NODE');
       for (const [key, def] of Object.entries(ITEMS)) {
         const count = player.inventory[key] || 0;
         if (count === 0) continue;
+        if (key === 'SENSOR_NODE' && !powerInstalled) continue; // gated until power is online
         total += count;
         const row = makeItemRow(key, def, count);
         if (def.category === 'hardware') { hwList.appendChild(row);   hwCount++;   }
@@ -694,6 +725,7 @@
         for (let r = rStart; r <= rEnd; r++) {
           const t = mapData[r][c];
           if (t === VOID) continue;
+          if (!visibleHexes.has(`${c},${r}`)) continue; // fog of war
 
           const wx = c * HEX_COL_STEP;
           const wy = r * HEX_ROW_STEP + yOff;
@@ -734,6 +766,8 @@
 
     function drawTechObject(obj, now) {
       if (!obj.intact) return;
+      const { col: tc, row: tr } = worldToHex(obj.x, obj.y);
+      if (!visibleHexes.has(`${tc},${tr}`)) return;
       const wx = obj.x, wy = obj.y;
       const rgb = SHAPE_COLORS[obj.shape] || '200,130,20';
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.0018 + obj.glowPhase);
@@ -934,6 +968,13 @@
         updateCmdWindow();
         return;
       }
+      // Sensor node requires power node installed first
+      if (fragType === 'SENSOR_NODE' && !CORE_SLOTS[1].assignments.some(a => a.fragType === 'POWER_NODE')) {
+        log('> CMD — Sensor Node: power node must be installed in slot 1 first', 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
       if ((player.inventory[fragType] || 0) === 0) {
         log(`> CMD — ${ITEMS[fragType].label}: not in cache`, 'error');
         cmdState.input = '';
@@ -965,6 +1006,8 @@
       }
       slot.assignments.push({ fragType: cmdState.fragType });
       log(`> ${ITEMS[cmdState.fragType].label} > Core ${slotNum}`, 'success');
+      updateInventoryUI();   // reveal gated items (e.g. sensor after power)
+      updateVisibility();    // activate sensor vision immediately if just installed
       cancelCmd();
     }
 
@@ -1100,8 +1143,9 @@
         hCtx.strokeStyle = '#1c1c44'; hCtx.lineWidth = 1.2; hCtx.stroke();
       }
 
-      // Assignment wedges for core 1
-      CORE_SLOTS[1].assignments.forEach((a, i) => {
+      // Assignment wedges for core 1 — power node powers the slot, doesn't fill a wedge
+      const moduleAssignments = CORE_SLOTS[1].assignments.filter(a => a.fragType !== 'POWER_NODE');
+      moduleAssignments.forEach((a, i) => {
         if (i < 6) {
           const rgb = hexColorToRgb(ITEMS[a.fragType].color);
           drawWedge(CX, CY, S, i, `rgba(${rgb},0.75)`, `rgba(${rgb},0.95)`);
@@ -1142,14 +1186,15 @@
       if (booting) return;
       lastTime = now;
 
-      // Movement
+      // Movement — arrow keys only
       let dx = 0, dy = 0;
-      if (keys['KeyW'] || keys['ArrowUp'])    dy -= 1;
-      if (keys['KeyS'] || keys['ArrowDown'])  dy += 1;
-      if (keys['KeyA'] || keys['ArrowLeft'])  dx -= 1;
-      if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+      if (keys['ArrowUp'])    dy -= 1;
+      if (keys['ArrowDown'])  dy += 1;
+      if (keys['ArrowLeft'])  dx -= 1;
+      if (keys['ArrowRight']) dx += 1;
 
-      if (dx !== 0 || dy !== 0) {
+      const isMoving = dx !== 0 || dy !== 0;
+      if (isMoving) {
         const len = Math.hypot(dx, dy);
         dx /= len; dy /= len;
         player.angle = Math.atan2(dy, dx);
@@ -1157,6 +1202,9 @@
         const ny = player.y + dy * player.speed;
         if (canMoveTo(nx, player.y)) player.x = nx;
         if (canMoveTo(player.x, ny)) player.y = ny;
+      } else {
+        // Sensor vision only refreshes while holding still
+        updateVisibility();
       }
 
       // Camera (world-space top-left corner of view)
