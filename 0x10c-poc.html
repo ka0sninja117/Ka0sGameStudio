@@ -277,22 +277,26 @@
 
   <div id="game-wrapper">
 
-    <!-- LEFT: Loadout items + Fragment Cache -->
+    <!-- LEFT: Item inventory by category -->
     <div id="left-panel">
-      <div class="panel-section" id="loadout-section" style="display:none;">
-        <div class="panel-title">// AVAILABLE</div>
-        <div id="loadout-list"></div>
+      <div class="panel-section" id="section-hardware">
+        <div class="panel-title">// HARDWARE</div>
+        <div id="hardware-list"></div>
       </div>
-      <div class="panel-section grow">
-        <div class="panel-title">// FRAGMENT CACHE</div>
-        <div id="inventory-list"></div>
+      <div class="panel-section" id="section-fragments" style="display:none;">
+        <div class="panel-title">// V_OS FRAGMENTS</div>
+        <div id="fragments-list"></div>
+      </div>
+      <div class="panel-section" id="section-actions">
+        <div class="panel-title">// ACTIONS</div>
+        <div id="actions-list" style="font-size:10px;color:#2a5040;padding:2px 0;">— none available —</div>
       </div>
     </div>
 
     <!-- CENTER: Game Canvas -->
     <div id="canvas-container">
       <canvas id="gameCanvas"></canvas>
-      <div id="keyhints">WASD — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [F] — INTERFACE &nbsp;|&nbsp; SCROLL — ZOOM</div>
+      <div id="keyhints">WASD — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt;] — COMMAND &nbsp;|&nbsp; SCROLL — ZOOM</div>
     </div>
 
     <!-- RIGHT: System Log -->
@@ -316,7 +320,7 @@
   </div>
 
   <div id="status-bar">
-    <span class="status-item" id="frag-count">FRAGS: 0</span>
+    <span class="status-item" id="item-count">ITEMS: 1</span>
     <span class="status-item" id="location">LOC: UNKNOWN</span>
     <div class="status-item">
       SCAN
@@ -377,34 +381,24 @@
       room(1, 1, 23, 19);
       // Corridor
       room(10, 19, 13, 27);
-      // Room 2 — Processing Core
-      room(4, 27, 28, 37);
-      // Open corridor mouths
-      m[19][11] = FLOOR; m[19][12] = FLOOR;
-      m[27][11] = FLOOR; m[27][12] = FLOOR;
-      // Locked bulkhead
-      m[23][11] = DOOR_LOCKED;
-      m[23][12] = DOOR_LOCKED;
+      // Room 1 — Entry Chamber only
+      room(1, 1, 23, 19);
       return m;
     })();
 
-    // ── FRAGMENT DEFS ─────────────────────────────────────────────────────────
-    const FRAGMENTS = {
-      LOOP_FRAGMENT: { label: 'LOOP FRAGMENT',  color: '#2299ff', dot: '#1166cc' },
-      SENSOR_NODE:   { label: 'SENSOR NODE',    color: '#ffaa11', dot: '#cc7700' },
-      ACTUATOR_UNIT: { label: 'ACTUATOR UNIT',  color: '#bb44ff', dot: '#8822cc' },
-      CORE_SHARD:    { label: 'CORE SHARD',     color: '#ff1177', dot: '#cc0055' },
+    // ── ITEM REGISTRY ─────────────────────────────────────────────────────────
+    // Hex code scheme: first digit = category (0=hardware, 1=V_OS),
+    //   second char = tier/grade (A=basic), last two = item index.
+    //   e.g. a better power node → 0B01; a second hardware type → 0A02.
+    const ITEMS = {
+      // Hardware
+      POWER_NODE:    { label: 'Power Node',    category: 'hardware',  color: '#5599ff', dot: '#2255cc', code: '0A01' },
+      SENSOR_NODE:   { label: 'Sensor Node',   category: 'hardware',  color: '#ffbb33', dot: '#cc8800', code: '0A02' },
+      // V_OS Fragments
+      LOOP_FRAGMENT: { label: 'Loop Fragment', category: 'fragment',  color: '#33ccff', dot: '#1199cc', code: '1F01' },
     };
-
-    // ── FRAGMENT HEX CODES (deterministic per type) ───────────────────────────
-    const FRAG_CODES = {
-      LOOP_FRAGMENT: '1F3A',
-      SENSOR_NODE:   '4C2E',
-      ACTUATOR_UNIT: 'B509',
-      CORE_SHARD:    'F0FF',
-    };
-    const CODE_TO_FRAG = Object.fromEntries(
-      Object.entries(FRAG_CODES).map(([k, v]) => [v, k])
+    const CODE_TO_ITEM = Object.fromEntries(
+      Object.entries(ITEMS).map(([k, v]) => [v.code, k])
     );
 
     function hexColorToRgb(hex) {
@@ -427,37 +421,10 @@
     }
 
     const techObjects = [
-      // Room 1
-      new TechObject(5,  6,  'RUSTED CONSOLE',   [{type:'LOOP_FRAGMENT', count:2}], 'console'),
-      new TechObject(18, 13, 'BROKEN SCANNER',   [{type:'SENSOR_NODE',   count:1}], 'scanner'),
-      new TechObject(4,  16, 'DEAD TERMINAL',    [{type:'LOOP_FRAGMENT', count:1}], 'console'),
-      new TechObject(20, 5,  'FRACTURED RELAY',  [{type:'LOOP_FRAGMENT', count:1},{type:'SENSOR_NODE', count:1}], 'scanner'),
-      // Room 2
-      new TechObject(8,  31, 'DORMANT DRONE',    [{type:'ACTUATOR_UNIT', count:2}], 'drone'),
-      new TechObject(24, 29, 'AUXILIARY NODE',   [{type:'SENSOR_NODE',   count:1},{type:'ACTUATOR_UNIT', count:1}], 'scanner'),
-      new TechObject(15, 35, 'CENTRAL CORE',     [{type:'CORE_SHARD',    count:1}], 'core'),
-    ];
-
-    // ── INTERACTABLES ─────────────────────────────────────────────────────────
-    class Interactable {
-      constructor(col, row, label, requires, unlockMsg) {
-        // World pos = midpoint between the two door hex centers
-        const p1 = hexToWorld(col, row), p2 = hexToWorld(col + 1, row);
-        this.x = (p1.x + p2.x) / 2;
-        this.y = (p1.y + p2.y) / 2;
-        this.col = col; this.row = row;
-        this.label = label;
-        this.requires = requires;     // { FRAGMENT_TYPE: count }
-        this.unlockMsg = unlockMsg;
-        this.locked = true;
-        this.unlockFlash = 0;
-      }
-    }
-
-    const interactables = [
-      new Interactable(11, 23, 'SEALED BULKHEAD',
-        { SENSOR_NODE: 1, LOOP_FRAGMENT: 2 },
-        'BULKHEAD UNSEALED — PASSAGE CLEARED')
+      new TechObject(5,  6,  'RUSTED CONSOLE',  [{type:'LOOP_FRAGMENT', count:2}], 'console'),
+      new TechObject(18, 13, 'SENSOR ARRAY',    [{type:'SENSOR_NODE',   count:1}], 'scanner'),
+      new TechObject(4,  16, 'DEAD TERMINAL',   [{type:'LOOP_FRAGMENT', count:1}], 'console'),
+      new TechObject(20, 5,  'RELAY NODE',      [{type:'LOOP_FRAGMENT', count:1},{type:'SENSOR_NODE', count:1}], 'scanner'),
     ];
 
     // ── PLAYER ────────────────────────────────────────────────────────────────
@@ -468,7 +435,7 @@
       radius: 10,
       speed: 2.4,
       angle: Math.PI / 2,
-      inventory: {},
+      inventory: { POWER_NODE: 1 },
       scanning: false,
       scanCooldownStart: -99999,
       scanCooldownMs: 2200,
@@ -491,15 +458,6 @@
 
     const scanRings = [];
 
-    // ── AREA TRIGGERS ─────────────────────────────────────────────────────────
-    const areaTriggers = [
-      {
-        id: 'room2', triggered: false,
-        r0: 28, c0: 5, r1: 36, c1: 27,
-        msg: '> DEEPER SECTOR ACCESSED — ANOMALOUS ENERGY SIGNATURES DETECTED', cls: 'success',
-      }
-    ];
-
     // ── INPUT ─────────────────────────────────────────────────────────────────
     const keys = {};
     document.addEventListener('keydown', e => {
@@ -507,7 +465,6 @@
       if (cmdState.active) { handleCmdKey(e); return; }
       if (e.key === '>') { startCmd(); return; }
       if (e.code === 'KeyE') tryScanning();
-      if (e.code === 'KeyF') tryInteract();
       keys[e.code] = true;
     });
     document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -542,25 +499,35 @@
     }
 
     // ── INVENTORY UI ──────────────────────────────────────────────────────────
+    function makeItemRow(key, def, count) {
+      const div = document.createElement('div');
+      div.className = 'fragment-item active';
+      div.innerHTML =
+        `<div class="fragment-dot" style="background:${def.dot}"></div>` +
+        `<span class="fragment-label" style="color:${def.color}">` +
+        `${def.label}<span style="color:#558877;font-size:9px;margin-left:5px;">[${def.code}]</span></span>` +
+        `<span class="fragment-count" style="color:${def.color}">${count}</span>`;
+      return div;
+    }
+
     function updateInventoryUI() {
-      const list = document.getElementById('inventory-list');
-      list.innerHTML = '';
-      let total = 0;
-      for (const [key, def] of Object.entries(FRAGMENTS)) {
+      const hwList   = document.getElementById('hardware-list');
+      const fragList = document.getElementById('fragments-list');
+      hwList.innerHTML = fragList.innerHTML = '';
+      let hwCount = 0, fragCount = 0, total = 0;
+
+      for (const [key, def] of Object.entries(ITEMS)) {
         const count = player.inventory[key] || 0;
+        if (count === 0) continue;
         total += count;
-        const div = document.createElement('div');
-        div.className = 'fragment-item' + (count > 0 ? ' active' : '');
-        div.style.opacity = count > 0 ? '1' : '0.28';
-        const code = FRAG_CODES[key];
-        div.innerHTML =
-          `<div class="fragment-dot" style="background:${count>0?def.dot:'#334'}"></div>` +
-          `<span class="fragment-label" style="color:${count>0?def.color:'#667788'}">` +
-          `${def.label}<span style="color:${count>0?'#336655':'#223333'};font-size:9px;margin-left:5px;">[${code}]</span></span>` +
-          `<span class="fragment-count" style="color:${count>0?def.color:'#556677'}">${count}</span>`;
-        list.appendChild(div);
+        const row = makeItemRow(key, def, count);
+        if (def.category === 'hardware') { hwList.appendChild(row);   hwCount++;   }
+        else                             { fragList.appendChild(row);  fragCount++; }
       }
-      document.getElementById('frag-count').textContent = `FRAGS: ${total}`;
+
+      document.getElementById('section-hardware').style.display  = hwCount   > 0 ? '' : 'none';
+      document.getElementById('section-fragments').style.display = fragCount > 0 ? '' : 'none';
+      document.getElementById('item-count').textContent = `ITEMS: ${total}`;
     }
     updateInventoryUI();
 
@@ -621,39 +588,11 @@
         const gained = [];
         for (const drop of target.drops) {
           player.inventory[drop.type] = (player.inventory[drop.type] || 0) + drop.count;
-          gained.push(`${drop.count}x ${FRAGMENTS[drop.type].label}`);
+          gained.push(`${drop.count}x ${ITEMS[drop.type].label}`);
         }
         log(`> ACQUIRED: ${gained.join(', ')}`, 'acquire');
         updateInventoryUI();
       }, SCAN_DUR_MS);
-    }
-
-    // ── INTERACT MECHANIC ─────────────────────────────────────────────────────
-    const INTERACT_RANGE = 80;
-
-    function tryInteract() {
-      for (const obj of interactables) {
-        if (!obj.locked) continue;
-        if (Math.hypot(obj.x - player.x, obj.y - player.y) > INTERACT_RANGE) continue;
-        const missing = [];
-        for (const [key, need] of Object.entries(obj.requires)) {
-          const have = player.inventory[key] || 0;
-          if (have < need) missing.push(`${need - have}x more ${FRAGMENTS[key].label}`);
-        }
-        if (missing.length) {
-          log(`> ACCESS DENIED — REQUIRE: ${missing.join(', ')}`, 'error');
-          obj.unlockFlash = performance.now();
-          return;
-        }
-        obj.locked = false;
-        mapData[obj.row][obj.col]     = DOOR_OPEN;
-        mapData[obj.row][obj.col + 1] = DOOR_OPEN;
-        spawnParticles(obj.x, obj.y, '0,255,160', 18);
-        scanRings.push({ x: obj.x, y: obj.y, r: 0, maxR: 90, life: 1, color: '0,255,160' });
-        log(`> ${obj.unlockMsg}`, 'success');
-        return;
-      }
-      log('> NOTHING TO INTERFACE WITH NEARBY', 'system');
     }
 
     // ── BOOT SEQUENCE ─────────────────────────────────────────────────────────
@@ -721,8 +660,9 @@
 
       booting = false;
 
-      // Reveal loadout panel with scan animation after a short delay
-      setTimeout(revealLoadout, 1400);
+      setTimeout(() => {
+        log('> V_OS online. Power node detected. Assign to core slot via [ > ] command.', 'system');
+      }, 1400);
     }
 
     // ── DRAW: HEX TILES (world-space) ────────────────────────────────────────
@@ -882,29 +822,6 @@
       }
     }
 
-    // ── DRAW: INTERACTABLES (world-space) ─────────────────────────────────────
-    function drawInteractables(now) {
-      for (const obj of interactables) {
-        if (!obj.locked) continue;
-        const dist = Math.hypot(obj.x - player.x, obj.y - player.y);
-        if (dist > INTERACT_RANGE + 30) continue;
-        const a = Math.max(0, 1 - dist / (INTERACT_RANGE + 30));
-        if (obj.unlockFlash > 0) {
-          const ft = (now - obj.unlockFlash) / 600;
-          if (ft < 1) {
-            ctx.beginPath(); ctx.arc(obj.x, obj.y, 20 + ft * 30, 0, Math.PI*2);
-            ctx.strokeStyle = `rgba(220,30,0,${(1-ft)*0.6})`; ctx.lineWidth=1.5; ctx.stroke();
-          }
-        }
-        ctx.font = `bold ${10 / zoom}px Courier New`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(255,110,80,${a})`;
-        ctx.fillText(obj.label, obj.x, obj.y - 20);
-        ctx.fillStyle = `rgba(255,140,110,${a * 0.85})`;
-        ctx.fillText('[F] INTERFACE', obj.x, obj.y - 10);
-      }
-    }
-
     // ── DRAW: PLAYER (world-space) ────────────────────────────────────────────
     function drawPlayer(now) {
       const wx = player.x, wy = player.y;
@@ -1010,7 +927,7 @@
     }
 
     function confirmFragCode() {
-      const fragType = CODE_TO_FRAG[cmdState.input];
+      const fragType = CODE_TO_ITEM[cmdState.input];
       if (!fragType) {
         log(`> CMD — unknown code: ${cmdState.input}`, 'error');
         cmdState.input = '';
@@ -1018,7 +935,7 @@
         return;
       }
       if ((player.inventory[fragType] || 0) === 0) {
-        log(`> CMD — ${FRAGMENTS[fragType].label}: not in cache`, 'error');
+        log(`> CMD — ${ITEMS[fragType].label}: not in cache`, 'error');
         cmdState.input = '';
         updateCmdWindow();
         return;
@@ -1047,7 +964,7 @@
         return;
       }
       slot.assignments.push({ fragType: cmdState.fragType });
-      log(`> ${FRAGMENTS[cmdState.fragType].label} > Core ${slotNum}`, 'success');
+      log(`> ${ITEMS[cmdState.fragType].label} > Core ${slotNum}`, 'success');
       cancelCmd();
     }
 
@@ -1063,10 +980,10 @@
         display.innerHTML = `<span style="color:#33cc99;">&gt; ${cmdState.input}<span class="cmd-cursor"></span></span>`;
         hint.textContent  = 'FRAG CODE  [ 0-9  A-F ]   ESC to cancel';
       } else if (cmdState.stage === 2) {
-        const code = FRAG_CODES[cmdState.fragType];
+        const code = ITEMS[cmdState.fragType].code;
         display.innerHTML =
           `<span style="color:#33cc99;">&gt; ${code} → Core ${cmdState.input}<span class="cmd-cursor"></span></span>`;
-        hint.textContent = `${FRAGMENTS[cmdState.fragType].label} → CORE #  [ 1-7 ]   ESC to cancel`;
+        hint.textContent = `${ITEMS[cmdState.fragType].label} → CORE #  [ 1-7 ]   ESC to cancel`;
       }
     }
 
@@ -1079,11 +996,8 @@
     // Ring angles for flat-top hex neighbors (degrees → radians)
     const RING_ANGLES = [330, 30, 90, 150, 210, 270].map(d => d * Math.PI / 180);
 
-    const hotbarState = {
-      powerNode:     false,
-      scannerModule: false,
-      selectedItem:  null,
-    };
+    // hotbarState retained for future use; assignments drive visuals via CORE_SLOTS
+    const hotbarState = {};
 
     // Core slots: 1=center, 2-7=ring clockwise from upper-left (330°)
     const CORE_SLOTS = {
@@ -1146,7 +1060,7 @@
           hCtx.fillStyle = '#0c0c22'; hCtx.fill();
           hCtx.strokeStyle = '#2a2a55'; hCtx.lineWidth = 1.2; hCtx.stroke();
           slot.assignments.forEach((a, i) => {
-            const rgb = hexColorToRgb(FRAGMENTS[a.fragType].color);
+            const rgb = hexColorToRgb(ITEMS[a.fragType].color);
             drawWedge(rx, ry, S, i, `rgba(${rgb},0.8)`, `rgba(${rgb},0.95)`);
           });
         } else {
@@ -1175,7 +1089,8 @@
       hotHexPath(hCtx, CX, CY, S - 1);
       hCtx.fillStyle = '#0c0c22'; hCtx.fill();
 
-      if (hotbarState.powerNode) {
+      const hasPower = CORE_SLOTS[1].assignments.some(a => a.fragType === 'POWER_NODE');
+      if (hasPower) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 0.003);
         hotHexPath(hCtx, CX, CY, S - 1);
         hCtx.strokeStyle = `rgba(30,100,255,${0.45 + pulse * 0.5})`;
@@ -1185,32 +1100,13 @@
         hCtx.strokeStyle = '#1c1c44'; hCtx.lineWidth = 1.2; hCtx.stroke();
       }
 
-      // Scanner module wedge (loadout-equip system)
-      if (hotbarState.scannerModule) {
-        drawWedge(CX, CY, S, 0, 'rgba(0,90,230,0.88)', 'rgba(80,170,255,0.8)');
-      }
-
-      // Fragment assignment wedges for core 1 (start after scanner if present)
-      const wedgeOffset = hotbarState.scannerModule ? 1 : 0;
+      // Assignment wedges for core 1
       CORE_SLOTS[1].assignments.forEach((a, i) => {
-        const wi = wedgeOffset + i;
-        if (wi < 6) {
-          const rgb = hexColorToRgb(FRAGMENTS[a.fragType].color);
-          drawWedge(CX, CY, S, wi, `rgba(${rgb},0.75)`, `rgba(${rgb},0.95)`);
+        if (i < 6) {
+          const rgb = hexColorToRgb(ITEMS[a.fragType].color);
+          drawWedge(CX, CY, S, i, `rgba(${rgb},0.75)`, `rgba(${rgb},0.95)`);
         }
       });
-
-      // "INSTALL" hint for loadout items
-      const showInstall = (hotbarState.selectedItem && !hotbarState.powerNode) ||
-        (hotbarState.selectedItem === 'scanner_short' && hotbarState.powerNode && !hotbarState.scannerModule);
-      if (showInstall) {
-        hCtx.font = '7px Courier New';
-        hCtx.textAlign = 'center';
-        hCtx.textBaseline = 'middle';
-        hCtx.fillStyle = 'rgba(80,140,255,0.7)';
-        hCtx.fillText('▼ INSTALL', CX, CY + 4);
-        hCtx.textBaseline = 'alphabetic';
-      }
 
       // Core "1" number — always on top, white-grey, 50% opacity
       hCtx.font = 'bold 10px Courier New';
@@ -1219,102 +1115,6 @@
       hCtx.fillStyle = 'rgba(220,230,240,0.5)';
       hCtx.fillText('1', CX, CY);
       hCtx.textBaseline = 'alphabetic';
-    }
-
-    // Click center hex to equip selected item
-    hotbarCanvas.addEventListener('click', e => {
-      if (!hotbarState.selectedItem) return;
-      const rect = hotbarCanvas.getBoundingClientRect();
-      const dx = e.clientX - rect.left - hotbarCanvas.width  / 2;
-      const dy = e.clientY - rect.top  - hotbarCanvas.height / 2;
-      if (Math.hypot(dx, dy) > HOT_SIZE * 1.1) return; // must click center hex
-      equipSelected();
-    });
-
-    // ── LOADOUT ITEMS ─────────────────────────────────────────────────────────
-    const LOADOUT_ITEMS = [
-      { id: 'power_node',    label: 'Power node: basic',      desc: 'V_OS baseline power supply', equipped: false, enabled: true  },
-      { id: 'scanner_short', label: 'Short-range scanner',    desc: 'Detection radius: 120u',     equipped: false, enabled: false },
-    ];
-
-    function renderLoadout() {
-      const el = document.getElementById('loadout-list');
-      el.innerHTML = '';
-      for (const item of LOADOUT_ITEMS) {
-        const div = document.createElement('div');
-        let cls = 'loadout-item';
-        if (item.equipped)                    cls += ' equipped';
-        else if (!item.enabled)               cls += ' disabled';
-        else if (hotbarState.selectedItem === item.id) cls += ' selected';
-        div.className = cls;
-        div.innerHTML =
-          `<span class="loadout-item-label">${item.label}</span>` +
-          `<span class="loadout-item-desc">${item.equipped ? '— INSTALLED' : item.desc}</span>`;
-        if (item.enabled && !item.equipped) {
-          div.addEventListener('click', () => selectLoadoutItem(item.id));
-        }
-        el.appendChild(div);
-      }
-    }
-
-    function selectLoadoutItem(id) {
-      hotbarState.selectedItem = (hotbarState.selectedItem === id) ? null : id;
-      renderLoadout();
-      if (hotbarState.selectedItem) {
-        const item = LOADOUT_ITEMS.find(i => i.id === id);
-        log(`> Selected: ${item.label} — click center module to install`, 'system');
-      }
-    }
-
-    function equipSelected() {
-      const id = hotbarState.selectedItem;
-      if (!id) return;
-      const item = LOADOUT_ITEMS.find(i => i.id === id);
-      if (!item || item.equipped) return;
-
-      if (id === 'power_node') {
-        hotbarState.powerNode    = true;
-        item.equipped            = true;
-        hotbarState.selectedItem = null;
-        // Enable scanner now that power is present
-        LOADOUT_ITEMS.find(i => i.id === 'scanner_short').enabled = true;
-        document.getElementById('slot-status').textContent = 'PWR: BASIC';
-        log('> Power node: basic — INSTALLED. Slot 1 online.', 'success');
-      } else if (id === 'scanner_short') {
-        if (!hotbarState.powerNode) {
-          log('> Requires power node first.', 'error'); return;
-        }
-        hotbarState.scannerModule = true;
-        item.equipped             = true;
-        hotbarState.selectedItem  = null;
-        document.getElementById('slot-status').textContent = 'PWR + SCAN';
-        log('> Short-range scanner — ONLINE. Tech detection active [120u range].', 'success');
-      }
-      renderLoadout();
-    }
-
-    // Reveal loadout panel after boot transition + scan animation
-    function revealLoadout() {
-      const section = document.getElementById('loadout-section');
-      section.style.display = 'block';
-
-      // Scan beam animation across the left panel
-      const beam = document.createElement('div');
-      beam.style.cssText = 'position:absolute;left:0;right:0;height:2px;' +
-        'background:linear-gradient(90deg,transparent,#00ff88,transparent);' +
-        'box-shadow:0 0 8px #00ff88;top:0;pointer-events:none;transition:top 1.4s linear,opacity 0.3s;';
-      const lp = document.getElementById('left-panel');
-      lp.style.position = 'relative';
-      lp.appendChild(beam);
-      requestAnimationFrame(() => {
-        beam.style.top  = lp.clientHeight + 'px';
-        beam.style.opacity = '0';
-      });
-      setTimeout(() => {
-        beam.remove();
-        log('> Diagnostic: low power. Upgrade internal sensor hardware [V_OS compatibility].', 'system');
-        renderLoadout();
-      }, 1500);
     }
 
     // ── STATUS BAR UPDATE ─────────────────────────────────────────────────────
@@ -1329,26 +1129,10 @@
       const { col: pc, row: pr } = worldToHex(player.x, player.y);
       const locEl = document.getElementById('location');
       if (!locEl) return;
-      if (pr >= 28 && pc >= 5 && pc <= 27) {
-        locEl.textContent = 'LOC: SECTOR B';
-      } else if (pr >= 2 && pr <= 18 && pc >= 2 && pc <= 22) {
-        locEl.textContent = 'LOC: SECTOR A';
-      } else {
-        locEl.textContent = 'LOC: CORRIDOR';
-      }
+      locEl.textContent = (pr >= 2 && pr <= 18 && pc >= 2 && pc <= 22)
+        ? 'LOC: SECTOR A' : 'LOC: UNKNOWN';
     }
 
-    // ── AREA TRIGGER CHECK ────────────────────────────────────────────────────
-    function checkAreaTriggers() {
-      const { col: pc, row: pr } = worldToHex(player.x, player.y);
-      for (const trigger of areaTriggers) {
-        if (trigger.triggered) continue;
-        if (pr >= trigger.r0 && pr <= trigger.r1 && pc >= trigger.c0 && pc <= trigger.c1) {
-          trigger.triggered = true;
-          log(trigger.msg, trigger.cls);
-        }
-      }
-    }
 
     // ── MAIN LOOP ─────────────────────────────────────────────────────────────
     let lastTime = 0;
@@ -1375,8 +1159,6 @@
         if (canMoveTo(player.x, ny)) player.y = ny;
       }
 
-      checkAreaTriggers();
-
       // Camera (world-space top-left corner of view)
       const camX = player.x - canvas.width  / (2 * zoom);
       const camY = player.y - canvas.height / (2 * zoom);
@@ -1392,7 +1174,6 @@
 
       drawHexTiles(camX, camY, now);
       for (const obj of techObjects) drawTechObject(obj, now);
-      drawInteractables(now);
       drawFX();
       drawPlayer(now);
 
