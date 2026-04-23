@@ -458,6 +458,26 @@
 
     const scanRings = [];
 
+    // ── CORE STATE (must be declared before any function that references it) ──
+    const hotbarState = {};
+
+    const CORE_SLOTS = {
+      1: { unlocked: true,  ringIdx: -1, assignments: [] },
+      2: { unlocked: false, ringIdx:  0, assignments: [] },
+      3: { unlocked: false, ringIdx:  1, assignments: [] },
+      4: { unlocked: false, ringIdx:  2, assignments: [] },
+      5: { unlocked: false, ringIdx:  3, assignments: [] },
+      6: { unlocked: false, ringIdx:  4, assignments: [] },
+      7: { unlocked: false, ringIdx:  5, assignments: [] },
+    };
+
+    const cmdState = {
+      active:   false,
+      stage:    0,
+      input:    '',
+      fragType: null,
+    };
+
     // ── VISIBILITY / FOG OF WAR ───────────────────────────────────────────────
     const visibleHexes = new Set(); // "col,row" keys of currently lit tiles
 
@@ -1039,27 +1059,6 @@
     // Ring angles for flat-top hex neighbors (degrees → radians)
     const RING_ANGLES = [330, 30, 90, 150, 210, 270].map(d => d * Math.PI / 180);
 
-    // hotbarState retained for future use; assignments drive visuals via CORE_SLOTS
-    const hotbarState = {};
-
-    // Core slots: 1=center, 2-7=ring clockwise from upper-left (330°)
-    const CORE_SLOTS = {
-      1: { unlocked: true,  ringIdx: -1, assignments: [] },
-      2: { unlocked: false, ringIdx:  0, assignments: [] },
-      3: { unlocked: false, ringIdx:  1, assignments: [] },
-      4: { unlocked: false, ringIdx:  2, assignments: [] },
-      5: { unlocked: false, ringIdx:  3, assignments: [] },
-      6: { unlocked: false, ringIdx:  4, assignments: [] },
-      7: { unlocked: false, ringIdx:  5, assignments: [] },
-    };
-
-    // Command-mode state
-    const cmdState = {
-      active:   false,
-      stage:    0,      // 0=idle, 1=entering frag code, 2=entering core #
-      input:    '',
-      fragType: null,
-    };
 
     function hotHexPath(hc, cx, cy, s) {
       hc.beginPath();
