@@ -267,6 +267,26 @@
     /* Panel highlight during command entry */
     .cmd-hl-frags { box-shadow: inset 0 0 0 1px rgba(0,220,140,0.55), 0 0 14px rgba(0,200,130,0.12); transition: box-shadow 0.2s; }
     .cmd-hl-core  { outline: 1px solid rgba(60,130,255,0.6); outline-offset: -2px; }
+    /* Deactivated items (installed in unpowered slot) */
+    .fragment-item.deactivated {
+      border-color: #442222;
+      box-shadow: none;
+      position: relative;
+      overflow: hidden;
+    }
+    .fragment-item.deactivated::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 4px,
+        rgba(200,30,30,0.22) 4px,
+        rgba(200,30,30,0.22) 5px
+      );
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -296,7 +316,7 @@
     <!-- CENTER: Game Canvas -->
     <div id="canvas-container">
       <canvas id="gameCanvas"></canvas>
-      <div id="keyhints">ARROWS — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt;] — COMMAND &nbsp;|&nbsp; SCROLL — ZOOM</div>
+      <div id="keyhints">ARROWS — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt;/&lt;] — COMMAND &nbsp;|&nbsp; SCROLL — ZOOM</div>
     </div>
 
     <!-- RIGHT: System Log -->
@@ -314,7 +334,7 @@
     <canvas id="hotbarCanvas" width="170" height="170" style="cursor:pointer;"></canvas>
     <div id="command-window">
       <div class="panel-title" style="margin-bottom:6px;">// CMD</div>
-      <div id="cmd-display"><span class="cmd-idle">[ &gt; ] enter command</span></div>
+      <div id="cmd-display"><span class="cmd-idle">[ &gt;/&lt; ] enter command</span></div>
       <div id="cmd-stage-hint"></div>
     </div>
   </div>
@@ -387,15 +407,14 @@
     })();
 
     // ── ITEM REGISTRY ─────────────────────────────────────────────────────────
-    // Hex code scheme: first digit = category (0=hardware, 1=V_OS),
-    //   second char = tier/grade (A=basic), last two = item index.
-    //   e.g. a better power node → 0B01; a second hardware type → 0A02.
+    // Code scheme: category letter (P=power/hardware, S=sensor/hardware, F=fragment)
+    //   followed by 2-digit hex index. e.g. second power type → P02.
     const ITEMS = {
       // Hardware
-      POWER_NODE:    { label: 'Power Node',    category: 'hardware',  color: '#5599ff', dot: '#2255cc', code: '0A01' },
-      SENSOR_NODE:   { label: 'Sensor Node',   category: 'hardware',  color: '#ffbb33', dot: '#cc8800', code: '0A02' },
+      POWER_NODE:    { label: 'Power Node',    category: 'hardware',  color: '#5599ff', dot: '#2255cc', code: 'P01' },
+      SENSOR_NODE:   { label: 'Sensor Node',   category: 'hardware',  color: '#ffbb33', dot: '#cc8800', code: 'S01' },
       // V_OS Fragments
-      LOOP_FRAGMENT: { label: 'Loop Fragment', category: 'fragment',  color: '#33ccff', dot: '#1199cc', code: '1F01' },
+      LOOP_FRAGMENT: { label: 'Loop Fragment', category: 'fragment',  color: '#33ccff', dot: '#1199cc', code: 'F01' },
     };
     const CODE_TO_ITEM = Object.fromEntries(
       Object.entries(ITEMS).map(([k, v]) => [v.code, k])
@@ -473,9 +492,11 @@
 
     const cmdState = {
       active:   false,
+      mode:     'equip',   // 'equip' | 'unequip'
       stage:    0,
       input:    '',
       fragType: null,
+      slotNum:  null,
     };
 
     // ── VISIBILITY / FOG OF WAR ───────────────────────────────────────────────
@@ -495,7 +516,9 @@
     function updateVisibility() {
       visibleHexes.clear();
       const hasSensor = Object.values(CORE_SLOTS).some(slot =>
-        slot.unlocked && slot.assignments.some(a => a.fragType === 'SENSOR_NODE')
+        slot.unlocked &&
+        slot.assignments.some(a => a.fragType === 'SENSOR_NODE') &&
+        slot.assignments.some(a => a.fragType === 'POWER_NODE')
       );
       if (!hasSensor) return;
       const { col: pc, row: pr } = worldToHex(player.x, player.y);
@@ -513,6 +536,7 @@
       if (booting) { keys[e.code] = true; return; }
       if (cmdState.active) { handleCmdKey(e); return; }
       if (e.key === '>') { startCmd(); return; }
+      if (e.key === '<') { startUnequip(); return; }
       if (e.code === 'KeyE') tryScanning();
       keys[e.code] = true;
     });
@@ -548,15 +572,31 @@
     }
 
     // ── INVENTORY UI ──────────────────────────────────────────────────────────
-    function makeItemRow(key, def, count) {
+    function makeItemRow(key, def, count, deactivated = false) {
       const div = document.createElement('div');
-      div.className = 'fragment-item active';
+      div.className = 'fragment-item ' + (deactivated ? 'deactivated' : 'active');
+      const labelColor = deactivated ? '#774444' : def.color;
+      const dotColor   = deactivated ? '#553333' : def.dot;
+      const codeColor  = deactivated ? '#662222' : '#33aa77';
+      const countText  = deactivated ? 'DEAC' : count;
+      const countColor = deactivated ? '#883333' : def.color;
       div.innerHTML =
-        `<div class="fragment-dot" style="background:${def.dot}"></div>` +
-        `<span class="fragment-label" style="color:${def.color}">` +
-        `${def.label}<span style="color:#558877;font-size:9px;margin-left:5px;">[${def.code}]</span></span>` +
-        `<span class="fragment-count" style="color:${def.color}">${count}</span>`;
+        `<div class="fragment-dot" style="background:${dotColor}"></div>` +
+        `<span class="fragment-label" style="color:${labelColor}">` +
+        `${def.label}<span style="color:${codeColor};font-size:12px;font-weight:bold;margin-left:5px;">[${def.code}]</span></span>` +
+        `<span class="fragment-count" style="color:${countColor}">${countText}</span>`;
       return div;
+    }
+
+    // Returns true if fragType is installed in any slot that has no POWER_NODE.
+    function isDeactivatedInSlot(fragType) {
+      if (fragType === 'POWER_NODE') return false;
+      for (const slot of Object.values(CORE_SLOTS)) {
+        const hasItem  = slot.assignments.some(a => a.fragType === fragType);
+        const hasPower = slot.assignments.some(a => a.fragType === 'POWER_NODE');
+        if (hasItem && !hasPower) return true;
+      }
+      return false;
     }
 
     function updateInventoryUI() {
@@ -565,15 +605,32 @@
       hwList.innerHTML = fragList.innerHTML = '';
       let hwCount = 0, fragCount = 0, total = 0;
 
-      const powerInstalled = CORE_SLOTS[1].assignments.some(a => a.fragType === 'POWER_NODE');
+      const powerInstalled = Object.values(CORE_SLOTS).some(slot =>
+        slot.unlocked && slot.assignments.some(a => a.fragType === 'POWER_NODE')
+      );
+
       for (const [key, def] of Object.entries(ITEMS)) {
-        const count = player.inventory[key] || 0;
-        if (count === 0) continue;
-        if (key === 'SENSOR_NODE' && !powerInstalled) continue; // gated until power is online
-        total += count;
-        const row = makeItemRow(key, def, count);
-        if (def.category === 'hardware') { hwList.appendChild(row);   hwCount++;   }
-        else                             { fragList.appendChild(row);  fragCount++; }
+        const count       = player.inventory[key] || 0;
+        const deactivated = isDeactivatedInSlot(key);
+
+        // Gate sensor from appearing in inventory until power is online
+        const gated = (key === 'SENSOR_NODE' && !powerInstalled);
+        const showInventory  = count > 0 && !gated;
+        const showDeactivated = deactivated;
+
+        if (!showInventory && !showDeactivated) continue;
+
+        if (showInventory) {
+          total += count;
+          const row = makeItemRow(key, def, count, false);
+          if (def.category === 'hardware') { hwList.appendChild(row);  hwCount++;  }
+          else                             { fragList.appendChild(row); fragCount++; }
+        }
+        if (showDeactivated) {
+          const row = makeItemRow(key, def, 0, true);
+          if (def.category === 'hardware') { hwList.appendChild(row);  hwCount++;  }
+          else                             { fragList.appendChild(row); fragCount++; }
+        }
       }
 
       document.getElementById('section-hardware').style.display  = hwCount   > 0 ? '' : 'none';
@@ -938,19 +995,34 @@
 
     // ── COMMAND MODE ─────────────────────────────────────────────────────────
     function startCmd() {
-      cmdState.active = true;
-      cmdState.stage  = 1;
-      cmdState.input  = '';
+      cmdState.active   = true;
+      cmdState.mode     = 'equip';
+      cmdState.stage    = 1;
+      cmdState.input    = '';
       cmdState.fragType = null;
+      cmdState.slotNum  = null;
       document.getElementById('left-panel').classList.add('cmd-hl-frags');
+      updateCmdWindow();
+    }
+
+    function startUnequip() {
+      cmdState.active   = true;
+      cmdState.mode     = 'unequip';
+      cmdState.stage    = 1;
+      cmdState.input    = '';
+      cmdState.fragType = null;
+      cmdState.slotNum  = null;
+      document.getElementById('hotbarCanvas').classList.add('cmd-hl-core');
       updateCmdWindow();
     }
 
     function cancelCmd() {
       cmdState.active   = false;
+      cmdState.mode     = 'equip';
       cmdState.stage    = 0;
       cmdState.input    = '';
       cmdState.fragType = null;
+      cmdState.slotNum  = null;
       document.getElementById('left-panel').classList.remove('cmd-hl-frags');
       document.getElementById('hotbarCanvas').classList.remove('cmd-hl-core');
       updateCmdWindow();
@@ -967,16 +1039,30 @@
       }
 
       if (e.key === 'Enter') {
-        if (cmdState.stage === 1) confirmFragCode();
-        else if (cmdState.stage === 2) confirmCoreSlot();
+        if (cmdState.mode === 'equip') {
+          if (cmdState.stage === 1) confirmFragCode();
+          else if (cmdState.stage === 2) confirmCoreSlot();
+        } else {
+          if (cmdState.stage === 1) confirmUnequipSlot();
+          else if (cmdState.stage === 2) confirmUnequipItem();
+        }
         return;
       }
 
-      if (cmdState.stage === 1 && cmdState.input.length < 4) {
-        const ch = e.key.toUpperCase();
-        if (/^[0-9A-F]$/.test(ch)) { cmdState.input += ch; updateCmdWindow(); }
-      } else if (cmdState.stage === 2 && cmdState.input.length < 1) {
-        if (/^[1-7]$/.test(e.key)) { cmdState.input += e.key; updateCmdWindow(); }
+      if (cmdState.mode === 'equip') {
+        if (cmdState.stage === 1 && cmdState.input.length < 3) {
+          const ch = e.key.toUpperCase();
+          if (/^[0-9A-Z]$/.test(ch)) { cmdState.input += ch; updateCmdWindow(); }
+        } else if (cmdState.stage === 2 && cmdState.input.length < 1) {
+          if (/^[1-7]$/.test(e.key)) { cmdState.input += e.key; updateCmdWindow(); }
+        }
+      } else {
+        if (cmdState.stage === 1 && cmdState.input.length < 1) {
+          if (/^[1-7]$/.test(e.key)) { cmdState.input += e.key; updateCmdWindow(); }
+        } else if (cmdState.stage === 2 && cmdState.input.length < 3) {
+          const ch = e.key.toUpperCase();
+          if (/^[0-9A-Z]$/.test(ch)) { cmdState.input += ch; updateCmdWindow(); }
+        }
       }
     }
 
@@ -1025,9 +1111,63 @@
         return;
       }
       slot.assignments.push({ fragType: cmdState.fragType });
+      player.inventory[cmdState.fragType]--;
       log(`> ${ITEMS[cmdState.fragType].label} > Core ${slotNum}`, 'success');
       updateInventoryUI();   // reveal gated items (e.g. sensor after power)
       updateVisibility();    // activate sensor vision immediately if just installed
+      cancelCmd();
+    }
+
+    function confirmUnequipSlot() {
+      const slotNum = parseInt(cmdState.input, 10);
+      const slot = CORE_SLOTS[slotNum];
+      if (!slot || !slot.unlocked) {
+        log(`> REMOVE — core ${cmdState.input || '?'}: not available`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      if (slot.assignments.length === 0) {
+        log(`> REMOVE — core ${slotNum}: nothing installed`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      cmdState.slotNum = slotNum;
+      cmdState.stage   = 2;
+      cmdState.input   = '';
+      document.getElementById('hotbarCanvas').classList.add('cmd-hl-core');
+      document.getElementById('left-panel').classList.add('cmd-hl-frags');
+      updateCmdWindow();
+    }
+
+    function confirmUnequipItem() {
+      const fragType = CODE_TO_ITEM[cmdState.input];
+      const slot = CORE_SLOTS[cmdState.slotNum];
+      if (!fragType || !slot) {
+        log(`> REMOVE — unknown code: ${cmdState.input}`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      const idx = slot.assignments.findIndex(a => a.fragType === fragType);
+      if (idx === -1) {
+        log(`> REMOVE — ${ITEMS[fragType].label}: not in core ${cmdState.slotNum}`, 'error');
+        cmdState.input = '';
+        updateCmdWindow();
+        return;
+      }
+      slot.assignments.splice(idx, 1);
+      player.inventory[fragType] = (player.inventory[fragType] || 0) + 1;
+      log(`> ${ITEMS[fragType].label} removed from Core ${cmdState.slotNum}`, 'success');
+      // Warn if remaining items are now unpowered
+      const hasPower = slot.assignments.some(a => a.fragType === 'POWER_NODE');
+      const others   = slot.assignments.filter(a => a.fragType !== 'POWER_NODE');
+      if (!hasPower && others.length > 0) {
+        log('> WARNING: remaining modules in this slot are now deactivated', 'error');
+      }
+      updateInventoryUI();
+      updateVisibility();
       cancelCmd();
     }
 
@@ -1035,18 +1175,30 @@
       const display = document.getElementById('cmd-display');
       const hint    = document.getElementById('cmd-stage-hint');
       if (!cmdState.active) {
-        display.innerHTML = '<span class="cmd-idle">[ &gt; ] enter command</span>';
+        display.innerHTML = '<span class="cmd-idle">[ &gt;/&lt; ] enter command</span>';
         hint.textContent  = '';
         return;
       }
-      if (cmdState.stage === 1) {
-        display.innerHTML = `<span style="color:#33cc99;">&gt; ${cmdState.input}<span class="cmd-cursor"></span></span>`;
-        hint.textContent  = 'FRAG CODE  [ 0-9  A-F ]   ESC to cancel';
-      } else if (cmdState.stage === 2) {
-        const code = ITEMS[cmdState.fragType].code;
-        display.innerHTML =
-          `<span style="color:#33cc99;">&gt; ${code} → Core ${cmdState.input}<span class="cmd-cursor"></span></span>`;
-        hint.textContent = `${ITEMS[cmdState.fragType].label} → CORE #  [ 1-7 ]   ESC to cancel`;
+      if (cmdState.mode === 'equip') {
+        if (cmdState.stage === 1) {
+          display.innerHTML = `<span style="color:#33cc99;">&gt; ${cmdState.input}<span class="cmd-cursor"></span></span>`;
+          hint.textContent  = 'ITEM CODE  [ A-Z  0-9 ]   ESC to cancel';
+        } else if (cmdState.stage === 2) {
+          const code = ITEMS[cmdState.fragType].code;
+          display.innerHTML =
+            `<span style="color:#33cc99;">&gt; ${code} → Core ${cmdState.input}<span class="cmd-cursor"></span></span>`;
+          hint.textContent = `${ITEMS[cmdState.fragType].label} → CORE #  [ 1-7 ]   ESC to cancel`;
+        }
+      } else {
+        const cur = `<span class="cmd-cursor" style="background:#ff7733;"></span>`;
+        if (cmdState.stage === 1) {
+          display.innerHTML = `<span style="color:#ff7733;">&lt; ${cmdState.input}${cur}</span>`;
+          hint.textContent  = 'REMOVE FROM SLOT  [ 1-7 ]   ESC to cancel';
+        } else if (cmdState.stage === 2) {
+          display.innerHTML =
+            `<span style="color:#ff7733;">&lt; Core ${cmdState.slotNum} → ${cmdState.input}${cur}</span>`;
+          hint.textContent = 'ITEM CODE  [ A-Z  0-9 ]   ESC to cancel';
+        }
       }
     }
 
