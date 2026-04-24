@@ -247,7 +247,7 @@
       min-width: 0;
     }
     #slot-preview {
-      width: 160px;
+      width: 320px;
       flex-shrink: 0;
       border-left: 1px solid #0a1a2a;
       padding: 8px 10px;
@@ -280,6 +280,10 @@
       height: 6px;
       border-radius: 50%;
       flex-shrink: 0;
+    }
+    .fragment-item.nav-selected {
+      border-color: #ffee00;
+      box-shadow: 0 0 0 1px #ffee00, 0 0 8px rgba(255,238,0,0.3);
     }
     #cmd-display {
       font-size: 13px;
@@ -344,7 +348,7 @@
         <div class="panel-title">// HARDWARE</div>
         <div id="hardware-list"></div>
       </div>
-      <div class="panel-section" id="section-fragments" style="display:none;">
+      <div class="panel-section" id="section-fragments">
         <div class="panel-title">// V_OS FRAGMENTS</div>
         <div id="fragments-list"></div>
       </div>
@@ -544,6 +548,7 @@
       input:    '',
       fragType: null,
       slotNum:  null,
+      navIndex: -1,        // -1 = not navigating; >=0 = index into navItems
     };
 
     // ── VISIBILITY / FOG OF WAR ───────────────────────────────────────────────
@@ -646,11 +651,21 @@
       return false;
     }
 
+    let navItems = []; // [{key, def}] in hardware→fragment order, navigable items only
+
+    function updateNavHighlight() {
+      document.querySelectorAll('.fragment-item').forEach(r => r.classList.remove('nav-selected'));
+      if (cmdState.navIndex < 0 || !navItems[cmdState.navIndex]) return;
+      const row = document.querySelector(`[data-nav-idx="${cmdState.navIndex}"]`);
+      if (row) row.classList.add('nav-selected');
+    }
+
     function updateInventoryUI() {
       const hwList   = document.getElementById('hardware-list');
       const fragList = document.getElementById('fragments-list');
       hwList.innerHTML = fragList.innerHTML = '';
-      let hwCount = 0, fragCount = 0, total = 0;
+      navItems = [];
+      let total = 0;
 
       const powerInstalled = Object.values(CORE_SLOTS).some(slot =>
         slot.unlocked && slot.assignments.some(a => a.fragType === 'POWER_NODE')
@@ -659,30 +674,36 @@
       for (const [key, def] of Object.entries(ITEMS)) {
         const count       = player.inventory[key] || 0;
         const deactivated = isDeactivatedInSlot(key);
-
-        // Gate sensor from appearing in inventory until power is online
         const gated = (key === 'SENSOR_NODE' && !powerInstalled);
-        const showInventory  = count > 0 && !gated;
+        const showInventory   = count > 0 && !gated;
         const showDeactivated = deactivated;
 
         if (!showInventory && !showDeactivated) continue;
 
         if (showInventory) {
           total += count;
+          const navIdx = navItems.length;
+          navItems.push({ key, def });
           const row = makeItemRow(key, def, count, false);
-          if (def.category === 'hardware') { hwList.appendChild(row);  hwCount++;  }
-          else                             { fragList.appendChild(row); fragCount++; }
+          row.dataset.navIdx = navIdx;
+          if (def.category === 'hardware') hwList.appendChild(row);
+          else                             fragList.appendChild(row);
         }
         if (showDeactivated) {
           const row = makeItemRow(key, def, 0, true);
-          if (def.category === 'hardware') { hwList.appendChild(row);  hwCount++;  }
-          else                             { fragList.appendChild(row); fragCount++; }
+          if (def.category === 'hardware') hwList.appendChild(row);
+          else                             fragList.appendChild(row);
         }
       }
 
-      document.getElementById('section-hardware').style.display  = hwCount   > 0 ? '' : 'none';
-      document.getElementById('section-fragments').style.display = fragCount > 0 ? '' : 'none';
+      // Always-visible empty placeholders
+      if (!hwList.children.length)
+        hwList.innerHTML = '<div style="font-size:10px;color:#1e3a2a;padding:2px 0;">— none —</div>';
+      if (!fragList.children.length)
+        fragList.innerHTML = '<div style="font-size:10px;color:#1e3a2a;padding:2px 0;">— none —</div>';
+
       document.getElementById('item-count').textContent = `ITEMS: ${total}`;
+      updateNavHighlight();
     }
     updateInventoryUI();
 
@@ -1048,7 +1069,10 @@
       cmdState.input    = '';
       cmdState.fragType = null;
       cmdState.slotNum  = null;
+      cmdState.navIndex = navItems.length > 0 ? 0 : -1;
       document.getElementById('left-panel').classList.add('cmd-hl-frags');
+      if (cmdState.navIndex >= 0) cmdState.input = navItems[0].def.code;
+      updateNavHighlight();
       updateCmdWindow();
     }
 
@@ -1102,8 +1126,10 @@
       cmdState.input    = '';
       cmdState.fragType = null;
       cmdState.slotNum  = null;
+      cmdState.navIndex = -1;
       document.getElementById('left-panel').classList.remove('cmd-hl-frags');
       document.getElementById('hotbarCanvas').classList.remove('cmd-hl-core');
+      updateNavHighlight();
       clearSlotPreview();
       updateCmdWindow();
     }
@@ -1130,9 +1156,38 @@
       }
 
       if (cmdState.mode === 'equip') {
-        if (cmdState.stage === 1 && cmdState.input.length < 3) {
-          const ch = e.key.toUpperCase();
-          if (/^[0-9A-Z]$/.test(ch)) { cmdState.input += ch; updateCmdWindow(); }
+        if (cmdState.stage === 1) {
+          // Arrow navigation
+          if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') && navItems.length > 0) {
+            let idx = cmdState.navIndex < 0 ? 0 : cmdState.navIndex;
+            if (e.key === 'ArrowDown') idx = Math.min(navItems.length - 1, idx + 1);
+            if (e.key === 'ArrowUp')   idx = Math.max(0, idx - 1);
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              // Jump to first item of next/prev category
+              const curCat = navItems[idx]?.def.category;
+              const cats   = [...new Set(navItems.map(n => n.def.category))];
+              const catIdx = cats.indexOf(curCat);
+              const nextCat = e.key === 'ArrowRight'
+                ? cats[Math.min(cats.length - 1, catIdx + 1)]
+                : cats[Math.max(0, catIdx - 1)];
+              const jump = navItems.findIndex(n => n.def.category === nextCat);
+              if (jump >= 0) idx = jump;
+            }
+            cmdState.navIndex = idx;
+            cmdState.input    = navItems[idx].def.code;
+            updateNavHighlight();
+            updateCmdWindow();
+            return;
+          }
+          // Typing clears nav selection
+          if (cmdState.input.length < 3) {
+            const ch = e.key.toUpperCase();
+            if (/^[0-9A-Z]$/.test(ch)) {
+              if (cmdState.navIndex >= 0) { cmdState.navIndex = -1; cmdState.input = ''; updateNavHighlight(); }
+              cmdState.input += ch;
+              updateCmdWindow();
+            }
+          }
         } else if (cmdState.stage === 2 && cmdState.input.length < 1) {
           if (/^[1-7]$/.test(e.key)) { cmdState.input += e.key; updateCmdWindow(); }
         }
