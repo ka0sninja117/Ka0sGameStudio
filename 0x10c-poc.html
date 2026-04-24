@@ -285,6 +285,11 @@
       border-color: #ffee00;
       box-shadow: 0 0 0 1px #ffee00, 0 0 8px rgba(255,238,0,0.3);
     }
+    .slot-preview-row.nav-selected {
+      outline: 1px solid #ffee00;
+      outline-offset: 1px;
+      box-shadow: 0 0 8px rgba(255,238,0,0.3);
+    }
     #cmd-display {
       font-size: 13px;
       letter-spacing: 1px;
@@ -654,11 +659,20 @@
     let navItems = []; // [{key, def}] in hardware→fragment order, navigable items only
 
     function updateNavHighlight() {
-      document.querySelectorAll('.fragment-item').forEach(r => r.classList.remove('nav-selected'));
-      if (cmdState.navIndex < 0 || !navItems[cmdState.navIndex]) return;
-      const row = document.querySelector(`[data-nav-idx="${cmdState.navIndex}"]`);
-      if (row) row.classList.add('nav-selected');
+      document.querySelectorAll('.nav-selected').forEach(r => r.classList.remove('nav-selected'));
+      if (cmdState.navIndex < 0) return;
+      let selector = null;
+      if (cmdState.mode === 'equip' && cmdState.stage === 1 && navItems[cmdState.navIndex]) {
+        selector = `.fragment-item[data-nav-idx="${cmdState.navIndex}"]`;
+      } else if (cmdState.mode === 'unequip' && cmdState.stage === 2 && previewNavItems[cmdState.navIndex]) {
+        selector = `.slot-preview-row[data-nav-idx="${cmdState.navIndex}"]`;
+      }
+      if (selector) {
+        const row = document.querySelector(selector);
+        if (row) row.classList.add('nav-selected');
+      }
     }
+    let previewNavItems = []; // [{fragType, def}] for nav during unequip stage 2
 
     function updateInventoryUI() {
       const hwList   = document.getElementById('hardware-list');
@@ -706,6 +720,7 @@
       updateNavHighlight();
     }
     updateInventoryUI();
+    resetSlotPreview();
 
     // ── TILE HELPERS (hex) ────────────────────────────────────────────────────
     function tileAt(wx, wy) {
@@ -1093,6 +1108,7 @@
       const items = document.getElementById('slot-preview-items');
       title.textContent = `// CORE ${slotNum}`;
       items.innerHTML = '';
+      previewNavItems = [];
       if (!slot || slot.assignments.length === 0) {
         items.innerHTML = '<div style="font-size:10px;color:#2a4a3a;padding:2px 0;">— empty —</div>';
         return;
@@ -1101,22 +1117,30 @@
       const sorted = [...slot.assignments].sort((a, b) =>
         (a.fragType === 'POWER_NODE' ? -1 : 1)
       );
-      for (const a of sorted) {
+      sorted.forEach((a, idx) => {
         const def  = ITEMS[a.fragType];
         const isPow = a.fragType === 'POWER_NODE';
         const row  = document.createElement('div');
         row.className = 'slot-preview-row';
+        row.dataset.navIdx = idx;
         row.innerHTML =
           `<div class="slot-preview-dot" style="background:${def.dot};${isPow ? 'box-shadow:0 0 4px rgba(50,120,255,0.7);' : ''}"></div>` +
           `<span style="color:${def.color};flex:1;">${def.label}</span>` +
           `<span style="color:#33aa77;font-size:11px;font-weight:bold;">[${def.code}]</span>`;
         items.appendChild(row);
-      }
+        previewNavItems.push({ fragType: a.fragType, def });
+      });
     }
 
-    function clearSlotPreview() {
-      document.getElementById('slot-preview-title').textContent = '— — —';
-      document.getElementById('slot-preview-items').innerHTML = '';
+    function resetSlotPreview() {
+      const title = document.getElementById('slot-preview-title');
+      const items = document.getElementById('slot-preview-items');
+      title.textContent = '// COMMANDS';
+      items.innerHTML =
+        `<div class="slot-preview-row"><span style="color:#33cc99;font-weight:bold;font-size:13px;width:14px;text-align:center;">&gt;</span><span style="color:#5a8a7a;flex:1;">load</span></div>` +
+        `<div class="slot-preview-row"><span style="color:#ff7733;font-weight:bold;font-size:13px;width:14px;text-align:center;">&lt;</span><span style="color:#5a8a7a;flex:1;">unload</span></div>` +
+        `<div class="slot-preview-row"><span style="color:#aa88ff;font-weight:bold;font-size:13px;width:14px;text-align:center;">/</span><span style="color:#5a8a7a;flex:1;">browse</span></div>`;
+      previewNavItems = [];
     }
 
     function cancelCmd() {
@@ -1130,7 +1154,7 @@
       document.getElementById('left-panel').classList.remove('cmd-hl-frags');
       document.getElementById('hotbarCanvas').classList.remove('cmd-hl-core');
       updateNavHighlight();
-      clearSlotPreview();
+      resetSlotPreview();
       updateCmdWindow();
     }
 
@@ -1194,9 +1218,26 @@
       } else {
         if (cmdState.stage === 1 && cmdState.input.length < 1) {
           if (/^[1-7]$/.test(e.key)) { cmdState.input += e.key; updateCmdWindow(); }
-        } else if (cmdState.stage === 2 && cmdState.input.length < 3) {
-          const ch = e.key.toUpperCase();
-          if (/^[0-9A-Z]$/.test(ch)) { cmdState.input += ch; updateCmdWindow(); }
+        } else if (cmdState.stage === 2) {
+          // Arrow navigation through preview items
+          if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && previewNavItems.length > 0) {
+            let idx = cmdState.navIndex < 0 ? 0 : cmdState.navIndex;
+            if (e.key === 'ArrowDown') idx = Math.min(previewNavItems.length - 1, idx + 1);
+            if (e.key === 'ArrowUp')   idx = Math.max(0, idx - 1);
+            cmdState.navIndex = idx;
+            cmdState.input    = previewNavItems[idx].def.code;
+            updateNavHighlight();
+            updateCmdWindow();
+            return;
+          }
+          if (cmdState.input.length < 3) {
+            const ch = e.key.toUpperCase();
+            if (/^[0-9A-Z]$/.test(ch)) {
+              if (cmdState.navIndex >= 0) { cmdState.navIndex = -1; cmdState.input = ''; updateNavHighlight(); }
+              cmdState.input += ch;
+              updateCmdWindow();
+            }
+          }
         }
       }
     }
@@ -1274,6 +1315,13 @@
       document.getElementById('hotbarCanvas').classList.add('cmd-hl-core');
       document.getElementById('left-panel').classList.add('cmd-hl-frags');
       showSlotPreview(slotNum);
+      if (previewNavItems.length > 0) {
+        cmdState.navIndex = 0;
+        cmdState.input    = previewNavItems[0].def.code;
+      } else {
+        cmdState.navIndex = -1;
+      }
+      updateNavHighlight();
       updateCmdWindow();
     }
 
