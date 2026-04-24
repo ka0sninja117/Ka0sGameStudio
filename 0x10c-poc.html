@@ -366,7 +366,7 @@
     <!-- CENTER: Game Canvas -->
     <div id="canvas-container">
       <canvas id="gameCanvas"></canvas>
-      <div id="keyhints">ARROWS — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt;/&lt;] — COMMAND &nbsp;|&nbsp; SCROLL — ZOOM</div>
+      <div id="keyhints">ARROWS — MOVE &nbsp;|&nbsp; [E] — SCAN &nbsp;|&nbsp; [&gt; &lt; /] — CMD &nbsp;|&nbsp; SCROLL — ZOOM</div>
     </div>
 
     <!-- RIGHT: System Log -->
@@ -385,7 +385,7 @@
     <div id="command-window">
       <div class="cmd-left">
         <div class="panel-title" style="margin-bottom:6px;">// CMD</div>
-        <div id="cmd-display"><span class="cmd-idle">[ &gt;/&lt; ] enter command</span></div>
+        <div id="cmd-display"><span class="cmd-idle">[ &gt; &lt; / ] enter command</span></div>
         <div id="cmd-stage-hint"></div>
       </div>
       <div id="slot-preview">
@@ -548,12 +548,14 @@
 
     const cmdState = {
       active:   false,
-      mode:     'equip',   // 'equip' | 'unequip'
+      mode:     'equip',   // 'equip' | 'unequip' | 'browse'
       stage:    0,
       input:    '',
       fragType: null,
       slotNum:  null,
       navIndex: -1,        // -1 = not navigating; >=0 = index into navItems
+      browseLevel: 0,      // 0 = slot list; 1 = slot detail
+      browseSlot:  null,   // slot number currently drilled into at level 1
     };
 
     // ── VISIBILITY / FOG OF WAR ───────────────────────────────────────────────
@@ -594,6 +596,7 @@
       if (cmdState.active) { handleCmdKey(e); return; }
       if (e.key === '>') { startCmd(); return; }
       if (e.key === '<') { startUnequip(); return; }
+      if (e.key === '/') { e.preventDefault(); startBrowse(); return; }
       if (e.code === 'KeyE') tryScanning();
       keys[e.code] = true;
     });
@@ -666,6 +669,8 @@
         selector = `.fragment-item[data-nav-idx="${cmdState.navIndex}"]`;
       } else if (cmdState.mode === 'unequip' && cmdState.stage === 2 && previewNavItems[cmdState.navIndex]) {
         selector = `.slot-preview-row[data-nav-idx="${cmdState.navIndex}"]`;
+      } else if (cmdState.mode === 'browse' && browseItems[cmdState.navIndex]) {
+        selector = `.slot-preview-row[data-nav-idx="${cmdState.navIndex}"]`;
       }
       if (selector) {
         const row = document.querySelector(selector);
@@ -673,6 +678,7 @@
       }
     }
     let previewNavItems = []; // [{fragType, def}] for nav during unequip stage 2
+    let browseItems     = []; // [{type, ...}] for nav during browse mode
 
     function updateInventoryUI() {
       const hwList   = document.getElementById('hardware-list');
@@ -1143,14 +1149,147 @@
       previewNavItems = [];
     }
 
+    // ── BROWSE MODE ──────────────────────────────────────────────────────────
+    function slotPowerState(slot) {
+      const hasPow   = slot.assignments.some(a => a.fragType === 'POWER_NODE');
+      const modules  = slot.assignments.filter(a => a.fragType !== 'POWER_NODE');
+      if (!slot.unlocked)                    return { state: 'locked',      color: '#552222', label: '[LOCKED]' };
+      if (hasPow && modules.length > 0)      return { state: 'active',      color: '#33ccff', label: 'ACTIVE' };
+      if (hasPow)                            return { state: 'powered',     color: '#4488cc', label: 'POWERED' };
+      if (modules.length > 0)                return { state: 'deactivated', color: '#cc6600', label: 'DEACTIVATED' };
+      return                                        { state: 'empty',       color: '#3a4a5a', label: 'EMPTY' };
+    }
+
+    function renderBrowsePanel() {
+      const title = document.getElementById('slot-preview-title');
+      const items = document.getElementById('slot-preview-items');
+      items.innerHTML = '';
+
+      if (cmdState.browseLevel === 0) {
+        title.textContent = '// BROWSE — CORES';
+        browseItems = [];
+        for (let n = 1; n <= 7; n++) {
+          const slot = CORE_SLOTS[n];
+          const ps   = slotPowerState(slot);
+          const idx  = browseItems.length;
+          browseItems.push({ type: 'slot', slotNum: n, locked: !slot.unlocked });
+          const row  = document.createElement('div');
+          row.className = 'slot-preview-row';
+          row.dataset.navIdx = idx;
+          row.innerHTML =
+            `<div class="slot-preview-dot" style="background:${ps.color};"></div>` +
+            `<span style="color:${ps.color};flex:1;">CORE ${n}</span>` +
+            `<span style="color:${ps.color};font-size:9px;font-weight:bold;">${ps.label}</span>`;
+          items.appendChild(row);
+        }
+      } else {
+        const slot = CORE_SLOTS[cmdState.browseSlot];
+        title.textContent = `// CORE ${cmdState.browseSlot}`;
+        browseItems = [];
+
+        // Power header row (not navigable)
+        const powAssign = slot.assignments.find(a => a.fragType === 'POWER_NODE');
+        const header    = document.createElement('div');
+        header.className = 'slot-preview-row';
+        header.style.borderBottom = '1px solid #0a1a2a';
+        header.style.paddingBottom = '5px';
+        header.style.marginBottom = '3px';
+        if (powAssign) {
+          const def = ITEMS.POWER_NODE;
+          header.innerHTML =
+            `<div class="slot-preview-dot" style="background:${def.dot};box-shadow:0 0 4px rgba(50,120,255,0.7);"></div>` +
+            `<span style="color:${def.color};flex:1;">${def.label}</span>` +
+            `<span style="color:#33aa77;font-size:11px;font-weight:bold;">[${def.code}]</span>`;
+        } else {
+          header.innerHTML =
+            `<div class="slot-preview-dot" style="background:#552222;"></div>` +
+            `<span style="color:#663333;flex:1;font-style:italic;">NO POWER</span>`;
+        }
+        items.appendChild(header);
+
+        // 6 wedge slots
+        const modules = slot.assignments.filter(a => a.fragType !== 'POWER_NODE');
+        for (let i = 0; i < 6; i++) {
+          const mod = modules[i];
+          const row = document.createElement('div');
+          row.className = 'slot-preview-row';
+          const idx = browseItems.length;
+          row.dataset.navIdx = idx;
+          if (mod) {
+            const def = ITEMS[mod.fragType];
+            browseItems.push({ type: 'item', fragType: mod.fragType, def });
+            row.innerHTML =
+              `<div class="slot-preview-dot" style="background:${def.dot};"></div>` +
+              `<span style="color:${def.color};flex:1;">${def.label}</span>` +
+              `<span style="color:#33aa77;font-size:11px;font-weight:bold;">[${def.code}]</span>`;
+          } else {
+            browseItems.push({ type: 'empty' });
+            row.innerHTML =
+              `<div class="slot-preview-dot" style="background:#1e2a3a;"></div>` +
+              `<span style="color:#2a4a5a;flex:1;font-style:italic;">— empty —</span>`;
+          }
+          items.appendChild(row);
+        }
+      }
+    }
+
+    function startBrowse() {
+      cmdState.active      = true;
+      cmdState.mode        = 'browse';
+      cmdState.stage       = 0;
+      cmdState.input       = '';
+      cmdState.fragType    = null;
+      cmdState.slotNum     = null;
+      cmdState.browseLevel = 0;
+      cmdState.browseSlot  = null;
+      cmdState.navIndex    = 0;
+      renderBrowsePanel();
+      updateNavHighlight();
+      updateCmdWindow();
+    }
+
+    function browseEnter() {
+      const item = browseItems[cmdState.navIndex];
+      if (!item) return;
+      if (cmdState.browseLevel === 0) {
+        if (item.locked) return; // can't drill into locked
+        cmdState.browseLevel = 1;
+        cmdState.browseSlot  = item.slotNum;
+        cmdState.navIndex    = 0;
+        renderBrowsePanel();
+        updateNavHighlight();
+        updateCmdWindow();
+      } else {
+        if (item.type === 'empty') return; // can't terminate on empty
+        cancelCmd(); // terminate browse on leaf selection
+      }
+    }
+
+    function browseBack() {
+      if (cmdState.browseLevel === 1) {
+        cmdState.browseLevel = 0;
+        const prevSlot = cmdState.browseSlot;
+        cmdState.browseSlot  = null;
+        cmdState.navIndex    = Math.max(0, prevSlot - 1); // restore cursor on the slot we came from
+        renderBrowsePanel();
+        updateNavHighlight();
+        updateCmdWindow();
+      } else {
+        cancelCmd();
+      }
+    }
+
     function cancelCmd() {
-      cmdState.active   = false;
-      cmdState.mode     = 'equip';
-      cmdState.stage    = 0;
-      cmdState.input    = '';
-      cmdState.fragType = null;
-      cmdState.slotNum  = null;
-      cmdState.navIndex = -1;
+      cmdState.active      = false;
+      cmdState.mode        = 'equip';
+      cmdState.stage       = 0;
+      cmdState.input       = '';
+      cmdState.fragType    = null;
+      cmdState.slotNum     = null;
+      cmdState.navIndex    = -1;
+      cmdState.browseLevel = 0;
+      cmdState.browseSlot  = null;
+      browseItems          = [];
       document.getElementById('left-panel').classList.remove('cmd-hl-frags');
       document.getElementById('hotbarCanvas').classList.remove('cmd-hl-core');
       updateNavHighlight();
@@ -1160,6 +1299,21 @@
 
     function handleCmdKey(e) {
       e.preventDefault();
+
+      // Browse mode: own key handling, no text input
+      if (cmdState.mode === 'browse') {
+        if (e.key === 'Escape' || e.key === 'Backspace') { browseBack(); return; }
+        if (e.key === 'Enter') { browseEnter(); return; }
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && browseItems.length > 0) {
+          let idx = cmdState.navIndex < 0 ? 0 : cmdState.navIndex;
+          if (e.key === 'ArrowDown') idx = Math.min(browseItems.length - 1, idx + 1);
+          if (e.key === 'ArrowUp')   idx = Math.max(0, idx - 1);
+          cmdState.navIndex = idx;
+          updateNavHighlight();
+        }
+        return;
+      }
+
       if (e.key === 'Escape') { cancelCmd(); return; }
 
       if (e.key === 'Backspace') {
@@ -1359,8 +1513,14 @@
       const display = document.getElementById('cmd-display');
       const hint    = document.getElementById('cmd-stage-hint');
       if (!cmdState.active) {
-        display.innerHTML = '<span class="cmd-idle">[ &gt;/&lt; ] enter command</span>';
+        display.innerHTML = '<span class="cmd-idle">[ &gt; &lt; / ] enter command</span>';
         hint.textContent  = '';
+        return;
+      }
+      if (cmdState.mode === 'browse') {
+        const lvl = cmdState.browseLevel === 0 ? 'CORES' : `CORE ${cmdState.browseSlot}`;
+        display.innerHTML = `<span style="color:#aa88ff;">/ BROWSE — ${lvl}</span>`;
+        hint.textContent  = '↑↓ NAV   ENTER SELECT   ESC/BACKSPACE BACK';
         return;
       }
       if (cmdState.mode === 'equip') {
