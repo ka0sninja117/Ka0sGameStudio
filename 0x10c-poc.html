@@ -233,12 +233,53 @@
     #command-window {
       flex: 1;
       align-self: stretch;
-      padding: 10px 14px;
+      display: flex;
+      flex-direction: row;
+      min-width: 0;
+      border-left: 1px solid #0a1a2a;
+    }
+    .cmd-left {
+      flex: 1;
       display: flex;
       flex-direction: column;
       justify-content: center;
+      padding: 10px 14px;
       min-width: 0;
+    }
+    #slot-preview {
+      width: 160px;
+      flex-shrink: 0;
       border-left: 1px solid #0a1a2a;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #002211 transparent;
+    }
+    #slot-preview::-webkit-scrollbar { width: 3px; }
+    #slot-preview::-webkit-scrollbar-thumb { background: #002211; }
+    .slot-preview-title {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: #5a7a6a;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid #0a1a2a;
+    }
+    .slot-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      font-size: 10px;
+    }
+    .slot-preview-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
     #cmd-display {
       font-size: 13px;
@@ -333,9 +374,15 @@
     <div id="hotbar-label">// MODULE RACK</div>
     <canvas id="hotbarCanvas" width="170" height="170" style="cursor:pointer;"></canvas>
     <div id="command-window">
-      <div class="panel-title" style="margin-bottom:6px;">// CMD</div>
-      <div id="cmd-display"><span class="cmd-idle">[ &gt;/&lt; ] enter command</span></div>
-      <div id="cmd-stage-hint"></div>
+      <div class="cmd-left">
+        <div class="panel-title" style="margin-bottom:6px;">// CMD</div>
+        <div id="cmd-display"><span class="cmd-idle">[ &gt;/&lt; ] enter command</span></div>
+        <div id="cmd-stage-hint"></div>
+      </div>
+      <div id="slot-preview">
+        <div class="slot-preview-title" id="slot-preview-title">— — —</div>
+        <div id="slot-preview-items"></div>
+      </div>
     </div>
   </div>
 
@@ -1016,6 +1063,38 @@
       updateCmdWindow();
     }
 
+    function showSlotPreview(slotNum) {
+      const slot  = CORE_SLOTS[slotNum];
+      const title = document.getElementById('slot-preview-title');
+      const items = document.getElementById('slot-preview-items');
+      title.textContent = `// CORE ${slotNum}`;
+      items.innerHTML = '';
+      if (!slot || slot.assignments.length === 0) {
+        items.innerHTML = '<div style="font-size:10px;color:#2a4a3a;padding:2px 0;">— empty —</div>';
+        return;
+      }
+      // Power node first, then everything else
+      const sorted = [...slot.assignments].sort((a, b) =>
+        (a.fragType === 'POWER_NODE' ? -1 : 1)
+      );
+      for (const a of sorted) {
+        const def  = ITEMS[a.fragType];
+        const isPow = a.fragType === 'POWER_NODE';
+        const row  = document.createElement('div');
+        row.className = 'slot-preview-row';
+        row.innerHTML =
+          `<div class="slot-preview-dot" style="background:${def.dot};${isPow ? 'box-shadow:0 0 4px rgba(50,120,255,0.7);' : ''}"></div>` +
+          `<span style="color:${def.color};flex:1;">${def.label}</span>` +
+          `<span style="color:#33aa77;font-size:11px;font-weight:bold;">[${def.code}]</span>`;
+        items.appendChild(row);
+      }
+    }
+
+    function clearSlotPreview() {
+      document.getElementById('slot-preview-title').textContent = '— — —';
+      document.getElementById('slot-preview-items').innerHTML = '';
+    }
+
     function cancelCmd() {
       cmdState.active   = false;
       cmdState.mode     = 'equip';
@@ -1025,6 +1104,7 @@
       cmdState.slotNum  = null;
       document.getElementById('left-panel').classList.remove('cmd-hl-frags');
       document.getElementById('hotbarCanvas').classList.remove('cmd-hl-core');
+      clearSlotPreview();
       updateCmdWindow();
     }
 
@@ -1138,6 +1218,7 @@
       cmdState.input   = '';
       document.getElementById('hotbarCanvas').classList.add('cmd-hl-core');
       document.getElementById('left-panel').classList.add('cmd-hl-frags');
+      showSlotPreview(slotNum);
       updateCmdWindow();
     }
 
