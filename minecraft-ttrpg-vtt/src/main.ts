@@ -2,8 +2,31 @@ import { world, system, Player } from '@minecraft/server';
 import { parseDiceNotation, formatDiceResult } from './dice';
 import { InitiativeTracker } from './initiative';
 import { GM_TAG, isGM, hasAnyGM } from './gm';
+import { ITEM_DICE_BAG, ITEM_INITIATIVE, ITEM_GM_WAND, givePlayerKit, giveGMKit } from './items';
+import { openDiceBagForm, openInitiativeForm, openGMMenu } from './forms';
 
 const initiative = new InitiativeTracker();
+
+// ── Item use (controller-friendly UI) ─────────────────────────────────────────
+
+world.beforeEvents.itemUse.subscribe(event => {
+  if (event.source.typeId !== 'minecraft:player') return;
+  const nameTag = event.itemStack?.nameTag;
+  if (!nameTag) return;
+
+  if (nameTag !== ITEM_DICE_BAG && nameTag !== ITEM_INITIATIVE && nameTag !== ITEM_GM_WAND) return;
+
+  event.cancel = true;
+  const player = event.source as Player;
+
+  system.run(() => {
+    if (nameTag === ITEM_DICE_BAG)   openDiceBagForm(player);
+    if (nameTag === ITEM_INITIATIVE) openInitiativeForm(player, initiative);
+    if (nameTag === ITEM_GM_WAND)    openGMMenu(player, initiative);
+  });
+});
+
+// ── Chat commands (keyboard fallback) ────────────────────────────────────────
 
 world.beforeEvents.chatSend.subscribe(event => {
   const msg = event.message.trim();
@@ -17,28 +40,19 @@ world.beforeEvents.chatSend.subscribe(event => {
 
   system.run(() => {
     switch (cmd) {
-      case 'roll':
-      case 'r':
-        handleRoll(args.join(' '), player);
-        break;
-      case 'init':
-        handleInit(args, player);
-        break;
-      case 'gm':
-        handleGM(args, player);
-        break;
-      case 'spawn':
-        handleSpawn(args, player);
-        break;
-      case 'help':
-      case 'h':
-        handleHelp(player);
-        break;
+      case 'roll': case 'r': handleRoll(args.join(' '), player); break;
+      case 'init':           handleInit(args, player);           break;
+      case 'gm':             handleGM(args, player);             break;
+      case 'spawn':          handleSpawn(args, player);          break;
+      case 'kit':            handleKit(args, player);            break;
+      case 'help': case 'h': handleHelp(player);                 break;
       default:
         player.sendMessage(`§cUnknown command: !${cmd} — type §b!help§c for commands.§r`);
     }
   });
 });
+
+// ── Command handlers ──────────────────────────────────────────────────────────
 
 function handleRoll(notation: string, player: Player): void {
   if (!notation) {
@@ -46,10 +60,7 @@ function handleRoll(notation: string, player: Player): void {
     return;
   }
   const result = parseDiceNotation(notation);
-  if (!result) {
-    player.sendMessage(`§cInvalid dice notation: "${notation}"§r`);
-    return;
-  }
+  if (!result) { player.sendMessage(`§cInvalid dice notation: "${notation}"§r`); return; }
   world.sendMessage(formatDiceResult(result, player.name));
 }
 
@@ -92,10 +103,7 @@ function handleInit(args: string[], player: Player): void {
     case 'start': {
       if (!isGM(player)) { player.sendMessage('§cGM only.§r'); return; }
       const first = initiative.start();
-      if (!first) {
-        player.sendMessage('§cAdd combatants first — have players use §b!init roll§c, or use §b!init add§c.§r');
-        return;
-      }
+      if (!first) { player.sendMessage('§cAdd combatants first.§r'); return; }
       world.sendMessage('§6§l=== COMBAT BEGINS ===§r');
       world.sendMessage(initiative.formatList());
       world.sendMessage(`§6[Initiative]§r §e§l${first.name}§r, you're up!`);
@@ -108,8 +116,7 @@ function handleInit(args: string[], player: Player): void {
       world.sendMessage(`§6[Initiative]§r §e§l${entry.name}§r's turn! (${entry.value})`);
       break;
     }
-    case 'list':
-    case 'show':
+    case 'list': case 'show':
       world.sendMessage(initiative.formatList());
       break;
     case 'clear': {
@@ -129,6 +136,7 @@ function handleGM(args: string[], player: Player): void {
   if (!sub || sub === 'claim') {
     if (!hasAnyGM()) {
       player.addTag(GM_TAG);
+      giveGMKit(player);
       player.sendMessage('§6§lYou are now the GM!§r');
       world.sendMessage(`§6[TTRPG]§r §e${player.name}§r has claimed the GM role.`);
     } else if (isGM(player)) {
@@ -145,6 +153,7 @@ function handleGM(args: string[], player: Player): void {
     const target = world.getAllPlayers().find(p => p.name.toLowerCase() === (args[1] || '').toLowerCase());
     if (!target) { player.sendMessage(`§cPlayer "${args[1]}" not found.§r`); return; }
     target.addTag(GM_TAG);
+    giveGMKit(target);
     target.sendMessage('§6§lYou have been granted GM privileges!§r');
     world.sendMessage(`§6[TTRPG]§r §e${target.name}§r is now a GM.`);
   } else if (sub === 'remove') {
@@ -167,45 +176,55 @@ function handleSpawn(args: string[], player: Player): void {
   if (!isGM(player)) { player.sendMessage('§cGM only.§r'); return; }
   const rawType = args[0];
   if (!rawType) {
-    player.sendMessage('§cUsage: !spawn <entity_type> [display_name]§r\n§7Example: !spawn zombie Goblin Guard§r');
+    player.sendMessage('§cUsage: !spawn <entity_type> [display_name]§r');
     return;
   }
   const entityType = rawType.includes(':') ? rawType : `minecraft:${rawType}`;
-  const displayName = args.slice(1).join(' ') || null;
-
+  const label = args.slice(1).join(' ') || null;
   try {
     const loc = player.location;
     const dir = player.getViewDirection();
-    const spawnLoc = { x: loc.x + dir.x * 3, y: loc.y, z: loc.z + dir.z * 3 };
-    const entity = player.dimension.spawnEntity(entityType, spawnLoc);
-    if (displayName) entity.nameTag = displayName;
-    player.sendMessage(`§aSpawned §e${displayName || entityType}§a.§r`);
+    const entity = player.dimension.spawnEntity(entityType, {
+      x: loc.x + dir.x * 3,
+      y: loc.y,
+      z: loc.z + dir.z * 3,
+    });
+    if (label) entity.nameTag = label;
+    player.sendMessage(`§aSpawned §e${label || entityType}§a.§r`);
   } catch {
-    player.sendMessage(
-      `§cFailed to spawn "${entityType}". Check the entity type name.§r\n` +
-      `§7Common types: zombie, skeleton, spider, creeper, enderman, villager§r`
-    );
+    player.sendMessage(`§cFailed to spawn "${entityType}".§r`);
   }
+}
+
+function handleKit(args: string[], player: Player): void {
+  if (args.length === 0) {
+    givePlayerKit(player);
+    return;
+  }
+  if (!isGM(player)) { player.sendMessage('§cOnly GMs can give kits to others.§r'); return; }
+  const target = world.getAllPlayers().find(p => p.name.toLowerCase() === args[0].toLowerCase());
+  if (!target) { player.sendMessage(`§cPlayer "${args[0]}" not found.§r`); return; }
+  givePlayerKit(target);
 }
 
 function handleHelp(player: Player): void {
   const gm = isGM(player);
-  const lines = [
-    '§6§l=== TTRPG VTT Commands ===§r',
-    '§b!roll §e<dice>§r — Roll dice  (1d20, 2d6+3, d20 adv, d20 dis)',
-    '§b!r§r — Shorthand for !roll',
-    '§b!init roll §e[mod]§r — Roll your initiative with optional modifier',
-    '§b!init list§r — Show current initiative order',
-    gm ? '§b!init add §e<name> <val>§r — Add NPC/monster to initiative' : null,
-    gm ? '§b!init remove §e<name>§r — Remove entry from initiative' : null,
-    gm ? '§b!init start§r — Start combat (show order, announce first turn)' : null,
-    gm ? '§b!init next§r — Advance to next combatant\'s turn' : null,
-    gm ? '§b!init clear§r — End combat and clear tracker' : null,
-    gm ? '§b!spawn §e<type> [name]§r — Spawn entity in front of you' : null,
-    gm ? '§b!gm add/remove §e<player>§r — Grant or revoke GM role' : null,
-    gm ? '§b!gm list§r — List online GMs' : null,
-    !gm ? '§b!gm claim§r — Claim GM role (only works if no GM exists)' : null,
-    '§b!help§r — Show this message',
-  ].filter(Boolean) as string[];
+  const lines: string[] = [
+    '§6§l=== TTRPG VTT ===§r',
+    '§7Items (controller-friendly):§r',
+    '  §eDice Bag §7(Book)§r — opens dice roller form',
+    '  §bInitiative Token §7(Compass)§r — rolls your initiative',
+    gm ? '  §6GM Wand §7(Blaze Rod)§r — opens GM control panel' : '',
+    '',
+    '§7Chat commands:§r',
+    '§b!kit§r — receive your Dice Bag + Initiative Token',
+    '§b!roll §e<dice>§r — 1d20, 2d6+3, d20 adv, d20 dis',
+    '§b!init roll §e[mod]§r — roll initiative',
+    '§b!init list§r — show initiative order',
+    gm ? '§b!init add §e<name> <val>§r  |  §b!init start  |  !init next  |  !init clear' : '',
+    gm ? '§b!spawn §e<type> [name]§r — spawn entity' : '',
+    gm ? '§b!gm add/remove §e<player>§r — manage GMs' : '',
+    !gm ? '§b!gm claim§r — claim GM role (if none exists)' : '',
+  ].filter(s => s !== '');
   player.sendMessage(lines.join('\n'));
 }
