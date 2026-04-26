@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "TTRPG VTT Resources",
+    "description": "Resource pack for TTRPG VTT (stub — no custom assets yet)",
+    "uuid": "c9f0e4a3-6d5f-4b4a-9c3e-1f8d7a6b5c4d",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 0]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "d0a1f5b4-7e6a-4c5b-8d4f-2a9e8b7c6d5e",
+      "version": [1, 0, 0]
+    }
+  ]
+}

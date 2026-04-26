@@ -1,0 +1,15 @@
+{
+  "name": "minecraft-ttrpg-vtt",
+  "version": "1.0.0",
+  "description": "Minecraft Bedrock Add-On: VTT tools for TTRPGs",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --format=esm --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui",
+    "watch": "esbuild src/main.ts --bundle --format=esm --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --watch"
+  },
+  "devDependencies": {
+    "@minecraft/server": "^1.14.0",
+    "@minecraft/server-ui": "^1.3.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0"
+  }
+}

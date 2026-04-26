@@ -1,0 +1,25 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "TTRPG VTT",
+    "description": "Virtual Tabletop tools — dice, initiative, GM controls",
+    "uuid": "a7f8c2e1-4b3d-4f2e-8a1c-9d6b5e4f3a2b",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 0]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "b8e9d3f2-5c4e-5a3f-9b2d-0e7c6f5a4b3c",
+      "version": [1, 0, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "1.14.0"
+    }
+  ]
+}
