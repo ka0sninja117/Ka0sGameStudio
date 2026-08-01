@@ -79,7 +79,6 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         applyEdgeToEdgeInsets();
 
         String mode = getIntent().getStringExtra("mode");
@@ -148,10 +147,22 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                     .show());
         }
 
+        // On Android 13+ the room-keepalive notification needs permission; the
+        // service still protects the connection if the user declines.
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1);
+        }
+
         if (isHost) {
+            // Hosts keep the screen awake: many phones drop their hotspot when
+            // the screen has been off a while, which would kill the whole room.
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             hostServer = new HostServer(room, name, color, this);
             try {
                 hostServer.start();
+                RoomService.start(this, "Hosting Room " + room);
                 onSys("You are hosting Room " + room + ". Others on your hotspot/WiFi will see it appear.");
             } catch (IOException e) {
                 Toast.makeText(this, "Couldn't host: is another room already hosted on this phone?",
@@ -164,6 +175,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             myName = name;
             myColor = color;
             connectClient();
+            RoomService.start(this, "?".equals(room) ? "In a room" : "In Room " + room);
             onSys("Joining…");
         }
     }
@@ -283,6 +295,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     protected void onDestroy() {
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
+        RoomService.stop(this);
         if (hostServer != null) hostServer.stop();
         if (client != null) client.close();
     }

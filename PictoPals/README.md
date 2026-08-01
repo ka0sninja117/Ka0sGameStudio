@@ -4,12 +4,12 @@ A PictoChat-style offline drawing chat for Android, inspired by the Nintendo DS
 Lite's PictoChat. No internet, no accounts, no servers — everything happens over
 a local WiFi network or one phone's hotspot, so it works on an airplane.
 
-**[⬇️ Download PictoPals-v1.4.apk](PictoPals-v1.4.apk)** (~30 KB)
+**[⬇️ Download PictoPals-v1.5.apk](PictoPals-v1.5.apk)** (~30 KB)
 
 ## Installing (sideloading)
 
 1. On each phone, open this file in the GitHub app or browser and download
-   `PictoPals-v1.4.apk` (tap **Raw** / **Download** on GitHub).
+   `PictoPals-v1.5.apk` (tap **Raw** / **Download** on GitHub).
 2. Open the downloaded file. Android will ask you to allow installs from that
    app (browser/Files) — allow it, then install.
 3. Play Protect may warn about an unknown developer; tap **Install anyway**.
@@ -51,6 +51,14 @@ If room discovery ever fails (some networks block broadcasts), use
   discovery beacon (port 41118) once per second; clients auto-discover rooms.
 - Messages are typed text, dice rolls, or the drawing panel encoded as PNG,
   relayed to everyone in the room. Nothing is stored or sent anywhere else.
+- **Background/lock survival**: while you're in a room a foreground service
+  (visible as a "PictoPals — chat stays connected" notification) keeps the
+  connection alive when you switch apps or your screen locks, holding CPU and
+  WiFi locks so Doze/app-sleep can't cut the room. Host phones also keep
+  their screen awake, since many phones drop their hotspot when the screen
+  has been off a while (also check the hotspot's "turn off automatically"
+  setting). Android 13+ asks for notification permission once — declining
+  keeps everything working, you just won't see the notification.
 - **Reliability**: heartbeat pings run both ways and silent connections are
   dropped after 30s; if a phone loses the room (WiFi blip, walked out of
   range) it auto-reconnects every 3s and re-syncs the chat from the host's
