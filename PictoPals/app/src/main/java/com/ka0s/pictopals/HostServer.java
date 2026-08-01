@@ -30,13 +30,21 @@ import java.util.concurrent.Executors;
  * The host also keeps the room's chat history in memory and replays it to every
  * newcomer, so late joiners see the whole conversation. History lives exactly as
  * long as the room does: when the host leaves, the room closes and it is gone.
+ *
+ * Everything received from the network is treated as untrusted: lines are
+ * length-bounded, names/colors/text/dice/drawings are validated and capped, and
+ * connections that go silent past the read timeout are dropped (live clients
+ * send heartbeat pings well inside it).
  */
 public class HostServer {
 
-    /** Message payload keys relayed verbatim from sender to everyone. */
-    private static final String[] MSG_KEYS = {"png", "text", "die", "result"};
-
     private static final int HISTORY_LIMIT = 200;
+    private static final int MAX_CLIENTS = 15;
+    private static final int MAX_PNG_B64_CHARS = 400_000;
+    private static final int MAX_TEXT_CHARS = 500;
+    private static final int MAX_NAME_CHARS = 16;
+    /** Every Nth 1s beacon, ping all clients so their read timeout never trips while idle. */
+    private static final int PING_EVERY_N_BEACONS = 10;
 
     public interface Listener {
         /** msg carries name, color and one of: png (base64) / text / die+result. */
@@ -101,15 +109,24 @@ public class HostServer {
         new Thread(this::beaconLoop, "pp-beacon").start();
     }
 
+    /** Says goodbye to clients (so they don't try to reconnect), then shuts down. */
     public void stop() {
         running = false;
+        worker.execute(() -> {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("t", "bye");
+                String line = o.toString();
+                for (Client c : clients) if (c.joined) c.send(line);
+            } catch (Exception ignored) {}
+            try { if (server != null) server.close(); } catch (IOException ignored) {}
+            if (beaconSocket != null) beaconSocket.close();
+            for (Client c : clients) {
+                try { c.sock.close(); } catch (IOException ignored) {}
+            }
+            clients.clear();
+        });
         worker.shutdown();
-        try { if (server != null) server.close(); } catch (IOException ignored) {}
-        if (beaconSocket != null) beaconSocket.close();
-        for (Client c : clients) {
-            try { c.sock.close(); } catch (IOException ignored) {}
-        }
-        clients.clear();
     }
 
     /** Called from the host's own UI. payload holds png / text / die+result. */
@@ -138,7 +155,12 @@ public class HostServer {
         while (running) {
             try {
                 Socket s = server.accept();
+                if (clients.size() >= MAX_CLIENTS) {
+                    try { s.close(); } catch (IOException ignored) {}
+                    continue;
+                }
                 s.setTcpNoDelay(true);
+                s.setSoTimeout(Proto.READ_TIMEOUT_MS);
                 Client c = new Client(s);
                 clients.add(c);
                 new Thread(() -> readLoop(c), "pp-client").start();
@@ -152,12 +174,12 @@ public class HostServer {
         try (BufferedReader in = new BufferedReader(
                 new InputStreamReader(c.sock.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            while (running && (line = in.readLine()) != null) {
+            while (running && (line = Proto.readBoundedLine(in, Proto.MAX_LINE_CHARS)) != null) {
                 JSONObject o = new JSONObject(line);
                 String t = o.optString("t");
                 if ("join".equals(t)) {
-                    c.name = o.optString("name", "?");
-                    c.color = o.optString("color", "#444444");
+                    c.name = sanitizeName(o.optString("name"));
+                    c.color = sanitizeColor(o.optString("color"));
                     // On the worker so the history replay can't interleave
                     // with a message being broadcast at the same moment.
                     worker.execute(() -> {
@@ -176,8 +198,11 @@ public class HostServer {
                 } else if ("msg".equals(t)) {
                     relay(c.name, c.color, o);
                 }
+                // "ping" (and anything unknown) needs no handling: any traffic
+                // resets the read timeout, which is the ping's whole job
             }
         } catch (Exception ignored) {
+            // covers disconnects, read timeouts on silent sockets, and bad JSON
         } finally {
             clients.remove(c);
             try { c.sock.close(); } catch (IOException ignored) {}
@@ -194,18 +219,51 @@ public class HostServer {
                 o.put("t", "msg");
                 o.put("name", name);
                 o.put("color", color);
-                boolean hasContent = false;
-                for (String k : MSG_KEYS) {
-                    if (payload.has(k)) {
-                        o.put(k, payload.get(k));
-                        hasContent = true;
-                    }
+                // Exactly one message kind is accepted, validated and capped.
+                if (payload.has("png")) {
+                    String png = payload.optString("png");
+                    if (png.isEmpty() || png.length() > MAX_PNG_B64_CHARS) return;
+                    o.put("png", png);
+                } else if (payload.has("die")) {
+                    int die = payload.optInt("die");
+                    int result = payload.optInt("result");
+                    if (!isRealDie(die) || result < 1 || result > die) return;
+                    o.put("die", die);
+                    o.put("result", result);
+                } else if (payload.has("text")) {
+                    String text = payload.optString("text").trim();
+                    if (text.isEmpty()) return;
+                    if (text.length() > MAX_TEXT_CHARS) text = text.substring(0, MAX_TEXT_CHARS);
+                    o.put("text", text);
+                } else {
+                    return;
                 }
-                if (!hasContent) return;
                 broadcastLine(o.toString());
                 listener.onMsg(o);
             } catch (Exception ignored) {}
         });
+    }
+
+    private static boolean isRealDie(int die) {
+        switch (die) {
+            case 4: case 6: case 8: case 10: case 12: case 20:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static String sanitizeName(String raw) {
+        StringBuilder sb = new StringBuilder();
+        for (char ch : raw.trim().toCharArray()) {
+            if (!Character.isISOControl(ch)) sb.append(ch);
+            if (sb.length() >= MAX_NAME_CHARS) break;
+        }
+        return sb.length() == 0 ? "?" : sb.toString();
+    }
+
+    private static String sanitizeColor(String raw) {
+        return raw.matches("#[0-9a-fA-F]{6}") ? raw : "#444444";
     }
 
     private void broadcastSys(String text) {
@@ -229,6 +287,7 @@ public class HostServer {
     }
 
     private void beaconLoop() {
+        int tick = 0;
         while (running) {
             try {
                 JSONObject o = new JSONObject();
@@ -243,6 +302,16 @@ public class HostServer {
                     try {
                         beaconSocket.send(new DatagramPacket(data, data.length, addr, Proto.UDP_PORT));
                     } catch (IOException ignored) {}
+                }
+                if (++tick % PING_EVERY_N_BEACONS == 0) {
+                    worker.execute(() -> {
+                        try {
+                            JSONObject ping = new JSONObject();
+                            ping.put("t", "ping");
+                            String line = ping.toString();
+                            for (Client c : clients) if (c.joined) c.send(line);
+                        } catch (Exception ignored) {}
+                    });
                 }
                 Thread.sleep(1000);
             } catch (Exception e) {

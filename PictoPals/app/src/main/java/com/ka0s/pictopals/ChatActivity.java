@@ -9,6 +9,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -40,6 +42,9 @@ import java.util.Random;
 public class ChatActivity extends Activity implements HostServer.Listener, ChatClient.Listener {
 
     private static final int[] DICE = {4, 6, 8, 10, 12, 20};
+    /** Slightly above the host's 200-message history so replays always fit. */
+    private static final int MAX_SHOWN_MESSAGES = 220;
+    private static final int RECONNECT_DELAY_MS = 3000;
 
     private static class Msg {
         String name, color, sysText, text;
@@ -56,6 +61,13 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     private HostServer hostServer;
     private ChatClient client;
     private boolean isHost;
+
+    // join-mode connection state, kept for auto-reconnect
+    private String joinIp, myName, myColor;
+    private int joinPort;
+    private boolean everConnected = false;
+    private boolean reconnecting = false;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     private View textPane, drawPane, dicePane;
     private Button modeTextBtn, modeDrawBtn, modeDiceBtn;
@@ -147,11 +159,18 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                 finish();
             }
         } else {
-            client = new ChatClient(this);
-            client.connect(getIntent().getStringExtra("ip"),
-                    getIntent().getIntExtra("port", Proto.TCP_PORT), name, color);
+            joinIp = getIntent().getStringExtra("ip");
+            joinPort = getIntent().getIntExtra("port", Proto.TCP_PORT);
+            myName = name;
+            myColor = color;
+            connectClient();
             onSys("Joining…");
         }
+    }
+
+    private void connectClient() {
+        client = new ChatClient(this);
+        client.connect(joinIp, joinPort, myName, myColor);
     }
 
     /**
@@ -263,6 +282,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        handler.removeCallbacksAndMessages(null);
         if (hostServer != null) hostServer.stop();
         if (client != null) client.close();
     }
@@ -270,15 +290,26 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     // ---- network callbacks (arrive on background threads) ----
 
     @Override
+    public void onConnected() {
+        runOnUiThread(() -> {
+            everConnected = true;
+            if (reconnecting) {
+                reconnecting = false;
+                // the host is about to replay the room history — start clean
+                messages.clear();
+                adapter.notifyDataSetChanged();
+                addMsg(sysMsg("Reconnected!"));
+            }
+        });
+    }
+
+    @Override
     public void onMsg(JSONObject o) {
         Msg m = new Msg();
         m.name = o.optString("name", "?");
         m.color = o.optString("color", "#444444");
         if (o.has("png")) {
-            try {
-                byte[] png = Base64.getDecoder().decode(o.optString("png"));
-                m.bitmap = BitmapFactory.decodeByteArray(png, 0, png.length);
-            } catch (Exception ignored) {}
+            m.bitmap = decodePngSafely(o.optString("png"));
             if (m.bitmap == null) return;
         } else if (o.has("die")) {
             m.die = o.optInt("die");
@@ -288,20 +319,40 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         } else {
             return;
         }
-        runOnUiThread(() -> {
-            messages.add(m);
-            adapter.notifyDataSetChanged();
-        });
+        runOnUiThread(() -> addMsg(m));
+    }
+
+    /** Checks dimensions before allocating so a huge image can't balloon memory. */
+    private static Bitmap decodePngSafely(String b64) {
+        try {
+            byte[] png = Base64.getDecoder().decode(b64);
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(png, 0, png.length, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0
+                    || bounds.outWidth > 2000 || bounds.outHeight > 2000) return null;
+            return BitmapFactory.decodeByteArray(png, 0, png.length);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override
     public void onSys(String text) {
-        runOnUiThread(() -> {
-            Msg m = new Msg();
-            m.sysText = text;
-            messages.add(m);
-            adapter.notifyDataSetChanged();
-        });
+        runOnUiThread(() -> addMsg(sysMsg(text)));
+    }
+
+    private static Msg sysMsg(String text) {
+        Msg m = new Msg();
+        m.sysText = text;
+        return m;
+    }
+
+    /** Single point of insertion so the on-screen list (and its bitmaps) stays bounded. */
+    private void addMsg(Msg m) {
+        messages.add(m);
+        while (messages.size() > MAX_SHOWN_MESSAGES) messages.remove(0);
+        adapter.notifyDataSetChanged();
     }
 
     @Override
@@ -313,10 +364,25 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     }
 
     @Override
-    public void onClosed(String reason) {
+    public void onClosed(String reason, boolean canRetry) {
         runOnUiThread(() -> {
-            Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
-            finish();
+            if (isFinishing() || isDestroyed()) return;
+            // A drop before ever connecting means a wrong network, not a blip —
+            // and canRetry=false means the host closed the room on purpose.
+            if (!canRetry || !everConnected) {
+                Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
+                finish();
+                return;
+            }
+            if (!reconnecting) {
+                reconnecting = true;
+                addMsg(sysMsg("Connection lost — reconnecting… (LEAVE to give up)"));
+            }
+            handler.postDelayed(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                client.close();
+                connectClient();
+            }, RECONNECT_DELAY_MS);
         });
     }
 
