@@ -7,10 +7,13 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.BaseAdapter;
 import android.widget.Button;
@@ -46,6 +49,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyEdgeToEdgeInsets();
 
         String mode = getIntent().getStringExtra("mode");
         String room = getIntent().getStringExtra("room");
@@ -104,6 +108,36 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             client.connect(getIntent().getStringExtra("ip"),
                     getIntent().getIntExtra("port", Proto.TCP_PORT), name, color);
             onSys("Joining…");
+        }
+    }
+
+    /**
+     * Android 15+ forces edge-to-edge. The dark header absorbs the status-bar
+     * inset (so its background runs to the top edge of the screen), and the
+     * root absorbs the side/bottom insets so the toolbar sits above the
+     * navigation bar and the keyboard.
+     */
+    private void applyEdgeToEdgeInsets() {
+        if (Build.VERSION.SDK_INT < 35) return;
+        View root = findViewById(R.id.rootChat);
+        View header = findViewById(R.id.chatHeader);
+        root.setOnApplyWindowInsetsListener((v, wi) -> {
+            android.graphics.Insets sb = wi.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            android.graphics.Insets ime = wi.getInsets(WindowInsets.Type.ime());
+            v.setPadding(sb.left, 0, sb.right, Math.max(sb.bottom, ime.bottom));
+            header.setPadding(header.getPaddingLeft(), sb.top,
+                    header.getPaddingRight(), header.getPaddingBottom());
+            return WindowInsets.CONSUMED;
+        });
+        // Dark header behind the status bar (light icons), light background
+        // behind the navigation bar (dark icons).
+        WindowInsetsController c = getWindow().getInsetsController();
+        if (c != null) {
+            c.setSystemBarsAppearance(
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                            | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
         }
     }
 

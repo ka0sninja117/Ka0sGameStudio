@@ -6,9 +6,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -53,6 +56,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        applyEdgeToEdgeInsets();
 
         prefs = getSharedPreferences("pictopals", MODE_PRIVATE);
         nameEdit = findViewById(R.id.nameEdit);
@@ -67,6 +71,30 @@ public class MainActivity extends Activity {
         buildHostRow();
 
         findViewById(R.id.joinIpBtn).setOnClickListener(v -> promptJoinByIp());
+    }
+
+    /**
+     * Android 15+ forces edge-to-edge: content is drawn behind the status and
+     * navigation bars, so pad the root view by the system-bar (and keyboard)
+     * insets to keep everything visible and tappable.
+     */
+    private void applyEdgeToEdgeInsets() {
+        if (Build.VERSION.SDK_INT < 35) return;
+        View root = findViewById(R.id.rootMain);
+        root.setOnApplyWindowInsetsListener((v, wi) -> {
+            android.graphics.Insets sb = wi.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            android.graphics.Insets ime = wi.getInsets(WindowInsets.Type.ime());
+            v.setPadding(sb.left, sb.top, sb.right, Math.max(sb.bottom, ime.bottom));
+            return WindowInsets.CONSUMED;
+        });
+        // Light background everywhere: use dark icons in both system bars.
+        WindowInsetsController c = getWindow().getInsetsController();
+        if (c != null) {
+            int flags = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                    | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            c.setSystemBarsAppearance(flags, flags);
+        }
     }
 
     @Override
