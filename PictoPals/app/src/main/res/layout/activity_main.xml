@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#dfe6ea"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="PictoPals"
+            android:textColor="#2b3f52"
+            android:textSize="34sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="PictoChat-style drawing chat — no internet needed"
+            android:textColor="#5b6c7d"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Your name"
+            android:textColor="#2b3f52"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/nameEdit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#ffffff"
+            android:hint="e.g. Dad"
+            android:inputType="textPersonName"
+            android:maxLength="12"
+            android:padding="10dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Your color"
+            android:textColor="#2b3f52"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/colorRow"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Host a room"
+            android:textColor="#2b3f52"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/hostRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Nearby rooms"
+            android:textColor="#2b3f52"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/roomList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/noRooms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="10dp"
+            android:text="Searching… rooms hosted on this WiFi/hotspot appear here."
+            android:textColor="#7a8a99"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/joinIpBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Join by IP address…" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="How to chat on a plane (no internet):\n1. One phone turns on its WiFi hotspot (works in airplane mode — re-enable hotspot after airplane mode is on).\n2. Everyone else joins that hotspot from WiFi settings.\n3. Hotspot phone taps a Host button; everyone else taps the room when it appears."
+            android:textColor="#5b6c7d"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

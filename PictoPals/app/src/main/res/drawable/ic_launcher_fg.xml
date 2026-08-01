@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- speech bubble -->
+    <path
+        android:fillColor="#ffffff"
+        android:pathData="M30,32 h48 a8,8 0 0 1 8,8 v22 a8,8 0 0 1 -8,8 h-28 l-10,10 v-10 h-10 a8,8 0 0 1 -8,-8 v-22 a8,8 0 0 1 8,-8 z" />
+    <!-- pencil scribble inside the bubble -->
+    <path
+        android:strokeColor="#2b3f52"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M38,56 q6,-14 12,0 q6,14 12,0 q6,-14 12,0" />
+</vector>
