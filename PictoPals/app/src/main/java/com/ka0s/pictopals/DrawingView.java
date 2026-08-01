@@ -24,11 +24,9 @@ public class DrawingView extends View {
     private Bitmap bitmap;
     private Canvas bmpCanvas;
     private final Paint pen = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float lastBx, lastBy;
     private boolean drawing = false;
     private boolean dirty = false;
-    private float nextTextY = 6f;
 
     public static final int TOOL_PEN = 0;
     public static final int TOOL_BIG = 1;
@@ -40,8 +38,6 @@ public class DrawingView extends View {
         pen.setStyle(Paint.Style.STROKE);
         pen.setStrokeCap(Paint.Cap.ROUND);
         pen.setStrokeJoin(Paint.Join.ROUND);
-        textPaint.setColor(Color.BLACK);
-        textPaint.setTextSize(30f);
         applyTool();
     }
 
@@ -124,36 +120,9 @@ public class DrawingView extends View {
         return super.onTouchEvent(e);
     }
 
-    /** Stamps typed text onto the panel, word-wrapping, moving down on each stamp. */
-    public void stampText(String text) {
-        if (bitmap == null || text == null || text.trim().isEmpty()) return;
-        float lineHeight = textPaint.getTextSize() + 6f;
-        float maxW = bitmap.getWidth() - 12f;
-        StringBuilder line = new StringBuilder();
-        for (String word : text.trim().split("\\s+")) {
-            String candidate = line.length() == 0 ? word : line + " " + word;
-            if (textPaint.measureText(candidate) > maxW && line.length() > 0) {
-                drawTextLine(line.toString(), lineHeight);
-                line = new StringBuilder(word);
-            } else {
-                line = new StringBuilder(candidate);
-            }
-        }
-        if (line.length() > 0) drawTextLine(line.toString(), lineHeight);
-        dirty = true;
-        invalidate();
-    }
-
-    private void drawTextLine(String line, float lineHeight) {
-        if (nextTextY + lineHeight > bitmap.getHeight()) nextTextY = 6f; // wrap to top
-        bmpCanvas.drawText(line, 6f, nextTextY + textPaint.getTextSize(), textPaint);
-        nextTextY += lineHeight;
-    }
-
     public void clear() {
         if (bmpCanvas != null) bmpCanvas.drawColor(Color.WHITE);
         dirty = false;
-        nextTextY = 6f;
         invalidate();
     }
 

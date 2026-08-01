@@ -10,7 +10,6 @@ import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,7 +17,8 @@ import java.util.concurrent.Executors;
 public class ChatClient {
 
     public interface Listener {
-        void onMsg(String name, String color, byte[] png);
+        /** msg carries name, color and one of: png (base64) / text / die+result. */
+        void onMsg(JSONObject msg);
         void onSys(String text);
         void onClosed(String reason);
     }
@@ -55,8 +55,7 @@ public class ChatClient {
                     JSONObject o = new JSONObject(line);
                     String t = o.optString("t");
                     if ("msg".equals(t)) {
-                        listener.onMsg(o.optString("name"), o.optString("color", "#444444"),
-                                Base64.getDecoder().decode(o.optString("png")));
+                        listener.onMsg(o);
                     } else if ("sys".equals(t)) {
                         listener.onSys(o.optString("text"));
                     }
@@ -69,13 +68,12 @@ public class ChatClient {
         }, "pp-clientread").start();
     }
 
-    public void send(byte[] png) {
+    /** payload holds png / text / die+result; the host adds name and color. */
+    public void send(JSONObject payload) {
         sender.execute(() -> {
             try {
-                JSONObject o = new JSONObject();
-                o.put("t", "msg");
-                o.put("png", Base64.getEncoder().encodeToString(png));
-                writeLine(o.toString());
+                payload.put("t", "msg");
+                writeLine(payload.toString());
             } catch (Exception ignored) {}
         });
     }

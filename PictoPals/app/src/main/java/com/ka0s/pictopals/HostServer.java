@@ -16,7 +16,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,11 +24,21 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Runs on the phone that hosts a room. Accepts TCP clients, relays every message
  * to all of them, and broadcasts a UDP discovery beacon once per second so other
  * phones on the same hotspot/WiFi can find the room without typing an IP.
+ *
+ * The host also keeps the room's chat history in memory and replays it to every
+ * newcomer, so late joiners see the whole conversation. History lives exactly as
+ * long as the room does: when the host leaves, the room closes and it is gone.
  */
 public class HostServer {
 
+    /** Message payload keys relayed verbatim from sender to everyone. */
+    private static final String[] MSG_KEYS = {"png", "text", "die", "result"};
+
+    private static final int HISTORY_LIMIT = 200;
+
     public interface Listener {
-        void onMsg(String name, String color, byte[] png);
+        /** msg carries name, color and one of: png (base64) / text / die+result. */
+        void onMsg(JSONObject msg);
         void onSys(String text);
     }
 
@@ -42,11 +51,13 @@ public class HostServer {
     private DatagramSocket beaconSocket;
     private volatile boolean running = true;
     private final List<Client> clients = new CopyOnWriteArrayList<>();
+    private final List<String> history = new ArrayList<>();
 
     private static class Client {
         final Socket sock;
         final BufferedWriter out;
         volatile String name = "?";
+        volatile String color = "#444444";
         volatile boolean joined = false;
 
         Client(Socket s) throws IOException {
@@ -91,9 +102,9 @@ public class HostServer {
         clients.clear();
     }
 
-    /** Called from the host's own UI when the host sends a drawing. */
-    public void sendFromHost(byte[] png) {
-        broadcastMsg(hostName, hostColor, png);
+    /** Called from the host's own UI. payload holds png / text / die+result. */
+    public void sendFromHost(JSONObject payload) {
+        relay(hostName, hostColor, payload);
     }
 
     private void acceptLoop() {
@@ -119,18 +130,19 @@ public class HostServer {
                 String t = o.optString("t");
                 if ("join".equals(t)) {
                     c.name = o.optString("name", "?");
-                    String color = o.optString("color", "#444444");
-                    c.joined = true;
+                    c.color = o.optString("color", "#444444");
                     JSONObject welcome = new JSONObject();
                     welcome.put("t", "welcome");
                     welcome.put("room", room);
                     c.send(welcome.toString());
+                    // Replay the room's history to the newcomer before anything else.
+                    synchronized (history) {
+                        for (String h : history) c.send(h);
+                    }
+                    c.joined = true;
                     broadcastSys(c.name + " joined the room");
-                    // remember the client's color for its messages
-                    clientColor(c, color);
                 } else if ("msg".equals(t)) {
-                    byte[] png = Base64.getDecoder().decode(o.optString("png"));
-                    broadcastMsg(c.name, colorOf(c), png);
+                    relay(c.name, c.color, o);
                 }
             }
         } catch (Exception ignored) {
@@ -143,21 +155,22 @@ public class HostServer {
         }
     }
 
-    // Tiny per-client color storage without another field class
-    private final java.util.Map<Client, String> colors = new java.util.concurrent.ConcurrentHashMap<>();
-    private void clientColor(Client c, String color) { colors.put(c, color); }
-    private String colorOf(Client c) { return colors.getOrDefault(c, "#444444"); }
-
-    private void broadcastMsg(String name, String color, byte[] png) {
+    private void relay(String name, String color, JSONObject payload) {
         try {
             JSONObject o = new JSONObject();
             o.put("t", "msg");
             o.put("name", name);
             o.put("color", color);
-            o.put("png", Base64.getEncoder().encodeToString(png));
-            String line = o.toString();
-            for (Client c : clients) if (c.joined) c.send(line);
-            listener.onMsg(name, color, png);
+            boolean hasContent = false;
+            for (String k : MSG_KEYS) {
+                if (payload.has(k)) {
+                    o.put(k, payload.get(k));
+                    hasContent = true;
+                }
+            }
+            if (!hasContent) return;
+            broadcastLine(o.toString());
+            listener.onMsg(o);
         } catch (Exception ignored) {}
     }
 
@@ -166,10 +179,17 @@ public class HostServer {
             JSONObject o = new JSONObject();
             o.put("t", "sys");
             o.put("text", text);
-            String line = o.toString();
-            for (Client c : clients) if (c.joined) c.send(line);
+            broadcastLine(o.toString());
             listener.onSys(text);
         } catch (Exception ignored) {}
+    }
+
+    private void broadcastLine(String line) {
+        synchronized (history) {
+            history.add(line);
+            if (history.size() > HISTORY_LIMIT) history.remove(0);
+        }
+        for (Client c : clients) if (c.joined) c.send(line);
     }
 
     private void beaconLoop() {
