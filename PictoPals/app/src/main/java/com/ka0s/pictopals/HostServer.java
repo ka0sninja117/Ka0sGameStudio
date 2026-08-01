@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Runs on the phone that hosts a room. Accepts TCP clients, relays every message
@@ -40,6 +42,7 @@ public class HostServer {
         /** msg carries name, color and one of: png (base64) / text / die+result. */
         void onMsg(JSONObject msg);
         void onSys(String text);
+        void onClear();
     }
 
     private final String room;
@@ -52,6 +55,12 @@ public class HostServer {
     private volatile boolean running = true;
     private final List<Client> clients = new CopyOnWriteArrayList<>();
     private final List<String> history = new ArrayList<>();
+    /**
+     * All broadcasting funnels through this worker: it keeps message order
+     * consistent and, crucially, keeps socket writes off the UI thread when
+     * the host itself sends (Android forbids network I/O on the main thread).
+     */
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
     private static class Client {
         final Socket sock;
@@ -94,6 +103,7 @@ public class HostServer {
 
     public void stop() {
         running = false;
+        worker.shutdown();
         try { if (server != null) server.close(); } catch (IOException ignored) {}
         if (beaconSocket != null) beaconSocket.close();
         for (Client c : clients) {
@@ -105,6 +115,23 @@ public class HostServer {
     /** Called from the host's own UI. payload holds png / text / die+result. */
     public void sendFromHost(JSONObject payload) {
         relay(hostName, hostColor, payload);
+    }
+
+    /** Host-only: wipes the room's history and everyone's screens. */
+    public void clearChat() {
+        worker.execute(() -> {
+            synchronized (history) {
+                history.clear();
+            }
+            try {
+                JSONObject o = new JSONObject();
+                o.put("t", "clear");
+                String line = o.toString();
+                for (Client c : clients) if (c.joined) c.send(line);
+                listener.onClear();
+            } catch (Exception ignored) {}
+        });
+        broadcastSys(hostName + " cleared the chat");
     }
 
     private void acceptLoop() {
@@ -131,15 +158,20 @@ public class HostServer {
                 if ("join".equals(t)) {
                     c.name = o.optString("name", "?");
                     c.color = o.optString("color", "#444444");
-                    JSONObject welcome = new JSONObject();
-                    welcome.put("t", "welcome");
-                    welcome.put("room", room);
-                    c.send(welcome.toString());
-                    // Replay the room's history to the newcomer before anything else.
-                    synchronized (history) {
-                        for (String h : history) c.send(h);
-                    }
-                    c.joined = true;
+                    // On the worker so the history replay can't interleave
+                    // with a message being broadcast at the same moment.
+                    worker.execute(() -> {
+                        try {
+                            JSONObject welcome = new JSONObject();
+                            welcome.put("t", "welcome");
+                            welcome.put("room", room);
+                            c.send(welcome.toString());
+                            synchronized (history) {
+                                for (String h : history) c.send(h);
+                            }
+                            c.joined = true;
+                        } catch (Exception ignored) {}
+                    });
                     broadcastSys(c.name + " joined the room");
                 } else if ("msg".equals(t)) {
                     relay(c.name, c.color, o);
@@ -156,32 +188,36 @@ public class HostServer {
     }
 
     private void relay(String name, String color, JSONObject payload) {
-        try {
-            JSONObject o = new JSONObject();
-            o.put("t", "msg");
-            o.put("name", name);
-            o.put("color", color);
-            boolean hasContent = false;
-            for (String k : MSG_KEYS) {
-                if (payload.has(k)) {
-                    o.put(k, payload.get(k));
-                    hasContent = true;
+        worker.execute(() -> {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("t", "msg");
+                o.put("name", name);
+                o.put("color", color);
+                boolean hasContent = false;
+                for (String k : MSG_KEYS) {
+                    if (payload.has(k)) {
+                        o.put(k, payload.get(k));
+                        hasContent = true;
+                    }
                 }
-            }
-            if (!hasContent) return;
-            broadcastLine(o.toString());
-            listener.onMsg(o);
-        } catch (Exception ignored) {}
+                if (!hasContent) return;
+                broadcastLine(o.toString());
+                listener.onMsg(o);
+            } catch (Exception ignored) {}
+        });
     }
 
     private void broadcastSys(String text) {
-        try {
-            JSONObject o = new JSONObject();
-            o.put("t", "sys");
-            o.put("text", text);
-            broadcastLine(o.toString());
-            listener.onSys(text);
-        } catch (Exception ignored) {}
+        worker.execute(() -> {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("t", "sys");
+                o.put("text", text);
+                broadcastLine(o.toString());
+                listener.onSys(text);
+            } catch (Exception ignored) {}
+        });
     }
 
     private void broadcastLine(String line) {

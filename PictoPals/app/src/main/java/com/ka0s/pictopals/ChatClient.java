@@ -20,6 +20,7 @@ public class ChatClient {
         /** msg carries name, color and one of: png (base64) / text / die+result. */
         void onMsg(JSONObject msg);
         void onSys(String text);
+        void onClear();
         void onClosed(String reason);
     }
 
@@ -58,6 +59,8 @@ public class ChatClient {
                         listener.onMsg(o);
                     } else if ("sys".equals(t)) {
                         listener.onSys(o.optString("text"));
+                    } else if ("clear".equals(t)) {
+                        listener.onClear();
                     }
                     // "welcome" needs no handling beyond a successful connection
                 }

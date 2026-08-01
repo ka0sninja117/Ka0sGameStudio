@@ -29,6 +29,15 @@
             android:textStyle="bold" />
 
         <Button
+            android:id="@+id/clearChatBtn"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CLEAR"
+            android:textColor="#a0c8ff"
+            android:visibility="gone" />
+
+        <Button
             android:id="@+id/leaveBtn"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"

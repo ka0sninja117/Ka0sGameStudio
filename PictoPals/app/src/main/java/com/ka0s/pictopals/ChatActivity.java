@@ -125,6 +125,17 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
 
         findViewById(R.id.leaveBtn).setOnClickListener(v -> finish());
 
+        Button clearChatBtn = findViewById(R.id.clearChatBtn);
+        if (isHost) {
+            clearChatBtn.setVisibility(View.VISIBLE);
+            clearChatBtn.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                    .setTitle("Clear chat")
+                    .setMessage("Erase the chat for everyone in the room?")
+                    .setPositiveButton("Clear", (d, w) -> hostServer.clearChat())
+                    .setNegativeButton("Cancel", null)
+                    .show());
+        }
+
         if (isHost) {
             hostServer = new HostServer(room, name, color, this);
             try {
@@ -289,6 +300,14 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             Msg m = new Msg();
             m.sysText = text;
             messages.add(m);
+            adapter.notifyDataSetChanged();
+        });
+    }
+
+    @Override
+    public void onClear() {
+        runOnUiThread(() -> {
+            messages.clear();
             adapter.notifyDataSetChanged();
         });
     }
