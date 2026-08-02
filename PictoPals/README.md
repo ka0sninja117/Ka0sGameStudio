@@ -4,7 +4,15 @@ A PictoChat-style offline drawing chat for Android, inspired by the Nintendo DS
 Lite's PictoChat. No internet, no accounts, no servers — everything happens over
 a local WiFi network or one phone's hotspot, so it works on an airplane.
 
-**[⬇️ Download PictoPals-v1.8.apk](PictoPals-v1.8.apk)** (~30 KB)
+**[⬇️ Download the latest APK](PictoPals.apk)** — `PictoPals.apk` is always a
+copy of the newest numbered release.
+
+Release policy: every release is kept as its own numbered APK
+(`PictoPals-v1.X.apk`) alongside the others — old versions are never deleted
+by the release process (the owner prunes manually). All APKs are signed with
+the same key, so any of them installs; note that Android requires an
+uninstall before installing an *older* version over a newer one, and phones
+in the same room should all run the same version.
 
 ## Installing (sideloading)
 
