@@ -4,12 +4,12 @@ A PictoChat-style offline drawing chat for Android, inspired by the Nintendo DS
 Lite's PictoChat. No internet, no accounts, no servers — everything happens over
 a local WiFi network or one phone's hotspot, so it works on an airplane.
 
-**[⬇️ Download PictoPals-v1.5.apk](PictoPals-v1.5.apk)** (~30 KB)
+**[⬇️ Download PictoPals-v1.6.apk](PictoPals-v1.6.apk)** (~30 KB)
 
 ## Installing (sideloading)
 
 1. On each phone, open this file in the GitHub app or browser and download
-   `PictoPals-v1.5.apk` (tap **Raw** / **Download** on GitHub).
+   `PictoPals-v1.6.apk` (tap **Raw** / **Download** on GitHub).
 2. Open the downloaded file. Android will ask you to allow installs from that
    app (browser/Files) — allow it, then install.
 3. Play Protect may warn about an unknown developer; tap **Install anyway**.
@@ -29,10 +29,12 @@ a local WiFi network or one phone's hotspot, so it works on an airplane.
    other phones — tap it to join.
 6. Chat! The compose bar has three modes, switched with the bottom buttons:
    - **Aa** (default): type a message and hit SEND (or the keyboard's send key).
-   - **✏️ Draw**: sketch with a finger (✏️ thin pen, 🖊️ thick pen, 🧽 eraser,
-     🗑️ clear) and hit SEND.
+   - **✏️ Draw**: sketch with a finger in your chat color (✏️ thin pen,
+     🖊️ thick pen, 🧽 eraser, ↩️ undo last stroke, 🗑️ clear) and hit SEND.
    - **🎲 Dice**: pick a D&D die (D4–D20) and tap ROLL — the result is rolled
-     and sent to the chat in one tap.
+     and sent to the chat in one tap. Tap the same die again to stack rolls
+     ("2× D20", up to 10×) — multi-rolls show every result plus the total.
+     A natural 20 on a D20 gets a red 💥 CRIT! callout.
 
 Anyone who joins a room receives its full chat history, kept by the hosting
 phone (up to the last 200 messages). History lasts as long as the host stays

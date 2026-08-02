@@ -43,6 +43,7 @@ public class HostServer {
     private static final int MAX_PNG_B64_CHARS = 400_000;
     private static final int MAX_TEXT_CHARS = 500;
     private static final int MAX_NAME_CHARS = 16;
+    private static final int MAX_ROLLS = 10;
     /** Every Nth 1s beacon, ping all clients so their read timeout never trips while idle. */
     private static final int PING_EVERY_N_BEACONS = 10;
 
@@ -226,10 +227,16 @@ public class HostServer {
                     o.put("png", png);
                 } else if (payload.has("die")) {
                     int die = payload.optInt("die");
-                    int result = payload.optInt("result");
-                    if (!isRealDie(die) || result < 1 || result > die) return;
+                    org.json.JSONArray results = payload.optJSONArray("results");
+                    if (!isRealDie(die) || results == null) return;
+                    int n = results.length();
+                    if (n < 1 || n > MAX_ROLLS) return;
+                    for (int i = 0; i < n; i++) {
+                        int r = results.optInt(i);
+                        if (r < 1 || r > die) return;
+                    }
                     o.put("die", die);
-                    o.put("result", result);
+                    o.put("results", results);
                 } else if (payload.has("text")) {
                     String text = payload.optString("text").trim();
                     if (text.isEmpty()) return;

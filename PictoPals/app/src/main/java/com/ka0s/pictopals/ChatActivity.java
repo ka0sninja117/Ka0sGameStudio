@@ -48,7 +48,8 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
 
     private static class Msg {
         String name, color, sysText, text;
-        int die, result;
+        int die;
+        int[] results;
         Bitmap bitmap;
     }
 
@@ -74,6 +75,8 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     private final List<Button> diceButtons = new ArrayList<>();
     private TextView diceLabel;
     private int selectedDie = 20;
+    private int rollCount = 1;
+    private static final int MAX_ROLL_COUNT = 10;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -127,8 +130,12 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         bigBtn.setOnClickListener(v -> selectTool(DrawingView.TOOL_BIG, toolBtns, v));
         eraseBtn.setOnClickListener(v -> selectTool(DrawingView.TOOL_ERASER, toolBtns, v));
         selectTool(DrawingView.TOOL_PEN, toolBtns, penBtn);
+        findViewById(R.id.undoBtn).setOnClickListener(v -> drawView.undo());
         findViewById(R.id.clearBtn).setOnClickListener(v -> drawView.clear());
         findViewById(R.id.sendDrawBtn).setOnClickListener(v -> sendDrawing());
+        try {
+            drawView.setPenColor(Color.parseColor(color));
+        } catch (Exception ignored) {}
 
         // dice mode
         buildDiceRow();
@@ -235,9 +242,16 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         for (int die : DICE) {
             Button b = new Button(this);
             b.setText("D" + die);
+            // Tapping the selected die again stacks the roll (2× D20, 3× D20…),
+            // wrapping back to 1× past the cap.
             b.setOnClickListener(v -> {
-                selectedDie = die;
-                diceLabel.setText("D" + die);
+                if (selectedDie == die) {
+                    rollCount = rollCount % MAX_ROLL_COUNT + 1;
+                } else {
+                    selectedDie = die;
+                    rollCount = 1;
+                }
+                diceLabel.setText((rollCount > 1 ? rollCount + "× " : "") + "D" + selectedDie);
                 for (Button db : diceButtons) db.setAlpha(db == b ? 1f : 0.45f);
             });
             diceButtons.add(b);
@@ -276,9 +290,13 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
 
     private void rollAndSend() {
         try {
+            org.json.JSONArray results = new org.json.JSONArray();
+            for (int i = 0; i < rollCount; i++) {
+                results.put(random.nextInt(selectedDie) + 1);
+            }
             JSONObject payload = new JSONObject();
             payload.put("die", selectedDie);
-            payload.put("result", random.nextInt(selectedDie) + 1);
+            payload.put("results", results);
             sendPayload(payload);
         } catch (Exception ignored) {}
     }
@@ -326,7 +344,10 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             if (m.bitmap == null) return;
         } else if (o.has("die")) {
             m.die = o.optInt("die");
-            m.result = o.optInt("result");
+            org.json.JSONArray arr = o.optJSONArray("results");
+            if (arr == null || arr.length() == 0) return;
+            m.results = new int[arr.length()];
+            for (int i = 0; i < arr.length(); i++) m.results[i] = arr.optInt(i);
         } else if (o.has("text")) {
             m.text = o.optString("text");
         } else {
@@ -467,10 +488,23 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                 int w = parent.getWidth() > 0 ? parent.getWidth() - 40 : 800;
                 int h = Math.round(w * (float) m.bitmap.getHeight() / m.bitmap.getWidth());
                 box.addView(iv, new LinearLayout.LayoutParams(w, h));
-            } else if (m.die > 0) {
+            } else if (m.results != null) {
+                StringBuilder sb = new StringBuilder("🎲 rolled ");
+                if (m.results.length > 1) sb.append(m.results.length).append("× ");
+                sb.append("D").append(m.die).append(" …  ");
+                int total = 0;
+                boolean crit = false;
+                for (int i = 0; i < m.results.length; i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(m.results[i]);
+                    total += m.results[i];
+                    if (m.die == 20 && m.results[i] == 20) crit = true;
+                }
+                if (m.results.length > 1) sb.append("  (total ").append(total).append(")");
+                if (crit) sb.append("  💥 CRIT!");
                 TextView tv = new TextView(ctx);
-                tv.setText("🎲 rolled the D" + m.die + " …  " + m.result + " !");
-                tv.setTextColor(Color.parseColor("#2b3f52"));
+                tv.setText(sb.toString());
+                tv.setTextColor(crit ? Color.parseColor("#c62828") : Color.parseColor("#2b3f52"));
                 tv.setTextSize(19f);
                 tv.setTypeface(null, Typeface.BOLD);
                 tv.setPadding(20, 14, 20, 16);
