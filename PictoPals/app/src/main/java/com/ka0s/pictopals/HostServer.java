@@ -48,10 +48,12 @@ public class HostServer {
     private static final int PING_EVERY_N_BEACONS = 10;
 
     public interface Listener {
-        /** msg carries name, color and one of: png (base64) / text / die+result. */
+        /** msg carries name, color and one of: png (base64) / text / die+results. */
         void onMsg(JSONObject msg);
         void onSys(String text);
         void onClear();
+        /** Current room roster: array of {name, color}, host first. */
+        void onUsers(org.json.JSONArray users);
     }
 
     private final String room;
@@ -108,6 +110,7 @@ public class HostServer {
         beaconSocket.setBroadcast(true);
         new Thread(this::acceptLoop, "pp-accept").start();
         new Thread(this::beaconLoop, "pp-beacon").start();
+        broadcastUsers(); // seed the host's own member list
     }
 
     /** Says goodbye to clients (so they don't try to reconnect), then shuts down. */
@@ -196,6 +199,7 @@ public class HostServer {
                         } catch (Exception ignored) {}
                     });
                     broadcastSys(c.name + " joined the room");
+                    broadcastUsers();
                 } else if ("msg".equals(t)) {
                     relay(c.name, c.color, o);
                 }
@@ -209,8 +213,39 @@ public class HostServer {
             try { c.sock.close(); } catch (IOException ignored) {}
             if (c.joined && running) {
                 broadcastSys(c.name + " left the room");
+                broadcastUsers();
             }
         }
+    }
+
+    /**
+     * Sends the current roster to everyone. Deliberately not stored in
+     * history — it's current state, and each newcomer triggers a fresh
+     * broadcast right after their join anyway.
+     */
+    private void broadcastUsers() {
+        worker.execute(() -> {
+            try {
+                org.json.JSONArray list = new org.json.JSONArray();
+                JSONObject me = new JSONObject();
+                me.put("name", hostName);
+                me.put("color", hostColor);
+                list.put(me);
+                for (Client c : clients) {
+                    if (!c.joined) continue;
+                    JSONObject u = new JSONObject();
+                    u.put("name", c.name);
+                    u.put("color", c.color);
+                    list.put(u);
+                }
+                JSONObject o = new JSONObject();
+                o.put("t", "users");
+                o.put("list", list);
+                String line = o.toString();
+                for (Client c : clients) if (c.joined) c.send(line);
+                listener.onUsers(list);
+            } catch (Exception ignored) {}
+        });
     }
 
     private void relay(String name, String color, JSONObject payload) {

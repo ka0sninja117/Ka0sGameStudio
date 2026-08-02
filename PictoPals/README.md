@@ -4,12 +4,12 @@ A PictoChat-style offline drawing chat for Android, inspired by the Nintendo DS
 Lite's PictoChat. No internet, no accounts, no servers — everything happens over
 a local WiFi network or one phone's hotspot, so it works on an airplane.
 
-**[⬇️ Download PictoPals-v1.6.apk](PictoPals-v1.6.apk)** (~30 KB)
+**[⬇️ Download PictoPals-v1.7.apk](PictoPals-v1.7.apk)** (~30 KB)
 
 ## Installing (sideloading)
 
 1. On each phone, open this file in the GitHub app or browser and download
-   `PictoPals-v1.6.apk` (tap **Raw** / **Download** on GitHub).
+   `PictoPals-v1.7.apk` (tap **Raw** / **Download** on GitHub).
 2. Open the downloaded file. Android will ask you to allow installs from that
    app (browser/Files) — allow it, then install.
 3. Play Protect may warn about an unknown developer; tap **Install anyway**.
@@ -27,7 +27,8 @@ a local WiFi network or one phone's hotspot, so it works on an airplane.
 4. The hotspot phone taps **Host** → room A, B, C, or D.
 5. Within a couple of seconds the room appears under **Nearby rooms** on the
    other phones — tap it to join.
-6. Chat! The compose bar has three modes, switched with the bottom buttons:
+6. Chat! Tap the room title any time to see who is in the room. The compose
+   bar has three modes, switched with the bottom buttons:
    - **Aa** (default): type a message and hit SEND (or the keyboard's send key).
    - **✏️ Draw**: sketch with a finger in your chat color (✏️ thin pen,
      🖊️ thick pen, 🧽 eraser, ↩️ undo last stroke, 🗑️ clear) and hit SEND.

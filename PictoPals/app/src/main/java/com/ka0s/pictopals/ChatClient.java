@@ -31,6 +31,8 @@ public class ChatClient {
         void onMsg(JSONObject msg);
         void onSys(String text);
         void onClear();
+        /** Current room roster: array of {name, color}, host first. */
+        void onUsers(org.json.JSONArray users);
         /** canRetry=false means the host deliberately closed the room. */
         void onClosed(String reason, boolean canRetry);
     }
@@ -73,6 +75,9 @@ public class ChatClient {
                         listener.onSys(o.optString("text"));
                     } else if ("clear".equals(t)) {
                         listener.onClear();
+                    } else if ("users".equals(t)) {
+                        org.json.JSONArray list = o.optJSONArray("list");
+                        if (list != null) listener.onUsers(list);
                     } else if ("welcome".equals(t)) {
                         startPings();
                         listener.onConnected();

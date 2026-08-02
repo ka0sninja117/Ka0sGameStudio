@@ -78,6 +78,9 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     private int rollCount = 1;
     private static final int MAX_ROLL_COUNT = 10;
 
+    /** Latest roster from the host: [name, color] pairs, host first. */
+    private final List<String[]> roomUsers = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -92,7 +95,8 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
 
         TextView title = findViewById(R.id.roomTitle);
         title.setText(("?".equals(room) ? "Room" : "Room " + room)
-                + (isHost ? "  (hosting)" : ""));
+                + (isHost ? " (hosting)" : "") + "  👥");
+        title.setOnClickListener(v -> showMembersDialog());
 
         drawView = findViewById(R.id.drawView);
         msgEdit = findViewById(R.id.msgEdit);
@@ -387,6 +391,47 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         messages.add(m);
         while (messages.size() > MAX_SHOWN_MESSAGES) messages.remove(0);
         adapter.notifyDataSetChanged();
+    }
+
+    @Override
+    public void onUsers(org.json.JSONArray users) {
+        List<String[]> parsed = new ArrayList<>();
+        for (int i = 0; i < users.length(); i++) {
+            JSONObject u = users.optJSONObject(i);
+            if (u != null) parsed.add(new String[]{u.optString("name", "?"),
+                    u.optString("color", "#444444")});
+        }
+        runOnUiThread(() -> {
+            roomUsers.clear();
+            roomUsers.addAll(parsed);
+        });
+    }
+
+    private void showMembersDialog() {
+        if (roomUsers.isEmpty()) {
+            Toast.makeText(this, "Member list hasn't arrived yet — try again in a second.",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        CharSequence[] items = new CharSequence[roomUsers.size()];
+        for (int i = 0; i < roomUsers.size(); i++) {
+            String[] u = roomUsers.get(i);
+            String label = "●  " + u[0] + (i == 0 ? "  (host)" : "");
+            android.text.SpannableString s = new android.text.SpannableString(label);
+            int c;
+            try {
+                c = Color.parseColor(u[1]);
+            } catch (Exception e) {
+                c = Color.DKGRAY;
+            }
+            s.setSpan(new android.text.style.ForegroundColorSpan(c), 0, 1, 0);
+            items[i] = s;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("In this room (" + roomUsers.size() + ")")
+                .setItems(items, null)
+                .setPositiveButton("Close", null)
+                .show();
     }
 
     @Override
