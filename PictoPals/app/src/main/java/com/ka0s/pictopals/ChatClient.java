@@ -33,6 +33,8 @@ public class ChatClient {
         void onClear();
         /** Current room roster: array of {name, color}, host first. */
         void onUsers(org.json.JSONArray users);
+        /** Chicken Time Warp state/hand/ask/peek events. */
+        void onGame(JSONObject msg);
         /** canRetry=false means the host deliberately closed the room. */
         void onClosed(String reason, boolean canRetry);
     }
@@ -78,6 +80,8 @@ public class ChatClient {
                     } else if ("users".equals(t)) {
                         org.json.JSONArray list = o.optJSONArray("list");
                         if (list != null) listener.onUsers(list);
+                    } else if ("game".equals(t)) {
+                        listener.onGame(o);
                     } else if ("welcome".equals(t)) {
                         startPings();
                         listener.onConnected();
@@ -113,6 +117,16 @@ public class ChatClient {
                 // reader thread notices the dead socket and reports onClosed
             }
         }, PING_INTERVAL_S, PING_INTERVAL_S, TimeUnit.SECONDS);
+    }
+
+    /** Sends a Chicken Time Warp action (already carrying t=game and an "a" field). */
+    public void sendGame(JSONObject o) {
+        sender.execute(() -> {
+            try {
+                o.put("t", "game");
+                writeLine(o.toString());
+            } catch (Exception ignored) {}
+        });
     }
 
     /** payload holds png / text / die+result; the host adds name and color. */

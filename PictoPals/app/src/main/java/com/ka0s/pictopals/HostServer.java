@@ -54,6 +54,8 @@ public class HostServer {
         void onClear();
         /** Current room roster: array of {name, color}, host first. */
         void onUsers(org.json.JSONArray users);
+        /** Chicken Time Warp state/hand/ask/peek events addressed to the host player. */
+        void onGame(JSONObject msg);
     }
 
     private final String room;
@@ -72,6 +74,9 @@ public class HostServer {
      * the host itself sends (Android forbids network I/O on the main thread).
      */
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+
+    /** Chicken Time Warp engine; lives with the room, all calls on the worker. */
+    private com.ka0s.pictopals.game.GameEngine game;
 
     private static class Client {
         final Socket sock;
@@ -101,6 +106,40 @@ public class HostServer {
         this.hostName = hostName;
         this.hostColor = hostColor;
         this.listener = listener;
+        this.game = new com.ka0s.pictopals.game.GameEngine(hostName,
+                new com.ka0s.pictopals.game.GameEngine.Io() {
+                    @Override
+                    public void broadcast(JSONObject o) {
+                        String line = o.toString();
+                        for (Client c : clients) if (c.joined) c.send(line);
+                        listener.onGame(o);
+                    }
+
+                    @Override
+                    public void sendTo(String player, JSONObject o) {
+                        if (player.equals(hostName)) {
+                            listener.onGame(o);
+                            return;
+                        }
+                        String line = o.toString();
+                        for (Client c : clients) if (c.joined && c.name.equals(player)) c.send(line);
+                    }
+
+                    @Override
+                    public void sys(String text) {
+                        broadcastSys(text);
+                    }
+
+                    @Override
+                    public void runOnWorker(Runnable r) {
+                        worker.execute(r);
+                    }
+                });
+    }
+
+    /** Game actions taken by the host player's own UI. */
+    public void gameActionFromHost(JSONObject o) {
+        worker.execute(() -> game.handleAction(hostName, hostColor, o));
     }
 
     /** Throws if the port is already taken (e.g. another room hosted on this phone). */
@@ -116,6 +155,7 @@ public class HostServer {
     /** Says goodbye to clients (so they don't try to reconnect), then shuts down. */
     public void stop() {
         running = false;
+        game.shutdown();
         worker.execute(() -> {
             try {
                 JSONObject o = new JSONObject();
@@ -200,8 +240,11 @@ public class HostServer {
                     });
                     broadcastSys(c.name + " joined the room");
                     broadcastUsers();
+                    worker.execute(() -> game.playerJoined(c.name, c.color));
                 } else if ("msg".equals(t)) {
                     relay(c.name, c.color, o);
+                } else if ("game".equals(t)) {
+                    worker.execute(() -> game.handleAction(c.name, c.color, o));
                 }
                 // "ping" (and anything unknown) needs no handling: any traffic
                 // resets the read timeout, which is the ping's whole job
@@ -214,6 +257,7 @@ public class HostServer {
             if (c.joined && running) {
                 broadcastSys(c.name + " left the room");
                 broadcastUsers();
+                worker.execute(() -> game.playerLeft(c.name));
             }
         }
     }

@@ -4,12 +4,12 @@ A PictoChat-style offline drawing chat for Android, inspired by the Nintendo DS
 Lite's PictoChat. No internet, no accounts, no servers — everything happens over
 a local WiFi network or one phone's hotspot, so it works on an airplane.
 
-**[⬇️ Download PictoPals-v1.7.apk](PictoPals-v1.7.apk)** (~30 KB)
+**[⬇️ Download PictoPals-v1.8.apk](PictoPals-v1.8.apk)** (~30 KB)
 
 ## Installing (sideloading)
 
 1. On each phone, open this file in the GitHub app or browser and download
-   `PictoPals-v1.7.apk` (tap **Raw** / **Download** on GitHub).
+   `PictoPals-v1.8.apk` (tap **Raw** / **Download** on GitHub).
 2. Open the downloaded file. Android will ask you to allow installs from that
    app (browser/Files) — allow it, then install.
 3. Play Protect may warn about an unknown developer; tap **Install anyway**.
@@ -36,6 +36,29 @@ a local WiFi network or one phone's hotspot, so it works on an airplane.
      and sent to the chat in one tap. Tap the same die again to stack rolls
      ("2× D20", up to 10×) — multi-rolls show every result plus the total.
      A natural 20 on a D20 gets a red 💥 CRIT! callout.
+
+## Chicken Time Warp 🐔
+
+A digital adaptation of the card game by CrashStache Games (for private family
+play — buy the real deck, it's great). The host opens the **🐔 Game** tab and
+taps **Start a game**; everyone else joins from the same tab (2–6 players,
+officially 3–6). The hosting phone runs the whole game and deals secretly, so
+nobody can peek at the deck — each phone sees only its own hand.
+
+- Your chat name and color are your chicken; the timeline is the countdown
+  strip at the top of the game tab (🌀 face-down, numbers face-up, ✕ erased,
+  🚪 the Escape Window).
+- On your turn a card is flipped automatically; tap a card to play it (with
+  target pickers for Swap/Thief/Peek/Freeze) or tap "Just draw & end turn."
+- You Dead, Clux Capacitor saves, Swap Block reactions, Time Slips Away,
+  Mooch restrictions, the frozen timeline, and the Final Countdown rule all
+  work per the rulebook. Reaction prompts auto-resolve after 30 seconds so a
+  distracted kid can't stall the game.
+- Dead chickens cling to the timeline and come back if time rewinds past
+  them; erased minutes take their chickens with them permanently.
+- The chat keeps working during a game and doubles as the game log, so
+  spectators can follow along. Players who disconnect are auto-played
+  (skip + draw) until they reconnect and take back their seat.
 
 Anyone who joins a room receives its full chat history, kept by the hosting
 phone (up to the last 200 messages). History lasts as long as the host stays

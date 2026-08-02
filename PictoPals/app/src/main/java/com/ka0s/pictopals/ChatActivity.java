@@ -70,8 +70,14 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     private boolean reconnecting = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private View textPane, drawPane, dicePane;
-    private Button modeTextBtn, modeDrawBtn, modeDiceBtn;
+    private View textPane, drawPane, dicePane, gamePane;
+    private Button modeTextBtn, modeDrawBtn, modeDiceBtn, modeGameBtn;
+    private LinearLayout gameContent;
+
+    // Chicken Time Warp client-side state
+    private JSONObject gameState;
+    private final List<String> myHand = new ArrayList<>();
+    private android.app.AlertDialog reactDialog;
     private final List<Button> diceButtons = new ArrayList<>();
     private TextView diceLabel;
     private int selectedDie = 20;
@@ -92,6 +98,8 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         String name = getIntent().getStringExtra("name");
         String color = getIntent().getStringExtra("color");
         isHost = "host".equals(mode);
+        myName = name;
+        myColor = color;
 
         TextView title = findViewById(R.id.roomTitle);
         title.setText(("?".equals(room) ? "Room" : "Room " + room)
@@ -107,13 +115,21 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         textPane = findViewById(R.id.textPane);
         drawPane = findViewById(R.id.drawPane);
         dicePane = findViewById(R.id.dicePane);
+        gamePane = findViewById(R.id.gamePane);
+        gameContent = findViewById(R.id.gameContent);
         modeTextBtn = findViewById(R.id.modeTextBtn);
         modeDrawBtn = findViewById(R.id.modeDrawBtn);
         modeDiceBtn = findViewById(R.id.modeDiceBtn);
+        modeGameBtn = findViewById(R.id.modeGameBtn);
         modeTextBtn.setOnClickListener(v -> showPane(textPane));
         modeDrawBtn.setOnClickListener(v -> showPane(drawPane));
         modeDiceBtn.setOnClickListener(v -> showPane(dicePane));
+        modeGameBtn.setOnClickListener(v -> {
+            showPane(gamePane);
+            renderGame();
+        });
         showPane(textPane);
+        renderGame();
 
         // text mode
         findViewById(R.id.sendTextBtn).setOnClickListener(v -> sendTypedText());
@@ -230,9 +246,11 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         textPane.setVisibility(pane == textPane ? View.VISIBLE : View.GONE);
         drawPane.setVisibility(pane == drawPane ? View.VISIBLE : View.GONE);
         dicePane.setVisibility(pane == dicePane ? View.VISIBLE : View.GONE);
+        gamePane.setVisibility(pane == gamePane ? View.VISIBLE : View.GONE);
         modeTextBtn.setAlpha(pane == textPane ? 1f : 0.45f);
         modeDrawBtn.setAlpha(pane == drawPane ? 1f : 0.45f);
         modeDiceBtn.setAlpha(pane == dicePane ? 1f : 0.45f);
+        modeGameBtn.setAlpha(pane == gamePane ? 1f : 0.45f);
     }
 
     private void selectTool(int tool, View[] toolBtns, View active) {
@@ -463,6 +481,386 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                 connectClient();
             }, RECONNECT_DELAY_MS);
         });
+    }
+
+    // ---- Chicken Time Warp ----
+
+    @Override
+    public void onGame(JSONObject o) {
+        runOnUiThread(() -> {
+            String e = o.optString("e");
+            if ("state".equals(e)) {
+                gameState = o;
+                if (reactDialog != null && !myName.equals(o.optString("waiting", ""))) {
+                    reactDialog.dismiss();
+                    reactDialog = null;
+                }
+                renderGame();
+            } else if ("hand".equals(e)) {
+                myHand.clear();
+                org.json.JSONArray arr = o.optJSONArray("cards");
+                if (arr != null) for (int i = 0; i < arr.length(); i++) myHand.add(arr.optString(i));
+                renderGame();
+            } else if ("ask".equals(e)) {
+                showReactDialog(o.optString("kind"), o.optString("from"));
+            } else if ("peek".equals(e)) {
+                StringBuilder sb = new StringBuilder();
+                org.json.JSONArray arr = o.optJSONArray("cards");
+                if (arr != null) for (int i = 0; i < arr.length(); i++) {
+                    sb.append("• ").append(com.ka0s.pictopals.game.GameEngine.cardName(arr.optString(i))).append('\n');
+                }
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("👀 " + o.optString("target") + "'s hand")
+                        .setMessage(sb.length() == 0 ? "(empty)" : sb.toString())
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
+        });
+    }
+
+    private void gameSend(JSONObject a) {
+        if (isHost) hostServer.gameActionFromHost(a);
+        else client.sendGame(a);
+    }
+
+    private JSONObject act(String a) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("t", "game");
+            o.put("a", a);
+        } catch (Exception ignored) {}
+        return o;
+    }
+
+    private static String cardEmoji(String id) {
+        switch (id) {
+            case "clux": return "⚡";
+            case "mooch": return "🤲";
+            case "freeze": return "🧊";
+            case "thief": return "🦹";
+            case "reverse": return "↩️";
+            case "peek": return "👀";
+            case "stock": return "🃏";
+            case "swap": return "🔄";
+            case "block": return "🛡";
+            case "pod": return "🚀";
+            default: return "🂠";
+        }
+    }
+
+    private static String cardDesc(String id) {
+        switch (id) {
+            case "clux": return "Reverse time 3 minutes. Also saves you from You Dead.";
+            case "mooch": return "Take the top useful card from the discard pile instead of drawing.";
+            case "freeze": return "A player misses their next turn. (because ice)";
+            case "thief": return "Name a card; if the target has it, it's yours.";
+            case "reverse": return "Reverse the order of play after your turn.";
+            case "peek": return "Look at any player's whole hand.";
+            case "stock": return "Draw two cards instead of one.";
+            case "swap": return "Trade hands with another player (they can Swap Block).";
+            case "block": return "Auto-offered when someone tries to swap hands with you.";
+            case "pod": return "Play while the Escape Window is open to WIN THE GAME!";
+            default: return "";
+        }
+    }
+
+    private JSONObject mySeat() {
+        if (gameState == null) return null;
+        org.json.JSONArray ps = gameState.optJSONArray("players");
+        if (ps == null) return null;
+        for (int i = 0; i < ps.length(); i++) {
+            JSONObject p = ps.optJSONObject(i);
+            if (p != null && myName.equals(p.optString("n"))) return p;
+        }
+        return null;
+    }
+
+    private void addGameText(String text, int sizeSp, boolean bold, int color) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(sizeSp);
+        tv.setTextColor(color);
+        if (bold) tv.setTypeface(null, Typeface.BOLD);
+        tv.setPadding(4, 6, 4, 6);
+        gameContent.addView(tv);
+    }
+
+    private void addGameButton(String label, Runnable action) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setOnClickListener(v -> action.run());
+        gameContent.addView(b);
+    }
+
+    private void renderGame() {
+        if (gameContent == null) return;
+        gameContent.removeAllViews();
+        int ink = Color.parseColor("#2b3f52");
+        String phase = gameState == null ? "idle" : gameState.optString("phase", "idle");
+
+        if ("idle".equals(phase)) {
+            addGameText("Chicken Time Warp 🐔 — escape the time loop before the multiverse collapses!",
+                    14, false, ink);
+            if (isHost) {
+                addGameButton("🐔 Start a game", () -> gameSend(act("join")));
+            } else {
+                addGameText("Ask the host to start a game.", 13, false, Color.parseColor("#7a8a99"));
+            }
+            return;
+        }
+
+        org.json.JSONArray ps = gameState.optJSONArray("players");
+        int n = ps == null ? 0 : ps.length();
+        boolean seated = mySeat() != null;
+
+        if ("lobby".equals(phase)) {
+            addGameText("🐔 Game forming — " + n + "/6 chickens:", 15, true, ink);
+            StringBuilder names = new StringBuilder();
+            for (int i = 0; i < n; i++) names.append(i > 0 ? ", " : "").append(ps.optJSONObject(i).optString("n"));
+            addGameText(names.toString(), 14, false, ink);
+            if (!seated) addGameButton("Join the game", () -> gameSend(act("join")));
+            else if (!isHost) addGameButton("Leave the game", () -> gameSend(act("leave")));
+            if (isHost) {
+                addGameButton(n >= 2 ? "▶️ Begin!" : "▶️ Begin (need 2+ players)", () -> gameSend(act("begin")));
+                addGameButton("Cancel game", () -> gameSend(act("abort")));
+            }
+            return;
+        }
+
+        boolean over = "over".equals(phase);
+        String cur = gameState.optString("cur", "");
+        String waiting = gameState.optString("waiting", "");
+        boolean ew = gameState.optBoolean("ew");
+        JSONObject me = mySeat();
+        boolean iAmAlive = me != null && me.optBoolean("alive") && !me.optBoolean("out");
+        boolean myTurn = !over && seated && iAmAlive && myName.equals(cur) && waiting.isEmpty();
+
+        if (over) {
+            String w = gameState.isNull("winner") ? null : gameState.optString("winner", null);
+            addGameText(w == null ? "💥 The multiverse collapsed — every chicken is lost."
+                    : "🏆 " + w + " escaped the time loop and WINS!", 17, true,
+                    w == null ? Color.parseColor("#c62828") : ink);
+            if (isHost) addGameButton("🐔 New game", () -> gameSend(act("newgame")));
+        } else if (ew) {
+            addGameText("🚨 ESCAPE WINDOW OPEN!" + (myTurn ? "  YOUR TURN!" : "  " + cur + "'s turn."),
+                    16, true, Color.parseColor("#c62828"));
+        } else if (!waiting.isEmpty()) {
+            addGameText("⏳ Waiting for " + waiting + "…", 15, true, ink);
+        } else {
+            addGameText(myTurn ? "▶️ YOUR TURN — play a card or draw!" : "▶️ " + cur + "'s turn"
+                    + (gameState.optInt("dir", 1) < 0 ? "  (order reversed)" : ""), 15, true, ink);
+        }
+
+        // timeline strip
+        LinearLayout tl = new LinearLayout(this);
+        tl.setOrientation(LinearLayout.HORIZONTAL);
+        org.json.JSONArray slots = gameState.optJSONArray("timeline");
+        StringBuilder deadNotes = new StringBuilder();
+        if (slots != null) {
+            for (int i = 0; i < slots.length(); i++) {
+                JSONObject slot = slots.optJSONObject(i);
+                int v = slot.optInt("v");
+                String s = slot.optString("s");
+                TextView cell = new TextView(this);
+                cell.setGravity(Gravity.CENTER);
+                cell.setTextSize(15);
+                cell.setPadding(6, 10, 6, 10);
+                GradientDrawable bg = new GradientDrawable();
+                bg.setCornerRadius(8f);
+                if ("x".equals(s)) {
+                    cell.setText("✕");
+                    bg.setColor(Color.parseColor("#b9c3cc"));
+                    cell.setTextColor(Color.parseColor("#7a8a99"));
+                } else if ("d".equals(s)) {
+                    cell.setText("🌀");
+                    bg.setColor(Color.parseColor("#2b3f52"));
+                    cell.setTextColor(Color.WHITE);
+                } else if (v == 0) {
+                    cell.setText("🚪!");
+                    bg.setColor(Color.parseColor("#c62828"));
+                    cell.setTextColor(Color.WHITE);
+                    cell.setTypeface(null, Typeface.BOLD);
+                } else {
+                    cell.setText(String.valueOf(v));
+                    bg.setColor(Color.WHITE);
+                    cell.setTextColor(v <= 3 ? Color.parseColor("#c62828") : ink);
+                    cell.setTypeface(null, Typeface.BOLD);
+                }
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                lp.setMargins(2, 2, 2, 2);
+                cell.setBackground(bg);
+                tl.addView(cell, lp);
+                if (ps != null) {
+                    for (int j = 0; j < ps.length(); j++) {
+                        JSONObject p = ps.optJSONObject(j);
+                        if (p != null && p.optInt("dead", -1) == i) {
+                            deadNotes.append("💀 ").append(p.optString("n"))
+                                    .append(" clings to ").append(v == 0 ? "the Window" : "minute " + v)
+                                    .append("   ");
+                        }
+                    }
+                }
+            }
+        }
+        gameContent.addView(tl);
+        if (deadNotes.length() > 0) addGameText(deadNotes.toString().trim(), 12, false, Color.parseColor("#7a8a99"));
+
+        // players
+        StringBuilder pl = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            JSONObject p = ps.optJSONObject(i);
+            if (p == null) continue;
+            if (i > 0) pl.append("   ");
+            if (p.optString("n").equals(cur) && !over) pl.append("▶");
+            if (p.optBoolean("out")) pl.append("☠️");
+            else if (!p.optBoolean("alive")) pl.append("💀");
+            if (p.optBoolean("frozen")) pl.append("🧊");
+            if (!p.optBoolean("conn", true)) pl.append("⚠️");
+            pl.append(p.optString("n")).append("(").append(p.optInt("hand")).append(")");
+        }
+        addGameText(pl.toString(), 13, false, ink);
+        String top = gameState.isNull("discard") ? null : gameState.optString("discard", null);
+        addGameText("Draw pile: " + gameState.optInt("draw") +
+                (top == null ? "" : "  ·  Moochable: " + com.ka0s.pictopals.game.GameEngine.cardName(top)),
+                12, false, Color.parseColor("#7a8a99"));
+
+        // my hand
+        if (seated && !over) {
+            if (!iAmAlive) {
+                addGameText(me != null && me.optBoolean("out")
+                        ? "☠️ You're gone from the multiverse. Spectate and heckle."
+                        : "💀 You are dead — a time reversal could still bring you back…", 14, true, ink);
+            }
+            addGameText("Your hand:", 13, true, ink);
+            android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+            LinearLayout handRow = new LinearLayout(this);
+            handRow.setOrientation(LinearLayout.HORIZONTAL);
+            for (String id : myHand) {
+                Button b = new Button(this);
+                b.setText(cardEmoji(id) + " " + com.ka0s.pictopals.game.GameEngine.cardName(id));
+                b.setAllCaps(false);
+                b.setAlpha(myTurn ? 1f : 0.6f);
+                b.setOnClickListener(v -> onCardTap(id, myTurn));
+                handRow.addView(b);
+            }
+            hs.addView(handRow);
+            gameContent.addView(hs);
+            if (myTurn) {
+                addGameButton("🂠 Just draw & end turn", () -> gameSend(act("pass")));
+            }
+        } else if (!seated && !over) {
+            addGameText("👀 You're spectating this game — follow along in the chat log.", 13, false,
+                    Color.parseColor("#7a8a99"));
+        }
+        if (isHost && !over) {
+            addGameButton("End game (host)", () -> new android.app.AlertDialog.Builder(this)
+                    .setMessage("End the game for everyone?")
+                    .setPositiveButton("End it", (d, w) -> gameSend(act("abort")))
+                    .setNegativeButton("Cancel", null)
+                    .show());
+        }
+    }
+
+    private void onCardTap(String id, boolean myTurn) {
+        if (!myTurn) {
+            Toast.makeText(this, cardDesc(id), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if ("block".equals(id)) {
+            Toast.makeText(this, "Swap Block plays itself when someone swaps with you.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean needsTarget = "swap".equals(id) || "thief".equals(id) || "peek".equals(id) || "freeze".equals(id);
+        if (!needsTarget) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle(cardEmoji(id) + " " + com.ka0s.pictopals.game.GameEngine.cardName(id))
+                    .setMessage(cardDesc(id))
+                    .setPositiveButton("Play it", (d, w) -> {
+                        JSONObject a = act("play");
+                        try { a.put("card", id); } catch (Exception ignored) {}
+                        gameSend(a);
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            return;
+        }
+        // pick a target
+        org.json.JSONArray ps = gameState == null ? null : gameState.optJSONArray("players");
+        List<String> targets = new ArrayList<>();
+        if (ps != null) for (int i = 0; i < ps.length(); i++) {
+            JSONObject p = ps.optJSONObject(i);
+            if (p == null || myName.equals(p.optString("n")) || p.optBoolean("out")) continue;
+            if (!"peek".equals(id) && !p.optBoolean("alive")) continue;
+            targets.add(p.optString("n"));
+        }
+        if (targets.isEmpty()) {
+            Toast.makeText(this, "No valid targets!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] arr = targets.toArray(new String[0]);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(cardEmoji(id) + " " + com.ka0s.pictopals.game.GameEngine.cardName(id) + " — pick a target")
+                .setItems(arr, (d, which) -> {
+                    String target = arr[which];
+                    if ("thief".equals(id)) {
+                        pickWantThenPlay(target);
+                    } else {
+                        JSONObject a = act("play");
+                        try {
+                            a.put("card", id);
+                            a.put("target", target);
+                        } catch (Exception ignored) {}
+                        gameSend(a);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void pickWantThenPlay(String target) {
+        String[] ids = {"pod", "clux", "swap", "block", "thief", "peek", "freeze", "stock", "mooch", "reverse"};
+        String[] labels = new String[ids.length];
+        for (int i = 0; i < ids.length; i++) {
+            labels[i] = cardEmoji(ids[i]) + " " + com.ka0s.pictopals.game.GameEngine.cardName(ids[i]);
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("🦹 Demand which card from " + target + "?")
+                .setItems(labels, (d, which) -> {
+                    JSONObject a = act("play");
+                    try {
+                        a.put("card", "thief");
+                        a.put("target", target);
+                        a.put("want", ids[which]);
+                    } catch (Exception ignored) {}
+                    gameSend(a);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showReactDialog(String kind, String from) {
+        if (reactDialog != null) reactDialog.dismiss();
+        boolean isClux = "clux".equals(kind);
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this)
+                .setCancelable(false)
+                .setTitle(isClux ? "☠️ YOU DEAD!" : "🔄 Incoming swap!")
+                .setMessage(isClux
+                        ? "You drew You Dead! Burn a Clux Capacitor to reverse time and survive? (auto-yes in 30s)"
+                        : from + " is trying to swap hands with you! Play your Swap Block? (auto-allow in 30s)")
+                .setPositiveButton(isClux ? "⚡ Use it!" : "🛡 Block it!", (d, w) -> {
+                    JSONObject a = act("react");
+                    try { a.put("yes", true); } catch (Exception ignored) {}
+                    gameSend(a);
+                    reactDialog = null;
+                })
+                .setNegativeButton(isClux ? "Accept death" : "Let it happen", (d, w) -> {
+                    JSONObject a = act("react");
+                    try { a.put("yes", false); } catch (Exception ignored) {}
+                    gameSend(a);
+                    reactDialog = null;
+                });
+        reactDialog = b.show();
     }
 
     // ---- message list ----
