@@ -18,6 +18,10 @@ import java.util.concurrent.TimeUnit;
  * implementation provides runOnWorker for timer callbacks). Clients only ever
  * see public state plus their own hand, so the deck can't be peeked at.
  *
+ * Every notable moment goes through {@link #event}, which both writes the
+ * chat log line and publishes it as the "last event" banner in the state, so
+ * players can follow the game from the game tab alone.
+ *
  * Digital adaptation of the card game by CrashStache Games, for private
  * family play. Chat names/colors stand in for the character cards, and the
  * timeline is rendered as a countdown strip.
@@ -60,6 +64,25 @@ public class GameEngine {
         }
     }
 
+    /** One icon per card, shared by the hand tiles, the log and the banner. */
+    public static String cardIcon(String id) {
+        switch (id) {
+            case CLUX: return "⚡";
+            case MOOCH: return "♻️";
+            case FREEZE: return "🧊";
+            case THIEF: return "🦹";
+            case REVERSE: return "🙃";
+            case PEEK: return "👀";
+            case STOCK: return "🃏";
+            case SWAP: return "🔄";
+            case BLOCK: return "🛡️";
+            case DEAD: return "☠️";
+            case SLIPS: return "⌛";
+            case POD: return "🚀";
+            default: return "🂠";
+        }
+    }
+
     private static final int MAX_SEATS = 6;
     private static final int MIN_SEATS = 2; // official game says 3-6; 2 works for a family duo
     private static final int REACT_TIMEOUT_S = 30;
@@ -90,6 +113,10 @@ public class GameEngine {
     private boolean pendReverse = false;
     private String winner = null;
 
+    // "what just happened" banner
+    private String lastIcon = "🐔", lastText = "Chicken Time Warp";
+    private int seq = 0;
+
     // pending reaction (Swap Block or death-Clux)
     private String pendKind = null, pendTarget = null, pendFrom = null;
     private int stashedDraws = 0;
@@ -106,6 +133,15 @@ public class GameEngine {
 
     public boolean isIdle() {
         return phase == Phase.IDLE;
+    }
+
+    /** Logs a moment and publishes it as the banner every phone can see. */
+    private void event(String icon, String text) {
+        lastIcon = icon;
+        lastText = text;
+        seq++;
+        io.sys(icon + " " + text);
+        broadcastState();
     }
 
     // ---- entry point for all player actions ----
@@ -153,7 +189,7 @@ public class GameEngine {
         if (pendKind != null && s.name.equals(pendTarget)) {
             resolveReact(CLUX.equals(pendKind)); // default: use the capacitor, decline the block
         } else if (pendKind == null && s == cur() && s.alive && !s.out) {
-            io.sys("🐔 " + name + " is away — auto-drawing for them.");
+            event("🐔", name + " is away — auto-drawing for them.");
             drawPhase(1);
         }
     }
@@ -165,14 +201,14 @@ public class GameEngine {
         if (phase == Phase.IDLE) {
             if (!name.equals(hostName)) return; // only the host opens a game lobby
             phase = Phase.LOBBY;
-            io.sys("🐔 " + name + " is starting a game of Chicken Time Warp! Open the 🐔 tab to join.");
+            event("🐔", name + " is starting a game of Chicken Time Warp! Open the 🐔 tab to join.");
         }
         if (seatOf(name) == null && seats.size() < MAX_SEATS) {
             Seat s = new Seat();
             s.name = name;
             s.color = color;
             seats.add(s);
-            io.sys("🐔 " + name + " joined the game (" + seats.size() + " playing).");
+            event("🐔", name + " joined the game (" + seats.size() + " playing).");
         }
         broadcastState();
     }
@@ -182,8 +218,7 @@ public class GameEngine {
         Seat s = seatOf(name);
         if (s != null) {
             seats.remove(s);
-            io.sys("🐔 " + name + " left the game.");
-            broadcastState();
+            event("🐔", name + " left the game.");
         }
     }
 
@@ -221,7 +256,7 @@ public class GameEngine {
         clearPending();
         curIdx = rng.nextInt(seats.size());
         phase = Phase.ACTIVE;
-        io.sys("🐔 Chicken Time Warp begins! " + seats.size()
+        event("🐔", "Chicken Time Warp begins! " + seats.size()
                 + " chickens, one escape pod. Good luck.");
         sendAllHands();
         startTurn();
@@ -232,8 +267,7 @@ public class GameEngine {
         phase = Phase.IDLE;
         seats.clear();
         clearPending();
-        io.sys("🐔 The host ended the game.");
-        broadcastState();
+        event("🐔", "The host ended the game.");
     }
 
     private void newGame(String name, String color) {
@@ -255,7 +289,7 @@ public class GameEngine {
             }
             if (s.frozen) {
                 s.frozen = false;
-                io.sys("🧊 " + s.name + " is frozen solid and misses their turn.");
+                event("🧊", s.name + " is frozen solid and misses their turn.");
                 advance();
                 continue;
             }
@@ -271,16 +305,16 @@ public class GameEngine {
             if (idx >= 0) {
                 tlState[idx] = 'u';
                 if (tlVal[idx] == 0) {
-                    io.sys("🚨 ESCAPE WINDOW OPEN! Play the Escape Pod on your turn to WIN!");
+                    event("🚨", "ESCAPE WINDOW OPEN! Play the Escape Pod on your turn to WIN!");
                 } else {
-                    io.sys("⏱ " + cur().name + " flips the timeline: "
+                    event("⏱️", cur().name + " flips the timeline: "
                             + tlVal[idx] + " minute" + (tlVal[idx] == 1 ? "" : "s") + " to window.");
                 }
             }
         }
         broadcastState();
         if (!cur().conn) {
-            io.sys("🐔 " + cur().name + " is away — auto-drawing for them.");
+            event("🐔", cur().name + " is away — auto-drawing for them.");
             drawPhase(1);
         }
     }
@@ -296,13 +330,13 @@ public class GameEngine {
                 if (!ewOpen()) return;
                 me.hand.remove(card);
                 discardPile.add(card);
-                io.sys("🚀 " + me.name + " leaps into the ESCAPE POD!");
+                event("🚀", me.name + " leaps into the ESCAPE POD!");
                 gameOver(me);
                 return;
             case CLUX:
                 me.hand.remove(card);
                 discardPile.add(card);
-                io.sys("⚡ " + me.name + " fires the Clux Capacitor — time reverses 3 minutes!");
+                event("⚡", me.name + " fires the Clux Capacitor — time reverses 3 minutes!");
                 rewind(3);
                 drawPhase(1);
                 return;
@@ -312,7 +346,7 @@ public class GameEngine {
                 me.hand.remove(card);
                 discardPile.add(card);
                 if (tgt.hand.contains(BLOCK)) {
-                    io.sys("🔄 " + me.name + " tries to swap hands with " + tgt.name + "…");
+                    event("🔄", me.name + " tries to swap hands with " + tgt.name + "…");
                     askReact("block", tgt.name, me.name, 1);
                 } else {
                     doSwap(me, tgt);
@@ -325,9 +359,10 @@ public class GameEngine {
                 discardPile.add(card);
                 if (tgt.hand.remove(want)) {
                     me.hand.add(want);
-                    io.sys("🦹 " + me.name + " super-thieved a " + cardName(want) + " from " + tgt.name + "!");
+                    event("🦹", me.name + " super-thieved a " + cardName(want) + " from " + tgt.name + "!");
                 } else {
-                    io.sys("🦹 " + me.name + " demanded a " + cardName(want) + " from " + tgt.name + " — they don't have one!");
+                    event("🦹", me.name + " demanded a " + cardName(want) + " from " + tgt.name
+                            + " — they don't have one!");
                 }
                 sendHand(me);
                 sendHand(tgt);
@@ -343,7 +378,7 @@ public class GameEngine {
                     pk.put("cards", new JSONArray(tgt.hand));
                 } catch (Exception ignored) {}
                 io.sendTo(me.name, pk);
-                io.sys("👀 " + me.name + " peeked at " + tgt.name + "'s hand.");
+                event("👀", me.name + " peeked at " + tgt.name + "'s hand.");
                 drawPhase(1);
                 return;
             case FREEZE:
@@ -351,20 +386,21 @@ public class GameEngine {
                 me.hand.remove(card);
                 discardPile.add(card);
                 tgt.frozen = true;
-                io.sys("🧊 " + me.name + " cryogenically froze " + tgt.name + " — they miss their next turn!");
+                event("🧊", me.name + " cryogenically froze " + tgt.name
+                        + " — they miss their next turn!");
                 drawPhase(1);
                 return;
             case REVERSE:
                 me.hand.remove(card);
                 discardPile.add(card);
                 pendReverse = true;
-                io.sys("↩️ " + me.name + " reversed the order of play!");
+                event("🙃", me.name + " reversed the order of play!");
                 drawPhase(1);
                 return;
             case STOCK:
                 me.hand.remove(card);
                 discardPile.add(card);
-                io.sys("🃏 " + me.name + " raids the Stock Pile — drawing two cards.");
+                event("🃏", me.name + " raids the Stock Pile — drawing two cards.");
                 drawPhase(2);
                 return;
             case MOOCH:
@@ -374,7 +410,7 @@ public class GameEngine {
                 discardPile.add(card);
                 discardPile.remove(discardPile.lastIndexOf(take));
                 me.hand.add(take);
-                io.sys("🤲 " + me.name + " mooched the " + cardName(take) + " off the discard pile.");
+                event("♻️", me.name + " mooched the " + cardName(take) + " off the discard pile.");
                 sendHand(me);
                 endTurn();
                 return;
@@ -398,12 +434,12 @@ public class GameEngine {
             stashedDraws--;
             String card = draw();
             if (card == null) {
-                io.sys("🃏 The draw pile is empty!");
+                event("🃏", "The draw pile is empty!");
                 break;
             }
             if (DEAD.equals(card)) {
                 discardPile.add(card);
-                io.sys("☠️ " + me.name + " drew YOU DEAD!");
+                event("☠️", me.name + " drew YOU DEAD!");
                 if (me.hand.contains(CLUX)) {
                     askReact("clux", me.name, me.name, 0);
                     return; // resumes in resolveReact
@@ -432,18 +468,18 @@ public class GameEngine {
         }
         if (idx < 0) {
             // Final Countdown rule: only the Escape Window remains — null and void
-            io.sys("⌛ " + drawer.name + " drew Time Slips Away — null and void, drawing again.");
+            event("⌛", drawer.name + " drew Time Slips Away — null and void, drawing again.");
             stashedDraws++;
             return;
         }
         tlState[idx] = 'x';
-        io.sys("⌛ " + drawer.name + " drew Time Slips Away — minute " + tlVal[idx]
+        event("⌛", drawer.name + " drew Time Slips Away — minute " + tlVal[idx]
                 + " is erased from the timeline!");
         for (Seat s : seats) {
             if (!s.alive && !s.out && s.deadSlot == idx) {
                 s.out = true;
                 s.deadSlot = -1;
-                io.sys("💀 " + s.name + " was clinging to that minute — gone from the multiverse forever.");
+                event("👻", s.name + " was clinging to that minute — gone from the multiverse forever.");
             }
         }
         winCheck();
@@ -454,12 +490,12 @@ public class GameEngine {
         int idx = lastUp();
         if (idx >= 0) {
             s.deadSlot = idx;
-            io.sys("💀 " + s.name + " is dead — clinging to "
+            event("💀", s.name + " is dead — clinging to "
                     + (tlVal[idx] == 0 ? "the Escape Window" : "minute " + tlVal[idx])
                     + ". A time reversal could still save them!");
         } else {
             s.out = true;
-            io.sys("💀 " + s.name + " fell into the vortex with nothing to cling to. Gone for good.");
+            event("👻", s.name + " fell into the vortex with nothing to cling to. Gone for good.");
         }
         winCheck();
     }
@@ -474,13 +510,13 @@ public class GameEngine {
                 if (!s.alive && !s.out && s.deadSlot == idx) {
                     s.alive = true;
                     s.deadSlot = -1;
-                    io.sys("✨ " + s.name + " is pulled back into existence!");
+                    event("✨", s.name + " is pulled back into existence!");
                     sendHand(s);
                 }
             }
         }
         if (wasOpen && !ewOpen()) {
-            io.sys("🚪 The Escape Window slams shut!");
+            event("🚪", "The Escape Window slams shut!");
         }
     }
 
@@ -490,7 +526,7 @@ public class GameEngine {
         a.hand.addAll(b.hand);
         b.hand.clear();
         b.hand.addAll(tmp);
-        io.sys("🔄 " + a.name + " swapped hands with " + b.name + "!");
+        event("🔄", a.name + " swapped hands with " + b.name + "!");
         sendHand(a);
         sendHand(b);
     }
@@ -553,7 +589,7 @@ public class GameEngine {
         if ("block".equals(kind)) {
             if (yes && target.hand.remove(BLOCK)) {
                 discardPile.add(BLOCK);
-                io.sys("🛡 " + target.name + " played Swap Block — the swap fizzles!");
+                event("🛡️", target.name + " played Swap Block — the swap fizzles!");
                 sendHand(target);
             } else if (from != null) {
                 doSwap(from, target);
@@ -562,7 +598,7 @@ public class GameEngine {
         } else { // clux (death save)
             if (yes && target.hand.remove(CLUX)) {
                 discardPile.add(CLUX);
-                io.sys("⚡ " + target.name + " burns a Clux Capacitor — time reverses and they LIVE!");
+                event("⚡", target.name + " burns a Clux Capacitor — time reverses and they LIVE!");
                 rewind(3);
                 sendHand(target);
                 continueDraws();
@@ -593,7 +629,6 @@ public class GameEngine {
         } else if (alive == 1 && seats.size() > 1) {
             for (Seat s : seats) {
                 if (s.alive && !s.out) {
-                    io.sys("🏆 " + s.name + " is the last chicken standing!");
                     gameOver(s);
                     return;
                 }
@@ -607,11 +642,10 @@ public class GameEngine {
         clearPending();
         if (pendTimer != null) pendTimer.cancel(false);
         if (w == null) {
-            io.sys("💥 The multiverse collapses. Every chicken is lost. (Nobody wins.)");
+            event("💥", "The multiverse collapses. Every chicken is lost. (Nobody wins.)");
         } else {
-            io.sys("🏆 " + w.name + " WINS Chicken Time Warp!");
+            event("🏆", w.name + " WINS Chicken Time Warp!");
         }
-        broadcastState();
     }
 
     private String draw() {
@@ -620,7 +654,7 @@ public class GameEngine {
             drawPile.addAll(discardPile);
             discardPile.clear();
             Collections.shuffle(drawPile, rng);
-            io.sys("🃏 The discard pile is shuffled into a new draw pile.");
+            event("🃏", "The discard pile is shuffled into a new draw pile.");
         }
         return drawPile.remove(drawPile.size() - 1);
     }
@@ -641,11 +675,6 @@ public class GameEngine {
         if (name == null) return null;
         for (Seat s : seats) if (s.name.equals(name)) return s;
         return null;
-    }
-
-    private String colorOf(String name) {
-        Seat s = seatOf(name);
-        return s == null ? "#444444" : s.color;
     }
 
     private int countAlive() {
@@ -707,6 +736,9 @@ public class GameEngine {
             o.put("dir", dir);
             o.put("ew", ewOpen());
             o.put("winner", winner);
+            o.put("li", lastIcon);
+            o.put("lt", lastText);
+            o.put("seq", seq);
             if (phase == Phase.ACTIVE) o.put("cur", cur().name);
             if (pendKind != null) o.put("waiting", pendTarget);
             JSONArray tl = new JSONArray();

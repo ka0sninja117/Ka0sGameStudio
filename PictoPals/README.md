@@ -56,8 +56,21 @@ nobody can peek at the deck — each phone sees only its own hand.
 - Your chat name and color are your chicken; the timeline is the countdown
   strip at the top of the game tab (🌀 face-down, numbers face-up, ✕ erased,
   🚪 the Escape Window).
-- On your turn a card is flipped automatically; tap a card to play it (with
-  target pickers for Swap/Thief/Peek/Freeze) or tap "Just draw & end turn."
+- A **banner at the top of the game tab shows what just happened** with a big
+  icon, so you never have to scan the chat log. It pops when something new
+  lands, and the minute cell animates when the timeline flips.
+- **When it's your turn** the whole panel picks up a warm border, and the
+  🐔 tab button changes to "YOUR GO!" so you notice from the text or draw
+  panes too.
+- Every card has its own icon and accent color: ⚡ Clux Capacitor ·
+  ☠️ You Dead · 🔄 Swap Hands · 🦹 Super Thief · ⌛ Time Slips Away ·
+  👀 Peek-a-Boo · 🧊 Cryogenic Freeze · ♻️ Mooch · 🛡️ Swap Block ·
+  🃏 Stock Pile · 🙃 Reverse · 🚀 Escape Pod. Player states use their own
+  icons so they never blur together with cards: 💀 dead but clinging,
+  👻 gone for good, 🧊 frozen, ▶️ current turn, ⚠️ disconnected.
+- On your turn a card is flipped automatically; tap a card tile to play it
+  (with target pickers for Swap/Thief/Peek/Freeze) or tap "Just draw & end
+  turn." Tapping a card when it isn't your turn explains what it does.
 - You Dead, Clux Capacitor saves, Swap Block reactions, Time Slips Away,
   Mooch restrictions, the frozen timeline, and the Final Countdown rule all
   work per the rulebook. Reaction prompts auto-resolve after 30 seconds so a

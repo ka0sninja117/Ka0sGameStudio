@@ -78,6 +78,11 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     private JSONObject gameState;
     private final List<String> myHand = new ArrayList<>();
     private android.app.AlertDialog reactDialog;
+    /** Last banner sequence rendered, so a new event animates exactly once. */
+    private int lastSeqSeen = -1;
+    private boolean animateBanner = false;
+    private boolean wasMyTurn = false;
+    private int gameBtnDefaultColor;
     private final List<Button> diceButtons = new ArrayList<>();
     private TextView diceLabel;
     private int selectedDie = 20;
@@ -121,6 +126,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         modeDrawBtn = findViewById(R.id.modeDrawBtn);
         modeDiceBtn = findViewById(R.id.modeDiceBtn);
         modeGameBtn = findViewById(R.id.modeGameBtn);
+        gameBtnDefaultColor = modeGameBtn.getCurrentTextColor();
         modeTextBtn.setOnClickListener(v -> showPane(textPane));
         modeDrawBtn.setOnClickListener(v -> showPane(drawPane));
         modeDiceBtn.setOnClickListener(v -> showPane(dicePane));
@@ -491,6 +497,9 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             String e = o.optString("e");
             if ("state".equals(e)) {
                 gameState = o;
+                int seq = o.optInt("seq", 0);
+                animateBanner = lastSeqSeen >= 0 && seq != lastSeqSeen;
+                lastSeqSeen = seq;
                 if (reactDialog != null && !myName.equals(o.optString("waiting", ""))) {
                     reactDialog.dismiss();
                     reactDialog = null;
@@ -507,7 +516,9 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                 StringBuilder sb = new StringBuilder();
                 org.json.JSONArray arr = o.optJSONArray("cards");
                 if (arr != null) for (int i = 0; i < arr.length(); i++) {
-                    sb.append("• ").append(com.ka0s.pictopals.game.GameEngine.cardName(arr.optString(i))).append('\n');
+                    String id = arr.optString(i);
+                    sb.append(cardEmoji(id)).append("  ")
+                            .append(com.ka0s.pictopals.game.GameEngine.cardName(id)).append('\n');
                 }
                 new android.app.AlertDialog.Builder(this)
                         .setTitle("👀 " + o.optString("target") + "'s hand")
@@ -533,19 +544,47 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     }
 
     private static String cardEmoji(String id) {
+        return com.ka0s.pictopals.game.GameEngine.cardIcon(id);
+    }
+
+    /** Accent color per card so a hand is scannable by color as well as icon. */
+    private static int cardColor(String id) {
         switch (id) {
-            case "clux": return "⚡";
-            case "mooch": return "🤲";
-            case "freeze": return "🧊";
-            case "thief": return "🦹";
-            case "reverse": return "↩️";
-            case "peek": return "👀";
-            case "stock": return "🃏";
-            case "swap": return "🔄";
-            case "block": return "🛡";
-            case "pod": return "🚀";
-            default: return "🂠";
+            case "clux": return Color.parseColor("#f5a623");   // amber — the lifesaver
+            case "pod": return Color.parseColor("#c9a227");    // gold — the win
+            case "swap": return Color.parseColor("#3b6ad4");   // blue
+            case "block": return Color.parseColor("#12a5a5");  // teal — defensive
+            case "thief": return Color.parseColor("#8a3bd4");  // purple — aggressive
+            case "freeze": return Color.parseColor("#4fa8d8"); // ice blue
+            case "reverse": return Color.parseColor("#e8890c");// orange
+            case "stock": return Color.parseColor("#2f9e44");  // green — gain
+            case "mooch": return Color.parseColor("#6b8e23");  // olive — gain
+            case "peek": return Color.parseColor("#5b6c7d");   // slate — info
+            case "dead": return Color.parseColor("#333333");
+            case "slips": return Color.parseColor("#8b2e2e");
+            default: return Color.DKGRAY;
         }
+    }
+
+    /** Short label that fits under a card tile. */
+    private static String cardShort(String id) {
+        switch (id) {
+            case "clux": return "Clux";
+            case "mooch": return "Mooch";
+            case "freeze": return "Freeze";
+            case "thief": return "Thief";
+            case "reverse": return "Reverse";
+            case "peek": return "Peek";
+            case "stock": return "Stock";
+            case "swap": return "Swap";
+            case "block": return "Block";
+            case "pod": return "POD!";
+            default: return id;
+        }
+    }
+
+    private int dp(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
     private static String cardDesc(String id) {
@@ -592,19 +631,141 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         gameContent.addView(b);
     }
 
+    /** Colors the "what just happened" banner by the kind of moment it was. */
+    private static int bannerAccent(String icon) {
+        switch (icon) {
+            case "🚨": case "☠️": case "👻": case "💥": case "⌛":
+                return Color.parseColor("#c62828");
+            case "🏆": case "🚀":
+                return Color.parseColor("#c9a227");
+            case "⚡": case "✨":
+                return Color.parseColor("#f5a623");
+            case "🔄": case "🛡️":
+                return Color.parseColor("#3b6ad4");
+            default:
+                return Color.parseColor("#2b3f52");
+        }
+    }
+
+    /** Big icon + one line of what just happened, so nobody has to read the log. */
+    private void addBanner(String icon, String text, boolean animate) {
+        int accent = bannerAccent(icon);
+        LinearLayout banner = new LinearLayout(this);
+        banner.setOrientation(LinearLayout.HORIZONTAL);
+        banner.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(2), accent);
+        banner.setBackground(bg);
+        banner.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+        TextView ic = new TextView(this);
+        ic.setText(icon);
+        ic.setTextSize(34);
+        ic.setPadding(0, 0, dp(10), 0);
+        banner.addView(ic);
+
+        TextView tx = new TextView(this);
+        tx.setText(text);
+        tx.setTextSize(14);
+        tx.setTextColor(accent);
+        tx.setTypeface(null, Typeface.BOLD);
+        banner.addView(tx, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, 0, dp(6));
+        gameContent.addView(banner, lp);
+
+        if (animate) {
+            ic.setScaleX(0.4f);
+            ic.setScaleY(0.4f);
+            ic.animate().scaleX(1f).scaleY(1f).setDuration(340)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator()).start();
+            banner.setAlpha(0.25f);
+            banner.animate().alpha(1f).setDuration(340).start();
+        }
+    }
+
+    /** Wraps the whole game panel in a warm border when it's your move. */
+    private void setPaneHighlight(boolean on) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(12));
+        bg.setColor(on ? Color.parseColor("#fff6dd") : Color.TRANSPARENT);
+        bg.setStroke(on ? dp(3) : 0, on ? Color.parseColor("#f5a623") : Color.TRANSPARENT);
+        gameContent.setBackground(bg);
+    }
+
+    /** Flags the 🐔 tab button so you notice your turn from the text/draw panes. */
+    private void setGameTabAlert(boolean alert) {
+        if (modeGameBtn == null) return;
+        modeGameBtn.setText(alert ? "🐔 YOUR GO!" : "🐔 Game");
+        modeGameBtn.setTextColor(alert ? Color.parseColor("#c62828") : gameBtnDefaultColor);
+        if (alert && !wasMyTurn) {
+            modeGameBtn.setScaleX(0.8f);
+            modeGameBtn.setScaleY(0.8f);
+            modeGameBtn.animate().scaleX(1f).scaleY(1f).setDuration(380)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator()).start();
+        }
+        wasMyTurn = alert;
+    }
+
+    /** A playing-card-shaped tile: big icon, short name, color-coded border. */
+    private View buildCardTile(String id, boolean playable) {
+        LinearLayout tile = new LinearLayout(this);
+        tile.setOrientation(LinearLayout.VERTICAL);
+        tile.setGravity(Gravity.CENTER);
+        int accent = cardColor(id);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(playable ? 3 : 2), accent);
+        tile.setBackground(bg);
+        tile.setPadding(dp(6), dp(7), dp(6), dp(6));
+        tile.setAlpha(playable ? 1f : 0.55f);
+
+        TextView icon = new TextView(this);
+        icon.setText(cardEmoji(id));
+        icon.setTextSize(30);
+        icon.setGravity(Gravity.CENTER);
+        tile.addView(icon);
+
+        TextView nm = new TextView(this);
+        nm.setText(cardShort(id));
+        nm.setTextSize(10);
+        nm.setTextColor(accent);
+        nm.setTypeface(null, Typeface.BOLD);
+        nm.setGravity(Gravity.CENTER);
+        tile.addView(nm);
+
+        tile.setOnClickListener(v -> onCardTap(id, playable));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                dp(68), ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(3), dp(2), dp(3), dp(2));
+        tile.setLayoutParams(lp);
+        return tile;
+    }
+
     private void renderGame() {
         if (gameContent == null) return;
         gameContent.removeAllViews();
+        boolean animate = animateBanner;
+        animateBanner = false;
         int ink = Color.parseColor("#2b3f52");
+        int muted = Color.parseColor("#7a8a99");
         String phase = gameState == null ? "idle" : gameState.optString("phase", "idle");
 
         if ("idle".equals(phase)) {
-            addGameText("Chicken Time Warp 🐔 — escape the time loop before the multiverse collapses!",
+            setPaneHighlight(false);
+            setGameTabAlert(false);
+            addGameText("🐔 Chicken Time Warp — escape the time loop before the multiverse collapses!",
                     14, false, ink);
             if (isHost) {
                 addGameButton("🐔 Start a game", () -> gameSend(act("join")));
             } else {
-                addGameText("Ask the host to start a game.", 13, false, Color.parseColor("#7a8a99"));
+                addGameText("Ask the host to start a game.", 13, false, muted);
             }
             return;
         }
@@ -612,16 +773,24 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         org.json.JSONArray ps = gameState.optJSONArray("players");
         int n = ps == null ? 0 : ps.length();
         boolean seated = mySeat() != null;
+        String lastIcon = gameState.optString("li", "🐔");
+        String lastText = gameState.optString("lt", "");
 
         if ("lobby".equals(phase)) {
-            addGameText("🐔 Game forming — " + n + "/6 chickens:", 15, true, ink);
+            setPaneHighlight(false);
+            setGameTabAlert(false);
+            addBanner(lastIcon, lastText, animate);
+            addGameText("Chickens in the game — " + n + "/6:", 14, true, ink);
             StringBuilder names = new StringBuilder();
-            for (int i = 0; i < n; i++) names.append(i > 0 ? ", " : "").append(ps.optJSONObject(i).optString("n"));
+            for (int i = 0; i < n; i++) {
+                names.append(i > 0 ? ", " : "").append(ps.optJSONObject(i).optString("n"));
+            }
             addGameText(names.toString(), 14, false, ink);
             if (!seated) addGameButton("Join the game", () -> gameSend(act("join")));
             else if (!isHost) addGameButton("Leave the game", () -> gameSend(act("leave")));
             if (isHost) {
-                addGameButton(n >= 2 ? "▶️ Begin!" : "▶️ Begin (need 2+ players)", () -> gameSend(act("begin")));
+                addGameButton(n >= 2 ? "▶️ Begin!" : "▶️ Begin (need 2+ players)",
+                        () -> gameSend(act("begin")));
                 addGameButton("Cancel game", () -> gameSend(act("abort")));
             }
             return;
@@ -635,28 +804,40 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         boolean iAmAlive = me != null && me.optBoolean("alive") && !me.optBoolean("out");
         boolean myTurn = !over && seated && iAmAlive && myName.equals(cur) && waiting.isEmpty();
 
+        setPaneHighlight(myTurn);
+        setGameTabAlert(myTurn || myName.equals(waiting));
+
+        // 1. what just happened
+        addBanner(lastIcon, lastText, animate);
+
+        // 2. whose move it is
         if (over) {
             String w = gameState.isNull("winner") ? null : gameState.optString("winner", null);
-            addGameText(w == null ? "💥 The multiverse collapsed — every chicken is lost."
-                    : "🏆 " + w + " escaped the time loop and WINS!", 17, true,
-                    w == null ? Color.parseColor("#c62828") : ink);
+            addGameText(w == null ? "💥 Every chicken is lost — nobody escapes."
+                            : "🏆 " + w + " escaped the time loop!", 17, true,
+                    w == null ? Color.parseColor("#c62828") : Color.parseColor("#c9a227"));
             if (isHost) addGameButton("🐔 New game", () -> gameSend(act("newgame")));
-        } else if (ew) {
-            addGameText("🚨 ESCAPE WINDOW OPEN!" + (myTurn ? "  YOUR TURN!" : "  " + cur + "'s turn."),
-                    16, true, Color.parseColor("#c62828"));
         } else if (!waiting.isEmpty()) {
-            addGameText("⏳ Waiting for " + waiting + "…", 15, true, ink);
+            addGameText("⏳ Waiting for " + waiting + " to decide…", 15, true, ink);
+        } else if (myTurn) {
+            addGameText(ew ? "🚨 YOUR TURN — PLAY THE POD TO WIN!" : "▶️ YOUR TURN — play a card or draw",
+                    16, true, ew ? Color.parseColor("#c62828") : Color.parseColor("#b8860b"));
         } else {
-            addGameText(myTurn ? "▶️ YOUR TURN — play a card or draw!" : "▶️ " + cur + "'s turn"
-                    + (gameState.optInt("dir", 1) < 0 ? "  (order reversed)" : ""), 15, true, ink);
+            addGameText("▶️ " + cur + "'s turn"
+                    + (gameState.optInt("dir", 1) < 0 ? "  🙃 (order reversed)" : ""), 15, true, ink);
         }
 
-        // timeline strip
+        // 3. timeline strip
         LinearLayout tl = new LinearLayout(this);
         tl.setOrientation(LinearLayout.HORIZONTAL);
         org.json.JSONArray slots = gameState.optJSONArray("timeline");
         StringBuilder deadNotes = new StringBuilder();
+        int newestUp = -1;
         if (slots != null) {
+            for (int i = 0; i < slots.length(); i++) {
+                JSONObject slot = slots.optJSONObject(i);
+                if (slot != null && "u".equals(slot.optString("s"))) newestUp = i;
+            }
             for (int i = 0; i < slots.length(); i++) {
                 JSONObject slot = slots.optJSONObject(i);
                 int v = slot.optInt("v");
@@ -664,19 +845,19 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                 TextView cell = new TextView(this);
                 cell.setGravity(Gravity.CENTER);
                 cell.setTextSize(15);
-                cell.setPadding(6, 10, 6, 10);
+                cell.setPadding(dp(2), dp(8), dp(2), dp(8));
                 GradientDrawable bg = new GradientDrawable();
-                bg.setCornerRadius(8f);
+                bg.setCornerRadius(dp(8));
                 if ("x".equals(s)) {
                     cell.setText("✕");
                     bg.setColor(Color.parseColor("#b9c3cc"));
-                    cell.setTextColor(Color.parseColor("#7a8a99"));
+                    cell.setTextColor(Color.parseColor("#6b7a88"));
                 } else if ("d".equals(s)) {
                     cell.setText("🌀");
                     bg.setColor(Color.parseColor("#2b3f52"));
                     cell.setTextColor(Color.WHITE);
                 } else if (v == 0) {
-                    cell.setText("🚪!");
+                    cell.setText("🚪");
                     bg.setColor(Color.parseColor("#c62828"));
                     cell.setTextColor(Color.WHITE);
                     cell.setTypeface(null, Typeface.BOLD);
@@ -686,11 +867,19 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
                     cell.setTextColor(v <= 3 ? Color.parseColor("#c62828") : ink);
                     cell.setTypeface(null, Typeface.BOLD);
                 }
+                cell.setBackground(bg);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
                         LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-                lp.setMargins(2, 2, 2, 2);
-                cell.setBackground(bg);
+                lp.setMargins(dp(1), dp(2), dp(1), dp(2));
                 tl.addView(cell, lp);
+                // pop the minute that just flipped
+                if (animate && i == newestUp
+                        && ("⏱️".equals(lastIcon) || "🚨".equals(lastIcon) || "⌛".equals(lastIcon))) {
+                    cell.setScaleX(0.5f);
+                    cell.setScaleY(0.5f);
+                    cell.animate().scaleX(1f).scaleY(1f).setDuration(320)
+                            .setInterpolator(new android.view.animation.OvershootInterpolator()).start();
+                }
                 if (ps != null) {
                     for (int j = 0; j < ps.length(); j++) {
                         JSONObject p = ps.optJSONObject(j);
@@ -704,54 +893,52 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             }
         }
         gameContent.addView(tl);
-        if (deadNotes.length() > 0) addGameText(deadNotes.toString().trim(), 12, false, Color.parseColor("#7a8a99"));
+        if (deadNotes.length() > 0) addGameText(deadNotes.toString().trim(), 12, false, muted);
 
-        // players
+        // 4. players
         StringBuilder pl = new StringBuilder();
         for (int i = 0; i < n; i++) {
             JSONObject p = ps.optJSONObject(i);
             if (p == null) continue;
             if (i > 0) pl.append("   ");
-            if (p.optString("n").equals(cur) && !over) pl.append("▶");
-            if (p.optBoolean("out")) pl.append("☠️");
+            if (p.optString("n").equals(cur) && !over) pl.append("▶️");
+            if (p.optBoolean("out")) pl.append("👻");
             else if (!p.optBoolean("alive")) pl.append("💀");
             if (p.optBoolean("frozen")) pl.append("🧊");
             if (!p.optBoolean("conn", true)) pl.append("⚠️");
-            pl.append(p.optString("n")).append("(").append(p.optInt("hand")).append(")");
+            pl.append(p.optString("n")).append(" 🂠").append(p.optInt("hand"));
         }
         addGameText(pl.toString(), 13, false, ink);
         String top = gameState.isNull("discard") ? null : gameState.optString("discard", null);
-        addGameText("Draw pile: " + gameState.optInt("draw") +
-                (top == null ? "" : "  ·  Moochable: " + com.ka0s.pictopals.game.GameEngine.cardName(top)),
-                12, false, Color.parseColor("#7a8a99"));
+        addGameText("🂠 Draw pile: " + gameState.optInt("draw")
+                        + (top == null ? "" : "   ♻️ Moochable: " + cardEmoji(top) + " "
+                        + com.ka0s.pictopals.game.GameEngine.cardName(top)),
+                12, false, muted);
 
-        // my hand
+        // 5. my hand
         if (seated && !over) {
             if (!iAmAlive) {
                 addGameText(me != null && me.optBoolean("out")
-                        ? "☠️ You're gone from the multiverse. Spectate and heckle."
-                        : "💀 You are dead — a time reversal could still bring you back…", 14, true, ink);
+                                ? "👻 You're gone from the multiverse. Spectate and heckle."
+                                : "💀 You are dead — a time reversal could still bring you back…",
+                        14, true, ink);
             }
-            addGameText("Your hand:", 13, true, ink);
             android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+            hs.setHorizontalScrollBarEnabled(false);
             LinearLayout handRow = new LinearLayout(this);
             handRow.setOrientation(LinearLayout.HORIZONTAL);
             for (String id : myHand) {
-                Button b = new Button(this);
-                b.setText(cardEmoji(id) + " " + com.ka0s.pictopals.game.GameEngine.cardName(id));
-                b.setAllCaps(false);
-                b.setAlpha(myTurn ? 1f : 0.6f);
-                b.setOnClickListener(v -> onCardTap(id, myTurn));
-                handRow.addView(b);
+                handRow.addView(buildCardTile(id, myTurn));
             }
             hs.addView(handRow);
             gameContent.addView(hs);
             if (myTurn) {
                 addGameButton("🂠 Just draw & end turn", () -> gameSend(act("pass")));
+            } else if (iAmAlive) {
+                addGameText("(tap a card to see what it does)", 11, false, muted);
             }
         } else if (!seated && !over) {
-            addGameText("👀 You're spectating this game — follow along in the chat log.", 13, false,
-                    Color.parseColor("#7a8a99"));
+            addGameText("👀 You're spectating this game — follow along in the chat log.", 13, false, muted);
         }
         if (isHost && !over) {
             addGameButton("End game (host)", () -> new android.app.AlertDialog.Builder(this)
