@@ -14,6 +14,23 @@ the same key, so any of them installs; note that Android requires an
 uninstall before installing an *older* version over a newer one, and phones
 in the same room should all run the same version.
 
+## If Chrome won't finish the download
+
+Chrome on Android runs a Safe Browsing check on `.apk` downloads that can hang
+after all the bytes have arrived (the download sits at "100%" forever). Fixes,
+best first:
+
+1. Download in **Firefox** instead — different download stack, no APK check.
+   This needs no renaming and is the least fiddly path.
+2. Or in Chrome: **Settings → Privacy and security → Safe Browsing → Standard
+   protection** (Enhanced is the mode that stalls), and be on WiFi.
+3. Or download `PictoPals-vX.Y.apk.bin`, then **rename** it in the Files app to
+   remove the `.bin` so it ends in `.apk`, and open it.
+   **Do not "extract" it** — an APK is internally a zip archive, so extracting
+   unpacks the app's internals instead of installing it. Rename only.
+4. Easiest for a household: get it onto **one** phone, then **Quick Share** the
+   `.apk` to the others. No browser involved on the remaining phones.
+
 ## Installing (sideloading)
 
 1. On each phone, open this file in the GitHub app or browser and download
