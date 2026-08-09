@@ -51,6 +51,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         int die;
         int[] results;
         Bitmap bitmap;
+        boolean mentionsMe;
     }
 
     private final List<Msg> messages = new ArrayList<>();
@@ -83,6 +84,14 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
     private boolean animateBanner = false;
     private boolean wasMyTurn = false;
     private int gameBtnDefaultColor;
+
+    // @-mentions
+    private static final String MENTION_CHANNEL = "mentions";
+    private static final int MENTION_NOTIF_ID = 2;
+    /** Highest host message id already handled, so replayed history can't re-notify. */
+    private int highestMentionId = 0;
+    private int pendingMentions = 0;
+    private boolean isForeground = false;
     private final List<Button> diceButtons = new ArrayList<>();
     private TextView diceLabel;
     private int selectedDie = 20;
@@ -139,6 +148,7 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
 
         // text mode
         findViewById(R.id.sendTextBtn).setOnClickListener(v -> sendTypedText());
+        findViewById(R.id.mentionBtn).setOnClickListener(v -> showMentionPicker());
         msgEdit.setOnEditorActionListener((v, actionId, ev) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendTypedText();
@@ -298,9 +308,138 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         try {
             JSONObject payload = new JSONObject();
             payload.put("text", text);
+            org.json.JSONArray mentions = computeMentions(text);
+            if (mentions.length() > 0) payload.put("mentions", mentions);
             sendPayload(payload);
             msgEdit.setText("");
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Resolves @-tags against the live roster on the sender's side, so a typed
+     * "@dad" and a picked "@Dad" both land, and the receiver never has to guess
+     * at names containing spaces.
+     */
+    private org.json.JSONArray computeMentions(String text) {
+        org.json.JSONArray out = new org.json.JSONArray();
+        String lower = text.toLowerCase();
+        if (lower.contains("@everyone") || lower.contains("@all")) {
+            out.put("*");
+            return out;
+        }
+        for (String[] u : roomUsers) {
+            if (lower.contains("@" + u[0].toLowerCase())) out.put(u[0]);
+        }
+        return out;
+    }
+
+    private void showMentionPicker() {
+        List<String> names = new ArrayList<>();
+        names.add("everyone");
+        for (String[] u : roomUsers) {
+            if (!myName.equals(u[0])) names.add(u[0]);
+        }
+        if (names.size() == 1) {
+            Toast.makeText(this, "Nobody else is in the room yet.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] arr = names.toArray(new String[0]);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Tag someone")
+                .setItems(arr, (d, which) -> {
+                    int at = Math.max(msgEdit.getSelectionStart(), 0);
+                    msgEdit.getText().insert(at, "@" + arr[which] + " ");
+                    msgEdit.requestFocus();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    /** Buzz pattern used for a mention; deliberately no sound. */
+    private void vibrate() {
+        try {
+            android.os.Vibrator v;
+            if (Build.VERSION.SDK_INT >= 31) {
+                android.os.VibratorManager vm =
+                        (android.os.VibratorManager) getSystemService(VIBRATOR_MANAGER_SERVICE);
+                v = vm == null ? null : vm.getDefaultVibrator();
+            } else {
+                v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+            }
+            if (v != null && v.hasVibrator()) {
+                v.vibrate(android.os.VibrationEffect.createWaveform(
+                        new long[]{0, 120, 90, 120}, -1));
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Handles a message that tagged us. The notification is an ordinary (not
+     * service-bound) one, so it survives the room closing, the host leaving,
+     * or this app being killed — it sits in the shade until swiped away.
+     */
+    private void onMentioned(Msg m, int id) {
+        if (id > 0 && id <= highestMentionId) return; // replayed from history
+        if (id > 0) highestMentionId = id;
+        vibrate();
+        if (isForeground) return; // they're already looking at the chat
+        pendingMentions++;
+        postMentionNotification(m);
+    }
+
+    private void postMentionNotification(Msg m) {
+        try {
+            android.app.NotificationManager nm =
+                    getSystemService(android.app.NotificationManager.class);
+            if (nm == null) return;
+            android.app.NotificationChannel ch = new android.app.NotificationChannel(
+                    MENTION_CHANNEL, "Mentions", android.app.NotificationManager.IMPORTANCE_HIGH);
+            ch.setDescription("Someone tagged you with @");
+            ch.setSound(null, null);          // vibrate only, never a sound
+            ch.enableVibration(true);
+            ch.setVibrationPattern(new long[]{0, 120, 90, 120});
+            nm.createNotificationChannel(ch);
+
+            android.content.Intent open = getPackageManager()
+                    .getLaunchIntentForPackage(getPackageName());
+            android.app.PendingIntent tap = android.app.PendingIntent.getActivity(this, 0, open,
+                    android.app.PendingIntent.FLAG_IMMUTABLE);
+
+            String title = pendingMentions > 1
+                    ? pendingMentions + " new mentions in PictoPals"
+                    : m.name + " tagged you";
+            String body = m.text == null ? "" : m.text;
+
+            android.app.Notification n = new android.app.Notification.Builder(this, MENTION_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_notif)
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(new android.app.Notification.BigTextStyle().bigText(body))
+                    .setAutoCancel(true)
+                    .setContentIntent(tap)
+                    .setWhen(System.currentTimeMillis())
+                    .setShowWhen(true)
+                    .build();
+            nm.notify(MENTION_NOTIF_ID, n);
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        isForeground = true;
+        pendingMentions = 0;
+        try {
+            android.app.NotificationManager nm =
+                    getSystemService(android.app.NotificationManager.class);
+            if (nm != null) nm.cancel(MENTION_NOTIF_ID);
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isForeground = false;
     }
 
     private void sendDrawing() {
@@ -381,7 +520,21 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
         } else {
             return;
         }
-        runOnUiThread(() -> addMsg(m));
+        org.json.JSONArray ms = o.optJSONArray("mentions");
+        if (ms != null && !myName.equals(m.name)) {
+            for (int i = 0; i < ms.length(); i++) {
+                String who = ms.optString(i);
+                if ("*".equals(who) || myName.equalsIgnoreCase(who)) {
+                    m.mentionsMe = true;
+                    break;
+                }
+            }
+        }
+        int id = o.optInt("id", 0);
+        runOnUiThread(() -> {
+            addMsg(m);
+            if (m.mentionsMe) onMentioned(m, id);
+        });
     }
 
     /** Checks dimensions before allocating so a huge image can't balloon memory. */
@@ -1088,9 +1241,10 @@ public class ChatActivity extends Activity implements HostServer.Listener, ChatC
             LinearLayout box = new LinearLayout(ctx);
             box.setOrientation(LinearLayout.VERTICAL);
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Color.WHITE);
+            // Messages that tagged you get a warm fill so they stand out in the log.
+            bg.setColor(m.mentionsMe ? Color.parseColor("#fff3cd") : Color.WHITE);
             bg.setCornerRadius(14f);
-            bg.setStroke(5, frameColor);
+            bg.setStroke(m.mentionsMe ? 8 : 5, m.mentionsMe ? Color.parseColor("#f5a623") : frameColor);
             box.setBackground(bg);
             LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

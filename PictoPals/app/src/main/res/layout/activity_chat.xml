@@ -83,6 +83,16 @@
                 android:padding="10dp" />
 
             <Button
+                android:id="@+id/mentionBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/at_sign"
+                android:textSize="18sp" />
+
+            <Button
                 android:id="@+id/sendTextBtn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

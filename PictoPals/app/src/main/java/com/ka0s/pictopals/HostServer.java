@@ -40,6 +40,7 @@ public class HostServer {
 
     private static final int HISTORY_LIMIT = 200;
     private static final int MAX_CLIENTS = 15;
+    private static final int MAX_MENTIONS = 20;
     private static final int MAX_PNG_B64_CHARS = 400_000;
     private static final int MAX_TEXT_CHARS = 500;
     private static final int MAX_NAME_CHARS = 16;
@@ -77,6 +78,13 @@ public class HostServer {
 
     /** Chicken Time Warp engine; lives with the room, all calls on the worker. */
     private com.ka0s.pictopals.game.GameEngine game;
+
+    /**
+     * Monotonic id stamped on every relayed message. Clients use it to tell a
+     * genuinely new message from one replayed out of history on reconnect, so
+     * @-mentions don't re-notify every time a phone blips off WiFi.
+     */
+    private int msgId = 0;
 
     private static class Client {
         final Socket sock;
@@ -324,6 +332,17 @@ public class HostServer {
                 } else {
                     return;
                 }
+                // Only text messages can carry mentions; validate and cap them.
+                org.json.JSONArray raw = payload.optJSONArray("mentions");
+                if (raw != null && o.has("text")) {
+                    org.json.JSONArray clean = new org.json.JSONArray();
+                    for (int i = 0; i < raw.length() && clean.length() < MAX_MENTIONS; i++) {
+                        String who = raw.optString(i);
+                        if (!who.isEmpty() && who.length() <= MAX_NAME_CHARS) clean.put(who);
+                    }
+                    if (clean.length() > 0) o.put("mentions", clean);
+                }
+                o.put("id", ++msgId);
                 broadcastLine(o.toString());
                 listener.onMsg(o);
             } catch (Exception ignored) {}

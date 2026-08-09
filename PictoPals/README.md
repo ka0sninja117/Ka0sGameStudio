@@ -40,6 +40,10 @@ in the same room should all run the same version.
    - **Aa** (default): type a message and hit SEND (or the keyboard's send key).
    - **✏️ Draw**: sketch with a finger in your chat color (✏️ thin pen,
      🖊️ thick pen, 🧽 eraser, ↩️ undo last stroke, 🗑️ clear) and hit SEND.
+   - **@ (tag someone)**: tap the **@** button next to SEND to pick a person
+     from the room — or **everyone** — and it drops `@Name` into your message.
+     Typing `@name` by hand works too (case doesn't matter). Anyone can use
+     `@everyone`.
    - **🎲 Dice**: pick a D&D die (D4–D20) and tap ROLL — the result is rolled
      and sent to the chat in one tap. Tap the same die again to stack rolls
      ("2× D20", up to 10×) — multi-rolls show every result plus the total.
@@ -80,6 +84,19 @@ nobody can peek at the deck — each phone sees only its own hand.
 - The chat keeps working during a game and doubles as the game log, so
   spectators can follow along. Players who disconnect are auto-played
   (skip + draw) until they reconnect and take back their seat.
+
+### Getting tagged
+
+When someone tags you, your phone **vibrates (never makes a sound)** and a
+notification lands in your notification bar carrying the full message text.
+That notification is not tied to the room: the host can leave, the hotspot can
+die, PictoPals can be closed entirely, and the tag stays in your shade until
+you swipe it away (only a reboot clears it). Tagged messages are also
+highlighted in amber in the chat itself.
+
+Messages carry ids, so reconnecting after a WiFi blip replays the chat without
+re-notifying you for tags you already saw; tags that arrived while you were
+away do notify when you rejoin, collapsed into one entry if there are several.
 
 Anyone who joins a room receives its full chat history, kept by the hosting
 phone (up to the last 200 messages). History lasts as long as the host stays
