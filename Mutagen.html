@@ -918,7 +918,7 @@
     </div>
 
     <script>
-        const GAME_VERSION = 'v1.24';
+        const GAME_VERSION = 'v1.25';
 
         // --- Grub sprite sheet (8 directional frames) ---
         const GRUB_DIRS = ['east','south-east','south','south-west','west','north-west','north','north-east'];
@@ -1073,6 +1073,7 @@
         // Array to store pre-generated forest background elements
         let forestElements = [];
         let foliagePatches = []; // { x, y, w, h } — player can hide under these
+        let forestCanvas = null; // offscreen pre-rendered static background (see bakeForestCanvas)
         let isInFoliage = false; // true when player center is inside a foliage patch
 
         // --- Combat Variables ---
@@ -1210,6 +1211,10 @@
         // Tier-disadvantage: per tier the NPC is above the player, a stealth penalty (%) escalates
         // Formula: (1 - 0.55^tierDiff) × 100  →  1 tier: 45%, 2 tiers: 70%, 3 tiers: 83%, …
         const STEALTH_TIER_DECAY = 0.55;
+        // Being hit forces an NPC to hunt for this long regardless of how stealthy/distant the
+        // attacker is. Without it, a ranged poke from beyond 1.5× detection radius made the NPC
+        // give up on the same frame it was damaged — free infinite kills at high stealth.
+        const AGGRO_MIN_PURSUIT_MS = 3000;
 
         // --- Defense mitigation system ---
         // Defense stat maps to a % damage reduction: mitigation = min(cap, defStat / (base×3) × cap)
@@ -1254,7 +1259,9 @@
         let postMovementImmobilityDuration = 250; // milliseconds after Pounce/Dash (can vary by ability)
         let canMoveFreeLy = true; // True if player can initiate normal movement or another movement ability
         let lastActivatedAbilityRef = null; // To track which ability was just activated
-        let dodgeRollLastUsed = -Infinity; // timestamp — tracks Shift dodge roll cooldown for post-movement effects
+        let dodgeRollLastUsed = -Infinity; // timestamp — tracks Shift dodge roll cooldown
+        let levelUpFlashTime = -Infinity;  // timestamp of the last level-up, drives the celebration flash
+        const LEVEL_UP_FLASH_MS = 1200;    // duration of the level-up flash/banner for post-movement effects
 
         // New Burrow specific variables
         let isBurrowing = false;
@@ -1716,28 +1723,43 @@
                     foliagePatches.push({ x: cx - pw / 2, y: cy - ph / 2, w: pw, h: ph });
                 }
             }
+
+            bakeForestCanvas();
         }
 
-        function renderForestBackground() {
-            ctx.fillStyle = '#22572a';
-            ctx.fillRect(0, 0, worldWidth, worldHeight);
+        // Bake the static forest (ground, ~450 scatter rects, foliage base layer) into an
+        // offscreen canvas once. These pixels never change, so redrawing them from primitives
+        // every frame was the single largest per-frame cost.
+        function bakeForestCanvas() {
+            forestCanvas = document.createElement('canvas');
+            forestCanvas.width = worldWidth;
+            forestCanvas.height = worldHeight;
+            const fctx = forestCanvas.getContext('2d');
+
+            fctx.fillStyle = '#22572a';
+            fctx.fillRect(0, 0, worldWidth, worldHeight);
 
             forestElements.forEach(element => {
                 if (element.type === 'rect') {
-                    ctx.fillStyle = element.color;
-                    ctx.fillRect(element.x, element.y, element.width, element.height);
+                    fctx.fillStyle = element.color;
+                    fctx.fillRect(element.x, element.y, element.width, element.height);
                 }
             });
 
             // Foliage patch base layer — drawn below the player (bright canopy floor)
-            ctx.globalAlpha = 1;
             foliagePatches.forEach(p => {
-                ctx.fillStyle = 'rgba(55, 145, 55, 0.88)';  // clearly lighter/brighter than forest floor
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.strokeStyle = 'rgba(20, 80, 20, 0.75)'; // dark outline so edges are visible
-                ctx.lineWidth = 2;
-                ctx.strokeRect(p.x, p.y, p.w, p.h);
+                fctx.fillStyle = 'rgba(55, 145, 55, 0.88)';  // clearly lighter/brighter than forest floor
+                fctx.fillRect(p.x, p.y, p.w, p.h);
+                fctx.strokeStyle = 'rgba(20, 80, 20, 0.75)'; // dark outline so edges are visible
+                fctx.lineWidth = 2;
+                fctx.strokeRect(p.x, p.y, p.w, p.h);
             });
+        }
+
+        function renderForestBackground() {
+            if (!forestCanvas) bakeForestCanvas();
+            ctx.globalAlpha = 1;
+            ctx.drawImage(forestCanvas, 0, 0);
         }
 
         // --- NPC Pathing Generation Functions ---
@@ -1927,6 +1949,7 @@
                 aggroTarget: null,        // null | 'player' | <npc reference>
                 loseInterestDuration: 0,  // ms; randomised when chase begins
                 loseInterestAt: 0,        // timestamp when NPC gives up chase
+                forcedPursuitUntil: 0,    // timestamp until which stealth can't shake this NPC (set on being hit)
                 detectionRadius: level >= 2 ? 400 : 0,
                 directionAngle: 0,
                 totalDamageDealtToPlayer: 0,
@@ -1976,6 +1999,7 @@
             npc.aggroTarget = null;
             npc.inCombat = false;
             npc.loseInterestAt = 0;
+            npc.forcedPursuitUntil = 0;
             // Level 1 NPCs snap back to their nearest patrol waypoint
             if (npc.level === 1 && npc.patrolWaypoints.length > 0) {
                 let nearestIdx = 0, nearestDist = Infinity;
@@ -2062,6 +2086,11 @@
                     // Refresh lose-interest timer and redirect aggro to player
                     defender.aggroTarget = 'player';
                     defender.loseInterestAt = currentTime + defender.loseInterestDuration;
+                }
+                // Getting hit commits the NPC to a hunt it can't stealth-shrug off
+                defender.forcedPursuitUntil = currentTime + AGGRO_MIN_PURSUIT_MS;
+                if (defender.loseInterestAt < defender.forcedPursuitUntil) {
+                    defender.loseInterestAt = defender.forcedPursuitUntil;
                 }
             }
 
@@ -2236,17 +2265,21 @@
             // Calculate how "off" the NPC's current direction is from facing the player
             const npcOrientationDiff = Math.abs(normalizeAngle(npcObj.directionAngle - angleNpcToPlayer));
 
-            // Player attacks first if their orientation is more direct OR if it's a tie
+            // Player attacks first if their orientation is more direct OR if it's a tie.
+            // The winner's reward is a FIRST_STRIKE_DELAY head start — not a free opening.
+            // The NPC's opening cooldown is 0 in both branches so its telegraph begins right
+            // away; the ~700ms wind-up IS its delay. (Previously the NPC also waited a full
+            // 700ms cooldown *before* winding up, handing the player ~4 free hits.)
             if (playerOrientationDiff <= npcOrientationDiff) {
                 playerLastAttackTime = currentTime;
                 playerAttackCooldown = 0; // First attack is immediate
                 npcObj.lastAttackTime = currentTime + FIRST_STRIKE_DELAY;
-                npcObj.attackCooldown = Math.round(combatDelay * NPC_ATTACK_INTERVAL_MULT); // 700ms
+                npcObj.attackCooldown = 0; // Telegraph starts as soon as the delay elapses
             } else {
                 npcObj.lastAttackTime = currentTime;
-                npcObj.attackCooldown = 0; // First attack is immediate
+                npcObj.attackCooldown = 0; // Telegraph starts immediately
                 playerLastAttackTime = currentTime + FIRST_STRIKE_DELAY;
-                playerAttackCooldown = 500; // Will be set to 500 after the first delayed attack
+                playerAttackCooldown = 0; // First swing lands once the delay elapses
             }
         }
 
@@ -2747,14 +2780,17 @@
                         // Re-evaluate stealth-adjusted detection radius each frame.
                         // If the player has moved beyond 1.5× effective range (foliage, stealth stat, etc.),
                         // the NPC gives up the chase — applies to all levels.
-                        const tierDiff = npc.level - playerStats.playerLevel;
-                        const tierPenalty = tierDiff > 0 ? (1 - Math.pow(STEALTH_TIER_DECAY, tierDiff)) * 100 : 0;
-                        const effectiveStealth = currentStealthValue - tierPenalty;
-                        const effectiveDetRadius = Math.max(0, STEALTH_BASE_DETECTION * (1 - effectiveStealth / 100));
-                        const pdx = targetX - npc.x, pdy = targetY - npc.y;
-                        if (Math.sqrt(pdx * pdx + pdy * pdy) > effectiveDetRadius * 1.5) {
-                            returnToPatrol(npc);
-                            return;
+                        // Exception: a recently-damaged NPC hunts anyway until forcedPursuitUntil.
+                        if (currentTime >= (npc.forcedPursuitUntil || 0)) {
+                            const tierDiff = npc.level - playerStats.playerLevel;
+                            const tierPenalty = tierDiff > 0 ? (1 - Math.pow(STEALTH_TIER_DECAY, tierDiff)) * 100 : 0;
+                            const effectiveStealth = currentStealthValue - tierPenalty;
+                            const effectiveDetRadius = Math.max(0, STEALTH_BASE_DETECTION * (1 - effectiveStealth / 100));
+                            const pdx = targetX - npc.x, pdy = targetY - npc.y;
+                            if (Math.sqrt(pdx * pdx + pdy * pdy) > effectiveDetRadius * 1.5) {
+                                returnToPatrol(npc);
+                                return;
+                            }
                         }
                     } else if (npc.aggroTarget && npcs.includes(npc.aggroTarget)) {
                         targetX = npc.aggroTarget.x;
@@ -3489,6 +3525,18 @@
                     updatePlayerSize();
                     playerStats.playerEvolutionState = LEVEL_DESCRIPTIONS[playerStats.playerLevel - 1];
                     playerStats.xpToNextLevel = XP_THRESHOLDS[playerStats.playerLevel];
+
+                    // Celebrate: screen flash + banner + evolution name over the player
+                    levelUpFlashTime = performance.now();
+                    floatingDamageTexts.push({
+                        value: playerStats.playerEvolutionState,
+                        x: playerX,
+                        y: playerY - playerSize * 2,
+                        color: '#FFD700',
+                        timestamp: levelUpFlashTime,
+                        duration: LEVEL_UP_FLASH_MS,
+                        floatDuration: LEVEL_UP_FLASH_MS
+                    });
                 }
 
             while (playerStats.playerLevel > 1 && playerStats.currentXp < XP_THRESHOLDS[playerStats.playerLevel - 1]) {
@@ -3600,6 +3648,10 @@
             const currentTime = performance.now(); // Get current time once per draw call
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Keep pixel-art sprites crisp — the default bilinear smoothing blurs the
+            // 32px Grub frames when they're scaled up to playerSize.
+            ctx.imageSmoothingEnabled = false;
 
             // Background fill for the entire canvas area
             ctx.fillStyle = '#333';
@@ -3945,15 +3997,47 @@
 
                     ctx.globalAlpha = 1 - floatProgress; // Fade out
 
-                    ctx.fillStyle = text.color;
                     ctx.font = `bold 20px "Inter", sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
+                    // Dark outline keeps yellow/red readable over bright foliage
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+                    ctx.strokeText(text.value, canvasX, canvasY);
+                    ctx.fillStyle = text.color;
                     ctx.fillText(text.value, canvasX, canvasY);
                     ctx.globalAlpha = 1; // Reset alpha for other drawings
                 });
             }
             drawStatusBarMessage(); // Draw status messages (like swap message or targeted NPC)
+            drawLevelUpFlash();
+        }
+
+        // Golden screen-edge flash + banner on level-up. Drawn last so it sits over everything.
+        function drawLevelUpFlash() {
+            const elapsed = performance.now() - levelUpFlashTime;
+            if (elapsed >= LEVEL_UP_FLASH_MS || isMapModeActive || gameOver) return;
+
+            const progress = elapsed / LEVEL_UP_FLASH_MS;
+            const fade = 1 - progress;
+
+            ctx.save();
+            // Warm full-screen wash that fades out fast
+            ctx.fillStyle = `rgba(255, 215, 0, ${0.22 * fade * fade})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Banner text rises slightly and fades
+            const bannerY = canvas.height * 0.28 - 20 * progress;
+            ctx.globalAlpha = Math.min(1, fade * 1.6);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `bold 46px "Inter", sans-serif`;
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.strokeText('LEVEL UP', canvas.width / 2, bannerY);
+            ctx.fillStyle = '#FFD700';
+            ctx.fillText('LEVEL UP', canvas.width / 2, bannerY);
+            ctx.restore();
         }
 
         function gameLoop() {
@@ -4003,6 +4087,8 @@
             playerAttackCooldown = 500;
             playerIsAttacking = false;
             playerAttackAnimStartTime = 0;
+            dodgeRollLastUsed = -Infinity; // don't carry a dodge cooldown into a fresh run
+            levelUpFlashTime = -Infinity;
 
 
             playerAbilities = {
@@ -4905,6 +4991,8 @@
                             angle: Math.atan2(dy, dx),
                             distanceTravelled: 0
                         });
+                        // Firing is loud — ranged pokes shouldn't be stealth-free like they used to be
+                        lastNoiseBurstTime = performance.now();
                         startCooldown('spikeLaunch');
                     }
                 }
